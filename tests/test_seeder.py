@@ -375,6 +375,142 @@ class TestDeterministicOrdering:
         # Same source tree → same hash regardless of seed
         assert r1.source_hash == r2.source_hash
 
+
+# ---------------------------------------------------------------------------
+# memcpy / read / recv heuristics
+# ---------------------------------------------------------------------------
+
+
+class TestMemcpyReadRecvHeuristics:
+    """Verify that memcpy, memmove, read, recv, recvfrom are detected and scored."""
+
+    IO_FIXTURE = FIXTURES_DIR / "io_ops.c"
+
+    def _string_seeder(self, source_root: Path) -> Seeder:
+        """Return a Seeder configured for string_operation pattern."""
+        spec = _load_seed(SEED_CWE122)
+        spec["target_pattern"]["pattern_type"] = "string_operation"
+        spec["target_pattern"].pop("min_candidate_score", None)
+        spec.pop("source_constraints", None)
+        return Seeder(seed=spec["seed"], spec=spec, source_root=source_root)
+
+    def test_memcpy_detected_in_fixture(self):
+        seeder = self._string_seeder(FIXTURES_DIR)
+        candidates = seeder._extract_candidates(self.IO_FIXTURE)
+        exprs = [c.context["expression"] for c in candidates]
+        assert any("memcpy" in e for e in exprs), (
+            f"Expected memcpy candidate in io_ops.c; got: {exprs}"
+        )
+
+    def test_memmove_detected_in_fixture(self):
+        seeder = self._string_seeder(FIXTURES_DIR)
+        candidates = seeder._extract_candidates(self.IO_FIXTURE)
+        exprs = [c.context["expression"] for c in candidates]
+        assert any("memmove" in e for e in exprs), (
+            f"Expected memmove candidate in io_ops.c; got: {exprs}"
+        )
+
+    def test_read_detected_in_fixture(self):
+        seeder = self._string_seeder(FIXTURES_DIR)
+        candidates = seeder._extract_candidates(self.IO_FIXTURE)
+        exprs = [c.context["expression"] for c in candidates]
+        assert any("read(" in e for e in exprs), (
+            f"Expected read() candidate in io_ops.c; got: {exprs}"
+        )
+
+    def test_recv_detected_in_fixture(self):
+        seeder = self._string_seeder(FIXTURES_DIR)
+        candidates = seeder._extract_candidates(self.IO_FIXTURE)
+        exprs = [c.context["expression"] for c in candidates]
+        assert any("recv(" in e for e in exprs), (
+            f"Expected recv() candidate in io_ops.c; got: {exprs}"
+        )
+
+    def test_recvfrom_detected_in_fixture(self):
+        seeder = self._string_seeder(FIXTURES_DIR)
+        candidates = seeder._extract_candidates(self.IO_FIXTURE)
+        exprs = [c.context["expression"] for c in candidates]
+        assert any("recvfrom(" in e for e in exprs), (
+            f"Expected recvfrom() candidate in io_ops.c; got: {exprs}"
+        )
+
+    def test_recv_scores_higher_than_memcpy(self, tmp_path):
+        """recv/read score 0.85, memcpy/strcpy score 0.75 — recv ranks first."""
+        c_file = tmp_path / "test.c"
+        c_file.write_text(
+            "void f1(int fd, char *buf) { read(fd, buf, 256); }\n"
+            "void f2(char *dst, char *src) { memcpy(dst, src, 256); }\n",
+            encoding="utf-8",
+        )
+        seeder = self._string_seeder(tmp_path)
+        candidates = seeder._extract_candidates(c_file)
+        assert len(candidates) == 2
+        read_c = next(c for c in candidates if "read(" in c.context["expression"])
+        memcpy_c = next(c for c in candidates if "memcpy" in c.context["expression"])
+        assert read_c.score > memcpy_c.score
+
+    def test_gets_still_highest(self, tmp_path):
+        """gets() must still outscore read/recv."""
+        c_file = tmp_path / "test.c"
+        c_file.write_text(
+            "void f1(int fd, char *buf) { recv(fd, buf, 256, 0); }\n"
+            "void f2(char *s) { gets(s); }\n",
+            encoding="utf-8",
+        )
+        seeder = self._string_seeder(tmp_path)
+        candidates = seeder._extract_candidates(c_file)
+        assert len(candidates) == 2
+        gets_c = next(c for c in candidates if "gets(" in c.context["expression"])
+        recv_c = next(c for c in candidates if "recv(" in c.context["expression"])
+        assert gets_c.score > recv_c.score
+
+    def test_custom_pattern_detects_recv(self, tmp_path):
+        """The 'custom' fallback pattern should also pick up recv calls."""
+        c_file = tmp_path / "test.c"
+        c_file.write_text(
+            "void f(int s, char *buf) { recv(s, buf, 512, 0); }\n",
+            encoding="utf-8",
+        )
+        spec = _load_seed(SEED_CWE122)
+        spec["target_pattern"]["pattern_type"] = "custom"
+        spec["target_pattern"].pop("min_candidate_score", None)
+        spec.pop("source_constraints", None)
+        seeder = Seeder(seed=spec["seed"], spec=spec, source_root=tmp_path)
+        candidates = seeder._extract_candidates(c_file)
+        assert len(candidates) == 1
+        assert "recv(" in candidates[0].context["expression"]
+
+    def test_custom_pattern_detects_memcpy(self, tmp_path):
+        """The 'custom' fallback pattern should also pick up memcpy calls."""
+        c_file = tmp_path / "test.c"
+        c_file.write_text(
+            "void f(char *dst, char *src, int n) { memcpy(dst, src, n); }\n",
+            encoding="utf-8",
+        )
+        spec = _load_seed(SEED_CWE122)
+        spec["target_pattern"]["pattern_type"] = "custom"
+        spec["target_pattern"].pop("min_candidate_score", None)
+        spec.pop("source_constraints", None)
+        seeder = Seeder(seed=spec["seed"], spec=spec, source_root=tmp_path)
+        candidates = seeder._extract_candidates(c_file)
+        assert len(candidates) == 1
+        assert "memcpy" in candidates[0].context["expression"]
+
+    def test_pattern_regex_keys_present(self):
+        """Ensure PATTERN_REGEXES contains 'string_operation' and 'custom' with new patterns."""
+        import re
+        assert "string_operation" in PATTERN_REGEXES
+        assert "custom" in PATTERN_REGEXES
+        # Verify new functions match
+        for func in ("memcpy", "memmove", "read", "recv", "recvfrom"):
+            line = f"    {func}(dst, src, len);"
+            assert PATTERN_REGEXES["string_operation"].search(line), (
+                f"string_operation regex did not match '{func}'"
+            )
+            assert PATTERN_REGEXES["custom"].search(line), (
+                f"custom regex did not match '{func}'"
+            )
+
     def test_source_hash_changes_with_content(self, tmp_path):
         (tmp_path / "f.c").write_text("void a() { malloc(1); }")
         s1 = _make_seeder(SEED_CWE122, tmp_path)

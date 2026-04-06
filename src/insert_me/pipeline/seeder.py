@@ -86,9 +86,10 @@ PATTERN_REGEXES: dict[str, re.Pattern[str]] = {
     "array_index":  re.compile(r"\b\w+\s*\["),
     # Integer multiplication — common in buffer-size calculations
     "integer_arithmetic": re.compile(r"\b\w+\s*\*\s*(?:sizeof\s*\(|\w+)"),
-    # Dangerous string operations (unbounded or size-unaware)
+    # Dangerous string/memory operations (unbounded or size-unaware)
     "string_operation": re.compile(
-        r"\b(?:strcpy|strncpy|strcat|strncat|sprintf|gets|scanf)\s*\("
+        r"\b(?:strcpy|strncpy|strcat|strncat|sprintf|gets|scanf"
+        r"|memcpy|memmove|read|recv|recvfrom)\s*\("
     ),
     # Format-string functions
     "format_string": re.compile(
@@ -99,7 +100,8 @@ PATTERN_REGEXES: dict[str, re.Pattern[str]] = {
     # Fallback: union of the most dangerous patterns
     "custom": re.compile(
         r"\b(?:malloc|calloc|realloc|free|strcpy|strncpy|strcat|strncat|"
-        r"sprintf|gets|scanf|printf|fprintf|snprintf|vprintf|vfprintf)\s*\("
+        r"sprintf|gets|scanf|printf|fprintf|snprintf|vprintf|vfprintf|"
+        r"memcpy|memmove|read|recv|recvfrom)\s*\("
         r"|\b\w+\s*->\s*\w+"
         r"|\bfor\s*\("
     ),
@@ -394,8 +396,9 @@ class Seeder:
             +0.15  unconditional
 
         string_operation:
-            +0.55  gets()     — unbounded, always dangerous
-            +0.35  strcpy()   — destination overflow risk
+            +0.55  gets()          — unbounded, always dangerous
+            +0.45  read()/recv()/recvfrom() — unchecked length from external source
+            +0.35  strcpy()/memcpy()/memmove() — destination overflow risk
             +0.25  strcat()
             +0.20  sprintf()
             +0.10  others
@@ -449,7 +452,9 @@ class Seeder:
         elif pt == "string_operation":
             if re.search(r"\bgets\s*\(", line):
                 score += 0.55
-            elif re.search(r"\bstrcpy\s*\(", line):
+            elif re.search(r"\b(?:read|recv|recvfrom)\s*\(", line):
+                score += 0.45
+            elif re.search(r"\b(?:strcpy|memcpy|memmove)\s*\(", line):
                 score += 0.35
             elif re.search(r"\bstrcat\s*\(", line):
                 score += 0.25
@@ -498,7 +503,9 @@ class Seeder:
         elif pt == "custom":
             if re.search(r"\bgets\s*\(", line):
                 score += 0.55
-            elif re.search(r"\bstrcpy\s*\(|\bsprintf\s*\(", line):
+            elif re.search(r"\b(?:read|recv|recvfrom)\s*\(", line):
+                score += 0.45
+            elif re.search(r"\b(?:strcpy|memcpy|memmove)\s*\(|\bsprintf\s*\(", line):
                 score += 0.30
             elif re.search(r"malloc\s*\([^)]*[+\-*][^)]*\)", line):
                 score += 0.25
