@@ -97,7 +97,34 @@
           },
           "adjudication_pending": {
             "type": "boolean",
-            "description": "If true, a semantic match was found but LLM adjudication has not been performed. Absent or false otherwise."
+            "description": "True when a semantic match exists but was not resolved by adjudication (adjudicator=disabled or no verdict produced). False when adjudication ran and produced a verdict."
+          },
+          "adjudication": {
+            "type": "object",
+            "description": "Adjudicator verdict for this semantic match case. Present only when adjudication was performed (adjudicator != disabled).",
+            "required": ["verdict", "confidence", "rationale", "adjudicator"],
+            "additionalProperties": false,
+            "properties": {
+              "verdict": {
+                "type": "string",
+                "enum": ["match", "no_match", "unresolved"],
+                "description": "Adjudicator verdict: match (likely a true positive), no_match (likely not the inserted flaw), or unresolved (insufficient evidence)."
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 1.0,
+                "description": "Normalized confidence score (0.0–1.0) from the adjudicator's heuristic or model."
+              },
+              "rationale": {
+                "type": "string",
+                "description": "Signal-level explanation of the adjudicator's scoring (e.g. matched signals and their weights)."
+              },
+              "adjudicator": {
+                "type": "string",
+                "description": "Adjudicator that produced this verdict: 'heuristic', 'llm', or a specific model identifier."
+              }
+            }
           }
         }
       }

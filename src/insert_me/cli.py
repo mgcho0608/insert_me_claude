@@ -234,6 +234,18 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help="Directory where evaluation artifacts are written. Default: same as --bundle.",
     )
+    eval_p.add_argument(
+        "--adjudicator",
+        type=str,
+        default="heuristic",
+        choices=["disabled", "heuristic"],
+        metavar="MODE",
+        help=(
+            "Adjudication mode for semantic matches: "
+            "'heuristic' (default) runs deterministic offline scoring; "
+            "'disabled' leaves semantic matches unresolved."
+        ),
+    )
     eval_p.set_defaults(func=_cmd_evaluate)
 
     return parser
@@ -372,13 +384,18 @@ def _cmd_evaluate(args: argparse.Namespace) -> int:
     import datetime
     import json
 
-    from insert_me.evaluation import Evaluator, emit_match_result, emit_coverage_result
+    from insert_me.evaluation import (
+        Evaluator, emit_match_result, emit_coverage_result,
+        DisabledAdjudicator, HeuristicAdjudicator,
+    )
+    from insert_me.evaluation.adjudication import emit_adjudication_result
     from insert_me.schema import validate_artifact, SCHEMA_DETECTOR_REPORT
 
     bundle_dir: Path = args.bundle
     tool_report_path: Path = args.tool_report
     tool_name: str = args.tool
     output_dir: Path = args.output if args.output is not None else bundle_dir
+    adjudicator_mode: str = getattr(args, "adjudicator", "heuristic")
 
     # --- Validate inputs ---
     if not bundle_dir.exists() or not bundle_dir.is_dir():
@@ -423,8 +440,14 @@ def _cmd_evaluate(args: argparse.Namespace) -> int:
         )
         return 1
 
+    # --- Build adjudicator ---
+    if adjudicator_mode == "disabled":
+        adjudicator = DisabledAdjudicator()
+    else:
+        adjudicator = HeuristicAdjudicator()
+
     # --- Run evaluation ---
-    evaluator = Evaluator(bundle_dir, tool_report, tool_name)
+    evaluator = Evaluator(bundle_dir, tool_report, tool_name, adjudicator=adjudicator)
     try:
         result = evaluator.run()
     except FileNotFoundError as exc:
@@ -435,6 +458,12 @@ def _cmd_evaluate(args: argparse.Namespace) -> int:
 
     match_dict = emit_match_result(result, output_dir, now_utc)
     coverage_dict = emit_coverage_result(result, output_dir, now_utc)
+
+    # --- Emit adjudication result (only when verdicts exist) ---
+    emit_adjudication_result(
+        result.match_records, result.run_id, tool_name,
+        result.adjudicator_name, output_dir,
+    )
 
     # --- Print summary ---
     total = coverage_dict["total_mutations"]
@@ -451,8 +480,17 @@ def _cmd_evaluate(args: argparse.Namespace) -> int:
     print(f"  unmatched       : {unmatched}")
     print(f"  coverage_rate   : {coverage_rate:.2%}")
     print(f"  false_positives : {false_positives}")
+    print(f"  adjudicator     : {result.adjudicator_name}")
+    if "adjudication_summary" in coverage_dict:
+        s = coverage_dict["adjudication_summary"]
+        print(f"  adj match       : {s['match']}")
+        print(f"  adj unresolved  : {s['unresolved']}")
+        print(f"  adj no_match    : {s['no_match']}")
     print(f"  match_result    : {output_dir / 'match_result.json'}")
     print(f"  coverage_result : {output_dir / 'coverage_result.json'}")
+    adj_path = output_dir / "adjudication_result.json"
+    if adj_path.exists():
+        print(f"  adj_result      : {adj_path}")
     return 0
 
 

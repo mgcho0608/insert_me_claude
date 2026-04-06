@@ -65,9 +65,9 @@ def _load_fixture(name: str) -> dict:
         return json.load(fh)
 
 
-def _run_evaluator(bundle_dir: Path, report: dict, tool_name: str):
+def _run_evaluator(bundle_dir: Path, report: dict, tool_name: str, adjudicator=None):
     from insert_me.evaluation import Evaluator
-    evaluator = Evaluator(bundle_dir, report, tool_name)
+    evaluator = Evaluator(bundle_dir, report, tool_name, adjudicator=adjudicator)
     return evaluator.run()
 
 
@@ -282,7 +282,7 @@ class TestSemanticMatch:
 # ---------------------------------------------------------------------------
 
 class TestAdjudicationPendingWhenNoLLM:
-    """Without LLM: semantic cases are pending, adjudication_result.json is NOT written."""
+    """With DisabledAdjudicator: semantic cases stay pending, adjudication_result.json NOT written."""
 
     def _make_semantic_report(self) -> dict:
         return {
@@ -297,21 +297,25 @@ class TestAdjudicationPendingWhenNoLLM:
             ],
         }
 
+    def _disabled_adjudicator(self):
+        from insert_me.evaluation import DisabledAdjudicator
+        return DisabledAdjudicator()
+
     def test_adjudication_result_not_written(self, tmp_path):
         bundle = _run_cwe416_pipeline(tmp_path)
         report = self._make_semantic_report()
-        result = _run_evaluator(bundle.root, report, "test-tool")
+        result = _run_evaluator(bundle.root, report, "test-tool", self._disabled_adjudicator())
         _emit_all(result, bundle.root)
 
         adjudication_path = bundle.root / "adjudication_result.json"
         assert not adjudication_path.exists(), (
-            "adjudication_result.json should NOT be written when LLM is not configured"
+            "adjudication_result.json should NOT be written with DisabledAdjudicator"
         )
 
     def test_match_result_written(self, tmp_path):
         bundle = _run_cwe416_pipeline(tmp_path)
         report = self._make_semantic_report()
-        result = _run_evaluator(bundle.root, report, "test-tool")
+        result = _run_evaluator(bundle.root, report, "test-tool", self._disabled_adjudicator())
         _emit_all(result, bundle.root)
 
         match_path = bundle.root / "match_result.json"
@@ -320,7 +324,7 @@ class TestAdjudicationPendingWhenNoLLM:
     def test_semantic_pending_in_match_result_json(self, tmp_path):
         bundle = _run_cwe416_pipeline(tmp_path)
         report = self._make_semantic_report()
-        result = _run_evaluator(bundle.root, report, "test-tool")
+        result = _run_evaluator(bundle.root, report, "test-tool", self._disabled_adjudicator())
         _emit_all(result, bundle.root)
 
         with open(bundle.root / "match_result.json", encoding="utf-8") as fh:
@@ -330,6 +334,7 @@ class TestAdjudicationPendingWhenNoLLM:
         match = mr["matches"][0]
         assert match["match_level"] == "semantic"
         assert match.get("adjudication_pending") is True
+        assert "adjudication" not in match
 
 
 # ---------------------------------------------------------------------------

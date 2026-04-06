@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0",
+  "tool": "cppcheck-demo",
+  "tool_version": "2.13.0",
+  "generated_at": "2026-04-06T10:00:00Z",
+  "source_root": "examples/demo/src",
+  "findings": [
+    {
+      "finding_id": "cppcheck-002",
+      "file": "uaf_demo.c",
+      "line": 42,
+      "severity": "warning",
+      "message": "use after free: freed pointer dereference detected at line 42"
+    }
+  ]
+}

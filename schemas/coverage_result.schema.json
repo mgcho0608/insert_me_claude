@@ -88,6 +88,33 @@
           "description": "Mutations with no corresponding finding."
         }
       }
+    },
+    "adjudication_summary": {
+      "type": "object",
+      "description": "Breakdown of semantic match adjudication outcomes. Present only when at least one semantic match was adjudicated (adjudicator != disabled).",
+      "required": ["adjudicator", "match", "unresolved", "no_match"],
+      "additionalProperties": false,
+      "properties": {
+        "adjudicator": {
+          "type": "string",
+          "description": "Adjudicator identifier, e.g. 'heuristic' or 'llm'."
+        },
+        "match": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Semantic cases adjudicated as MATCH."
+        },
+        "unresolved": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Semantic cases adjudicated as UNRESOLVED."
+        },
+        "no_match": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Semantic cases adjudicated as NO_MATCH."
+        }
+      }
     }
   }
 }

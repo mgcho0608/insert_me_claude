@@ -18,25 +18,38 @@ emit_coverage_result  Write coverage_result.json; return artifact dict.
 load_detector_report  Load a normalized detector report from a JSON file.
 validate_detector_report  Schema-validate a detector report dict.
 
+Adjudication
+------------
+AdjudicatorBase       Abstract base class for adjudication strategies.
+DisabledAdjudicator   No-op: returns no verdicts (default when disabled).
+HeuristicAdjudicator  Deterministic offline scoring adjudicator (default for evaluate).
+LLMAdjudicator        Phase 7B placeholder (raises NotImplementedError).
+PendingCase           Input to adjudicators: one semantic match case.
+AdjudicationVerdict   Output from adjudicators: verdict + confidence + rationale.
+emit_adjudication_result  Write adjudication_result.json when verdicts exist.
+
 Matching levels
 ---------------
 exact    same file basename + same CWE + line within ±2
 family   same CWE family group (18 CWEs across 9 families)
-semantic keyword heuristic on finding message (adjudication_pending=True)
+semantic keyword heuristic on finding message (adjudication pending)
 no_match none of the above
-
-Adjudication
-------------
-Semantic matches carry adjudication_pending=True.  The adjudication module
-(adjudication.py) defines AdjudicationCase and emit_adjudication_result.
-LLM-driven adjudication is Phase 7B; this phase leaves them as UNRESOLVED
-without failing the evaluation.
 """
 
 from insert_me.evaluation.evaluator import Evaluator, EvaluationResult, MatchRecord
 from insert_me.evaluation.matching import emit_match_result
 from insert_me.evaluation.coverage import emit_coverage_result
 from insert_me.evaluation.detector_report import load_detector_report, validate_detector_report
+from insert_me.evaluation.adjudication import (
+    AdjudicatorBase,
+    DisabledAdjudicator,
+    HeuristicAdjudicator,
+    LLMAdjudicator,
+    PendingCase,
+    AdjudicationVerdict,
+    collect_pending_cases,
+    emit_adjudication_result,
+)
 
 __all__ = [
     "Evaluator",
@@ -46,4 +59,12 @@ __all__ = [
     "emit_coverage_result",
     "load_detector_report",
     "validate_detector_report",
+    "AdjudicatorBase",
+    "DisabledAdjudicator",
+    "HeuristicAdjudicator",
+    "LLMAdjudicator",
+    "PendingCase",
+    "AdjudicationVerdict",
+    "collect_pending_cases",
+    "emit_adjudication_result",
 ]

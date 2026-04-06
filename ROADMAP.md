@@ -240,21 +240,43 @@ produces `match_result.json` (match_level=exact) and `coverage_result.json` (cov
 
 ---
 
+## Phase 7B-prep — Deterministic Semantic Adjudication Baseline COMPLETE
+
+**Goal:** Make the evaluation pipeline fully usable without an LLM, while preparing a clean
+plug-in point for a future internal LLM adjudicator.
+
+- [x] `AdjudicatorBase` ABC with `adjudicator_name` property and `adjudicate(cases)` method
+- [x] `DisabledAdjudicator` — no-op, returns `[]`, `adjudication_result.json` not written
+- [x] `HeuristicAdjudicator` — deterministic offline scoring (default for `insert-me evaluate`):
+      +0.20 same file basename, +0.15 line ±10, +0.30 CWE family, +0.20 keyword density, +0.15 strategy keyword
+      MATCH ≥ 0.65 / UNRESOLVED ≥ 0.30 / NO_MATCH < 0.30
+- [x] `LLMAdjudicator` — Phase 7B placeholder (raises `NotImplementedError`)
+- [x] `Evaluator` accepts optional `adjudicator=` parameter (default `HeuristicAdjudicator()`)
+- [x] Adjudication verdicts written into `MatchRecord.adjudication_verdict`
+- [x] `match_result.json` includes `adjudication` block and `adjudication_pending=False` when resolved
+- [x] `coverage_result.json` includes `adjudication_summary` when semantic cases adjudicated
+- [x] `adjudication_result.json` written only when verdicts exist
+- [x] `--adjudicator [disabled|heuristic]` flag on `insert-me evaluate` (default: heuristic)
+- [x] Example fixtures: `semantic_match_report.json`, `semantic_unresolved_report.json`
+- [x] 406 tests passing
+
+**Exit criterion met:** `insert-me evaluate` runs fully offline with deterministic adjudication.
+Semantic matches produce `adjudication` blocks in `match_result.json` and `adjudication_summary`
+in `coverage_result.json`. `adjudication_result.json` is written when heuristic runs.
+
+---
+
 ## Phase 7B — LLM Adjudicator (Semantic Match Resolution) REMAINING
 
 **Goal:** Pluggable LLM adjudicator for semantic match cases and optional label enrichment.
 
-- [ ] Finalize `LLMAdapter` ABC interface
-- [ ] Implement one real adapter (HTTP endpoint, OpenAI-compatible API)
-- [ ] Wire LLM adjudicator into Evaluator for `adjudication_pending=True` cases
-- [ ] Write `adjudication_result.json` when LLM adjudicator enabled
+- [ ] Implement one real `LLMAdjudicator` adapter (HTTP endpoint, OpenAI-compatible API)
 - [ ] Wire into Auditor as optional enrichment step for `labels.json`
-- [ ] Write tests: (a) NoOpAdapter produces valid output, (b) swapping adapters
-  does not change `ground_truth.json`, `audit.json`, `match_result.json`, or `coverage_result.json`
+- [ ] Write tests: (a) `DisabledAdjudicator` produces valid output, (b) swapping adjudicators
+  does not change `ground_truth.json`, `audit.json`, or `coverage_rate`
 
-**Exit criterion:** `--no-llm` and `--llm-adapter=noop` both work. All deterministic artifacts are
-byte-identical in both modes. Semantic matches are adjudicated when LLM is enabled; flagged as
-`adjudication_pending=True` when not.
+**Exit criterion:** `--adjudicator disabled` and `--adjudicator heuristic` both work.
+All deterministic artifacts are byte-identical in both modes.
 
 ---
 

@@ -244,7 +244,16 @@ def emit_match_result(
         }
         if rec.cwe_id is not None:
             item["cwe_id"] = rec.cwe_id
-        if rec.adjudication_pending:
+        if rec.adjudication_verdict is not None:
+            v = rec.adjudication_verdict
+            item["adjudication_pending"] = False
+            item["adjudication"] = {
+                "verdict": v.verdict,
+                "confidence": v.confidence,
+                "rationale": v.rationale,
+                "adjudicator": v.adjudicator,
+            }
+        elif rec.adjudication_pending:
             item["adjudication_pending"] = True
         matches_list.append(item)
 

@@ -27,6 +27,12 @@ from insert_me.evaluation.matching import (
     semantic_match,
     build_rationale,
 )
+from insert_me.evaluation.adjudication import (
+    AdjudicatorBase,
+    AdjudicationVerdict,
+    HeuristicAdjudicator,
+    collect_pending_cases,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -62,7 +68,10 @@ class MatchRecord:
     """Human-readable explanation of the match decision."""
 
     adjudication_pending: bool = False
-    """True for semantic matches that have not yet been adjudicated by an LLM."""
+    """True for semantic matches that have not yet been adjudicated."""
+
+    adjudication_verdict: Optional[AdjudicationVerdict] = None
+    """Set after the adjudicator runs; None if not adjudicated."""
 
 
 @dataclass
@@ -80,6 +89,9 @@ class EvaluationResult:
 
     run_id: str
     """16-char hex run ID from the bundle's ground_truth.json."""
+
+    adjudicator_name: str = "disabled"
+    """Name of the adjudicator that ran (e.g. 'heuristic', 'disabled')."""
 
 
 # ---------------------------------------------------------------------------
@@ -106,10 +118,12 @@ class Evaluator:
         bundle_dir: Path,
         tool_report: dict[str, Any],
         tool_name: str,
+        adjudicator: Optional[AdjudicatorBase] = None,
     ) -> None:
         self.bundle_dir = bundle_dir
         self.tool_report = tool_report
         self.tool_name = tool_name
+        self.adjudicator: AdjudicatorBase = adjudicator if adjudicator is not None else HeuristicAdjudicator()
 
     def run(self) -> EvaluationResult:
         """
@@ -148,11 +162,21 @@ class Evaluator:
             1 for i in range(len(findings)) if i not in used_finding_indices
         )
 
+        # --- Adjudication phase ---
+        pending = collect_pending_cases(match_records, mutations)
+        verdicts = self.adjudicator.adjudicate(pending)
+        if verdicts:
+            verdict_map = {v.mutation_index: v for v in verdicts}
+            for rec in match_records:
+                if rec.mutation_index in verdict_map:
+                    rec.adjudication_verdict = verdict_map[rec.mutation_index]
+
         return EvaluationResult(
             match_records=match_records,
             false_positive_count=false_positive_count,
             tool=self.tool_name,
             run_id=run_id,
+            adjudicator_name=self.adjudicator.adjudicator_name,
         )
 
     # ------------------------------------------------------------------

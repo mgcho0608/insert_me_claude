@@ -62,5 +62,23 @@ def emit_coverage_result(
         "by_level": by_level,
     }
 
+    # Adjudication summary — only when semantic matches were adjudicated
+    adjudicated_semantic = [
+        rec for rec in result.match_records
+        if rec.match_level == "semantic" and rec.adjudication_verdict is not None
+    ]
+    if adjudicated_semantic:
+        counts: dict[str, int] = {"match": 0, "unresolved": 0, "no_match": 0}
+        for rec in adjudicated_semantic:
+            v = rec.adjudication_verdict
+            if v.verdict in counts:
+                counts[v.verdict] += 1
+        artifact["adjudication_summary"] = {
+            "adjudicator": result.adjudicator_name,
+            "match": counts["match"],
+            "unresolved": counts["unresolved"],
+            "no_match": counts["no_match"],
+        }
+
     write_json_artifact(output_dir / "coverage_result.json", artifact)
     return artifact

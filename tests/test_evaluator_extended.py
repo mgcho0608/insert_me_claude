@@ -65,8 +65,12 @@ class TestEvaluationPackageStructure:
 
     def test_evaluation_has_adjudication_module(self):
         from insert_me.evaluation import adjudication
-        assert hasattr(adjudication, "AdjudicationCase")
-        assert hasattr(adjudication, "try_adjudicate")
+        assert hasattr(adjudication, "AdjudicatorBase")
+        assert hasattr(adjudication, "HeuristicAdjudicator")
+        assert hasattr(adjudication, "DisabledAdjudicator")
+        assert hasattr(adjudication, "PendingCase")
+        assert hasattr(adjudication, "AdjudicationVerdict")
+        assert hasattr(adjudication, "collect_pending_cases")
         assert hasattr(adjudication, "emit_adjudication_result")
 
     def test_evaluation_has_detector_report_module(self):
@@ -116,12 +120,12 @@ class TestDetectorReportHelpers:
 # ---------------------------------------------------------------------------
 
 class TestAdjudicationModule:
-    """collect_pending_cases and try_adjudicate behave correctly with no LLM."""
+    """collect_pending_cases, HeuristicAdjudicator, DisabledAdjudicator, emit."""
 
-    def _make_semantic_record(self):
+    def _make_semantic_record(self, mutation_index=0, line=42, msg="use after free"):
         from insert_me.evaluation.evaluator import MatchRecord
         return MatchRecord(
-            mutation_index=0,
+            mutation_index=mutation_index,
             mutation_type="insert_premature_free",
             file="uaf_demo.c",
             line=42,
@@ -129,8 +133,8 @@ class TestAdjudicationModule:
             match_level="semantic",
             matched_finding={
                 "file": "uaf_demo.c",
-                "line": 42,
-                "message": "use after free",
+                "line": line,
+                "message": msg,
             },
             rationale="Semantic match.",
             adjudication_pending=True,
@@ -150,47 +154,135 @@ class TestAdjudicationModule:
             adjudication_pending=False,
         )
 
+    def _mutations(self):
+        return [{"file": "uaf_demo.c", "line": 42, "mutation_type": "insert_premature_free"}]
+
+    # --- collect_pending_cases ---
+
     def test_collect_pending_returns_semantic_only(self):
         from insert_me.evaluation.adjudication import collect_pending_cases
         records = [self._make_exact_record(), self._make_semantic_record()]
-        pending = collect_pending_cases(records)
+        pending = collect_pending_cases(records, self._mutations() + self._mutations())
         assert len(pending) == 1
-        assert pending[0].match_level == "semantic"
+        assert pending[0].mutation_index == 0
 
     def test_collect_pending_empty_when_no_semantic(self):
         from insert_me.evaluation.adjudication import collect_pending_cases
         records = [self._make_exact_record()]
-        pending = collect_pending_cases(records)
+        pending = collect_pending_cases(records, self._mutations() + self._mutations())
         assert pending == []
 
-    def test_try_adjudicate_returns_empty_without_llm(self):
-        from insert_me.evaluation.adjudication import try_adjudicate
-        pending = [self._make_semantic_record()]
-        cases = try_adjudicate(pending, llm_adapter=None)
-        assert cases == []
+    # --- DisabledAdjudicator ---
 
-    def test_emit_adjudication_result_skips_empty_cases(self, tmp_path):
+    def test_disabled_adjudicator_returns_empty(self):
+        from insert_me.evaluation.adjudication import DisabledAdjudicator, PendingCase
+        adj = DisabledAdjudicator()
+        case = PendingCase(
+            mutation_index=0,
+            finding_id="f001",
+            mutation=self._mutations()[0],
+            finding={"file": "uaf_demo.c", "line": 42, "message": "use after free"},
+            mutation_cwe="CWE-416",
+            mutation_type="insert_premature_free",
+        )
+        assert adj.adjudicate([case]) == []
+        assert adj.adjudicator_name == "disabled"
+
+    # --- HeuristicAdjudicator ---
+
+    def test_heuristic_match_high_score(self):
+        """Same file + line proximity + strategy keyword → MATCH."""
+        from insert_me.evaluation.adjudication import HeuristicAdjudicator, PendingCase
+        adj = HeuristicAdjudicator()
+        case = PendingCase(
+            mutation_index=0,
+            finding_id="f001",
+            mutation={"file": "uaf_demo.c", "line": 42},
+            finding={"file": "uaf_demo.c", "line": 42, "message": "use after free detected"},
+            mutation_cwe="CWE-416",
+            mutation_type="insert_premature_free",
+        )
+        verdicts = adj.adjudicate([case])
+        assert len(verdicts) == 1
+        v = verdicts[0]
+        assert v.verdict == "match"
+        assert v.confidence >= 0.65
+
+    def test_heuristic_unresolved_moderate_score(self):
+        """Same file, far line, weak keyword → UNRESOLVED."""
+        from insert_me.evaluation.adjudication import HeuristicAdjudicator, PendingCase
+        adj = HeuristicAdjudicator()
+        case = PendingCase(
+            mutation_index=0,
+            finding_id="f002",
+            mutation={"file": "uaf_demo.c", "line": 42},
+            finding={"file": "uaf_demo.c", "line": 100, "message": "potential freed memory issue"},
+            mutation_cwe="CWE-416",
+            mutation_type="insert_premature_free",
+        )
+        verdicts = adj.adjudicate([case])
+        assert len(verdicts) == 1
+        v = verdicts[0]
+        assert v.verdict == "unresolved"
+        assert 0.30 <= v.confidence < 0.65
+
+    def test_heuristic_no_match_weak_score(self):
+        """Different file, no CWE, no keywords → NO_MATCH."""
+        from insert_me.evaluation.adjudication import HeuristicAdjudicator, PendingCase
+        adj = HeuristicAdjudicator()
+        case = PendingCase(
+            mutation_index=0,
+            finding_id="f003",
+            mutation={"file": "uaf_demo.c", "line": 42},
+            finding={"file": "other.c", "line": 200, "message": "suspicious function call"},
+            mutation_cwe="CWE-416",
+            mutation_type="insert_premature_free",
+        )
+        verdicts = adj.adjudicate([case])
+        v = verdicts[0]
+        assert v.verdict == "no_match"
+        assert v.confidence < 0.30
+
+    def test_heuristic_adjudicator_name(self):
+        from insert_me.evaluation.adjudication import HeuristicAdjudicator
+        assert HeuristicAdjudicator().adjudicator_name == "heuristic"
+
+    # --- LLMAdjudicator placeholder ---
+
+    def test_llm_adjudicator_raises(self):
+        from insert_me.evaluation.adjudication import LLMAdjudicator, PendingCase
+        adj = LLMAdjudicator()
+        with pytest.raises(NotImplementedError):
+            adj.adjudicate([])
+
+    # --- emit_adjudication_result ---
+
+    def test_emit_adjudication_result_skips_when_no_verdicts(self, tmp_path):
         from insert_me.evaluation.adjudication import emit_adjudication_result
+        records = [self._make_semantic_record()]
+        # No adjudication_verdict set → nothing to emit
         result = emit_adjudication_result(
-            [], "run-id-1234", "cppcheck", "heuristic", tmp_path
+            records, "run-id-1234", "cppcheck", "disabled", tmp_path
         )
         assert result is None
         assert not (tmp_path / "adjudication_result.json").exists()
 
-    def test_emit_adjudication_result_writes_nonempty_cases(self, tmp_path):
-        from insert_me.evaluation.adjudication import AdjudicationCase, emit_adjudication_result
-        cases = [
-            AdjudicationCase(
-                mutation_index=0,
-                finding_id="f001",
-                verdict="match",
-                confidence=0.85,
-                rationale="Keyword match confirmed.",
-                adjudicator="heuristic",
-            )
-        ]
+    def test_emit_adjudication_result_writes_when_verdicts_exist(self, tmp_path):
+        from insert_me.evaluation.adjudication import (
+            emit_adjudication_result, HeuristicAdjudicator, AdjudicationVerdict,
+        )
+        from insert_me.evaluation.evaluator import MatchRecord
+        rec = self._make_semantic_record()
+        rec.adjudication_verdict = AdjudicationVerdict(
+            mutation_index=0,
+            finding_id="f001",
+            verdict="match",
+            confidence=0.85,
+            rationale="same file (+0.20); line proximity dist=0 (+0.15); strategy keyword (+0.15)",
+            adjudicator="heuristic",
+        )
         result = emit_adjudication_result(
-            cases, "run-id-1234", "cppcheck", "heuristic", tmp_path
+            [rec], "run-id-1234", "cppcheck", "heuristic", tmp_path
         )
         assert result is not None
         adj_path = tmp_path / "adjudication_result.json"
@@ -200,23 +292,44 @@ class TestAdjudicationModule:
         assert len(data["cases"]) == 1
         assert data["cases"][0]["verdict"] == "match"
 
-    def test_adjudication_result_schema_valid(self, tmp_path):
-        from insert_me.evaluation.adjudication import AdjudicationCase, emit_adjudication_result
-        from insert_me.schema import validate_artifact_file, SCHEMA_ADJUDICATION_RESULT
-        cases = [
-            AdjudicationCase(
-                mutation_index=0,
-                finding_id="f001",
-                verdict="ambiguous",
-                confidence=0.5,
-                rationale="Could not determine.",
-                adjudicator="heuristic",
-            )
-        ]
-        emit_adjudication_result(
-            cases, "run-id-1234", "cppcheck", "heuristic", tmp_path
-        )
-        validate_artifact_file(tmp_path / "adjudication_result.json", SCHEMA_ADJUDICATION_RESULT)
+    # --- End-to-end: heuristic adjudicator via Evaluator ---
+
+    def test_evaluator_with_heuristic_produces_verdict(self, tmp_path):
+        from insert_me.evaluation import HeuristicAdjudicator
+        from insert_me.evaluation.evaluator import Evaluator
+        import json
+
+        bundle_gt = {
+            "schema_version": "1.0",
+            "run_id": "aabbccdd11223344",
+            "cwe_id": "CWE-416",
+            "mutations": [
+                {"file": "uaf_demo.c", "line": 42, "mutation_type": "insert_premature_free"},
+            ],
+        }
+        report = {
+            "schema_version": "1.0",
+            "tool": "test",
+            "findings": [
+                {
+                    "file": "uaf_demo.c",
+                    "line": 42,
+                    "message": "use after free: freed pointer dereference detected",
+                }
+            ],
+        }
+        bundle_dir = tmp_path / "bundle"
+        bundle_dir.mkdir()
+        (bundle_dir / "ground_truth.json").write_text(json.dumps(bundle_gt), encoding="utf-8")
+
+        evaluator = Evaluator(bundle_dir, report, "test", adjudicator=HeuristicAdjudicator())
+        result = evaluator.run()
+
+        assert result.adjudicator_name == "heuristic"
+        rec = result.match_records[0]
+        assert rec.match_level == "semantic"
+        assert rec.adjudication_verdict is not None
+        assert rec.adjudication_verdict.verdict == "match"
 
 
 # ---------------------------------------------------------------------------
