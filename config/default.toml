@@ -1,0 +1,77 @@
+# insert_me — default configuration
+#
+# This file documents all supported configuration keys and their defaults.
+# Override any key in a user-supplied config file passed with --config.
+#
+# All paths are resolved relative to the current working directory unless
+# they are absolute.
+
+# ---------------------------------------------------------------------------
+# [pipeline] — core run parameters
+# ---------------------------------------------------------------------------
+[pipeline]
+
+# Seed integer. Overridden by --seed on the CLI.
+# seed = 0  # required; no default — must be supplied at runtime
+
+# Path to the vulnerability spec TOML file.
+# spec_path = ""  # required; must be supplied at runtime
+
+# Root of the C/C++ source tree to mutate.
+# source_path = ""  # required; must be supplied at runtime
+
+# Root directory for all output bundles.
+output_root = "output"
+
+# Override the auto-derived run ID. Leave unset to use the derived value.
+# run_id = ""
+
+# ---------------------------------------------------------------------------
+# [llm] — optional LLM adapter settings
+# ---------------------------------------------------------------------------
+[llm]
+
+# Master switch. Set to false (or use --no-llm) to always use NoOpAdapter.
+# When false, no network calls are made and labels.json is not written.
+enabled = false
+
+# Adapter name. Must be a key in insert_me.llm.ADAPTER_REGISTRY.
+# Built-in: "noop"
+# Add: "openai_compat" (future Phase 7)
+adapter = "noop"
+
+# LLM API endpoint base URL. Adapter-specific.
+# For OpenAI-compatible endpoints: "http://internal-llm.corp/v1"
+endpoint = ""
+
+# Model identifier. Adapter-specific.
+# model = ""
+
+# Request timeout in seconds.
+timeout_seconds = 30
+
+# ---------------------------------------------------------------------------
+# [validator] — plausibility check configuration
+# ---------------------------------------------------------------------------
+[validator]
+
+# Check that the mutated file is syntactically plausible.
+check_syntax = true
+
+# Reject mutations that produce no substantive change.
+check_trivial = true
+
+# Check that the mutation target is within a valid code scope.
+check_scope = true
+
+# ---------------------------------------------------------------------------
+# [auditor] — output artifact configuration
+# ---------------------------------------------------------------------------
+[auditor]
+
+# Write labels.json via LLM adapter enrichment.
+# Requires [llm].enabled = true and [llm].adapter != "noop".
+write_labels = false
+
+# Output artifact format. Only "json" is supported in v1.
+output_format = "json"

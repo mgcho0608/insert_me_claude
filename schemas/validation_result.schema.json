@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "insert_me/schemas/validation_result/1.0",
+  "title": "ValidationResult",
+  "description": "The Validator's verdict on a completed patch application. Captures whether the inserted vulnerability is structurally well-formed, semantically plausible, and non-trivial. This is a deterministic, rule-based output — no LLM is involved.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "result_id",
+    "run_id",
+    "plan_id",
+    "overall",
+    "checks"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Schema version string, e.g. '1.0'."
+    },
+    "result_id": {
+      "type": "string",
+      "description": "Identifier for this validation result, derived deterministically from run_id."
+    },
+    "run_id": {
+      "type": "string",
+      "description": "16-character hex run identifier."
+    },
+    "plan_id": {
+      "type": "string",
+      "description": "plan_id from the PatchPlan that was validated."
+    },
+    "overall": {
+      "type": "string",
+      "description": "Aggregate verdict. PASS = all enabled checks passed. FAIL = at least one enabled check failed. SKIP = no checks were enabled.",
+      "enum": ["PASS", "FAIL", "SKIP"]
+    },
+    "checks": {
+      "type": "array",
+      "description": "Individual check results. One entry per enabled check.",
+      "items": {
+        "type": "object",
+        "required": ["name", "status"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Check identifier. Standard names: 'syntax', 'non_trivial', 'scope', 'compile_probe'.",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "description": "Result of this individual check.",
+            "enum": ["pass", "fail", "skip", "error"]
+          },
+          "reason": {
+            "type": "string",
+            "description": "Human-readable explanation. Required when status is 'fail' or 'error'."
+          },
+          "target_id": {
+            "type": "string",
+            "description": "If this check is scoped to a specific target, its target_id from the PatchPlan."
+          },
+          "detail": {
+            "type": "object",
+            "description": "Check-specific structured detail (e.g. line numbers for syntax errors).",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "checked_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 UTC timestamp of when validation completed."
+    },
+    "notes": {
+      "type": "string",
+      "description": "Free-text notes for human reviewers or downstream tools."
+    }
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "insert_me/schemas/audit_record/1.0",
+  "title": "AuditRecord",
+  "description": "Schema for audit.json — full provenance record for a single insert_me run.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_id",
+    "seed",
+    "spec_path",
+    "spec_hash",
+    "source_root",
+    "source_hash",
+    "pipeline_version",
+    "timestamp_utc",
+    "validation_verdict"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Schema version string (e.g. '1.0')."
+    },
+    "run_id": {
+      "type": "string",
+      "description": "Deterministic 16-character hex run identifier."
+    },
+    "seed": {
+      "type": "integer",
+      "description": "Integer seed used for this run."
+    },
+    "spec_path": {
+      "type": "string",
+      "description": "Path to the spec TOML file at time of run."
+    },
+    "spec_hash": {
+      "type": "string",
+      "description": "SHA-256 hex digest of the spec TOML file contents."
+    },
+    "source_root": {
+      "type": "string",
+      "description": "Absolute path to the source tree root used for this run."
+    },
+    "source_hash": {
+      "type": "string",
+      "description": "Content hash of the source tree (deterministic hash over all .c/.h/.cpp files)."
+    },
+    "pipeline_version": {
+      "type": "string",
+      "description": "insert_me package version string at time of run."
+    },
+    "timestamp_utc": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp (UTC) of when the run completed."
+    },
+    "validation_verdict": {
+      "type": "object",
+      "description": "Summary of the Validator result.",
+      "required": ["passed", "checks"],
+      "additionalProperties": false,
+      "properties": {
+        "passed": {
+          "type": "boolean"
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "status"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "status": {
+                "type": "string",
+                "enum": ["pass", "fail", "skip"]
+              },
+              "reason": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

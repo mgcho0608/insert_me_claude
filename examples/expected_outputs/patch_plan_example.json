@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0",
+  "plan_id": "pp-a3f9c1e8b2d47065",
+  "run_id": "a3f9c1e8b2d47065",
+  "seed_id": "cwe122-heap-overflow-alloc-undercount-001",
+  "seed": 42,
+  "status": "PLANNED",
+  "created_at": "2026-04-06T10:15:00Z",
+  "targets": [
+    {
+      "target_id": "t001",
+      "file": "src/parser/input_parser.c",
+      "line": 87,
+      "end_line": 87,
+      "mutation_strategy": "alloc_size_undercount",
+      "candidate_score": 0.91,
+      "context": {
+        "function_name": "parse_input_buffer",
+        "expression": "malloc(count * sizeof(token_t))",
+        "size_operand": "count",
+        "size_type": "size_t",
+        "post_write_access_line": 92,
+        "post_write_access_expr": "buf[i] = tokens[i]"
+      }
+    }
+  ],
+  "skipped_candidates": 3,
+  "source_tree_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4dbf8"
+}

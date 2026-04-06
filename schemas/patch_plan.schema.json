@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "insert_me/schemas/patch_plan/1.0",
+  "title": "PatchPlan",
+  "description": "The Seeder's output: a deterministically ordered list of intended code transformations. The patch plan describes what the Patcher should do, expressed in terms of source locations and mutation strategies. It is produced before any source files are modified.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "plan_id",
+    "run_id",
+    "seed_id",
+    "seed",
+    "status",
+    "created_at",
+    "targets"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Schema version string, e.g. '1.0'."
+    },
+    "plan_id": {
+      "type": "string",
+      "description": "Deterministic identifier for this plan, derived from run_id and target content hash."
+    },
+    "run_id": {
+      "type": "string",
+      "description": "16-character hex run identifier linking this plan to the enclosing pipeline run."
+    },
+    "seed_id": {
+      "type": "string",
+      "description": "seed_id from the Seed artifact that drove this plan."
+    },
+    "seed": {
+      "type": "integer",
+      "description": "Integer seed used for this plan (carried from the Seed artifact)."
+    },
+    "status": {
+      "type": "string",
+      "description": "Lifecycle status of this plan.",
+      "enum": ["PENDING", "PLANNED", "APPLIED", "ABORTED"]
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 UTC timestamp of when this plan was created by the Seeder."
+    },
+    "targets": {
+      "type": "array",
+      "description": "Ordered list of planned patch targets. Order is deterministic given the seed.",
+      "minItems": 0,
+      "items": {
+        "type": "object",
+        "required": [
+          "target_id",
+          "file",
+          "line",
+          "mutation_strategy"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "target_id": {
+            "type": "string",
+            "description": "Stable local identifier for this target within the plan."
+          },
+          "file": {
+            "type": "string",
+            "description": "Source file path relative to the source tree root."
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based line number of the primary mutation point."
+          },
+          "end_line": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Optional 1-based line number of the end of the mutation region (inclusive)."
+          },
+          "mutation_strategy": {
+            "type": "string",
+            "description": "Strategy identifier the Patcher will apply at this target."
+          },
+          "candidate_score": {
+            "type": "number",
+            "description": "Plausibility score assigned by the Seeder (0.0–1.0). Higher = more realistic target.",
+            "minimum": 0.0,
+            "maximum": 1.0
+          },
+          "context": {
+            "type": "object",
+            "description": "Structured context extracted during AST walking. Contents are strategy-specific.",
+            "additionalProperties": true
+          },
+          "skip_reason": {
+            "type": "string",
+            "description": "If the Patcher skipped this target, the reason. Absent if the target was applied."
+          }
+        }
+      }
+    },
+    "skipped_candidates": {
+      "type": "integer",
+      "description": "Number of candidate locations considered but not included due to score threshold or max_targets limit.",
+      "minimum": 0
+    },
+    "source_tree_hash": {
+      "type": "string",
+      "description": "Content hash of the source tree at plan creation time. Used for reproducibility verification."
+    }
+  }
+}

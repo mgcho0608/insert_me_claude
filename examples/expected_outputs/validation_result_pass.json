@@ -1,0 +1,42 @@
+{
+  "schema_version": "1.0",
+  "result_id": "vr-a3f9c1e8b2d47065",
+  "run_id": "a3f9c1e8b2d47065",
+  "plan_id": "pp-a3f9c1e8b2d47065",
+  "overall": "PASS",
+  "checks": [
+    {
+      "name": "syntax",
+      "status": "pass",
+      "reason": "",
+      "target_id": "t001",
+      "detail": {
+        "tool": "clang-format-probe",
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "non_trivial",
+      "status": "pass",
+      "reason": "",
+      "target_id": "t001",
+      "detail": {
+        "original_fragment": "malloc(count * sizeof(token_t))",
+        "mutated_fragment": "malloc((count - 1) * sizeof(token_t))",
+        "diff_chars": 5
+      }
+    },
+    {
+      "name": "scope",
+      "status": "pass",
+      "reason": "",
+      "target_id": "t001",
+      "detail": {
+        "enclosing_function": "parse_input_buffer",
+        "scope_depth": 1
+      }
+    }
+  ],
+  "checked_at": "2026-04-06T10:15:03Z",
+  "notes": ""
+}

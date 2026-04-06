@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "insert_me/schemas/vuln_spec/1.0",
+  "title": "GroundTruthRecord",
+  "description": "Schema for ground_truth.json — machine-readable annotation of an inserted vulnerability.",
+  "type": "object",
+  "required": ["schema_version", "run_id", "cwe_id", "spec_id", "seed", "mutations", "validation_passed"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Schema version string (e.g. '1.0')."
+    },
+    "run_id": {
+      "type": "string",
+      "description": "Deterministic 16-character hex run identifier."
+    },
+    "cwe_id": {
+      "type": "string",
+      "description": "CWE identifier for the vulnerability class (e.g. 'CWE-122').",
+      "pattern": "^CWE-[0-9]+$"
+    },
+    "spec_id": {
+      "type": "string",
+      "description": "Identifier of the vulnerability spec used for this run."
+    },
+    "seed": {
+      "type": "integer",
+      "description": "Integer seed used for deterministic target selection."
+    },
+    "validation_passed": {
+      "type": "boolean",
+      "description": "Whether the Validator accepted this mutation as plausible."
+    },
+    "mutations": {
+      "type": "array",
+      "description": "Ordered list of applied mutations.",
+      "items": {
+        "type": "object",
+        "required": ["file", "line", "mutation_type", "original_fragment", "mutated_fragment"],
+        "additionalProperties": false,
+        "properties": {
+          "file": {
+            "type": "string",
+            "description": "Source file path, relative to the source tree root."
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based line number of the primary mutation point."
+          },
+          "mutation_type": {
+            "type": "string",
+            "description": "String identifier for the mutation strategy applied."
+          },
+          "original_fragment": {
+            "type": "string",
+            "description": "The original source fragment before mutation."
+          },
+          "mutated_fragment": {
+            "type": "string",
+            "description": "The replacement source fragment (the vulnerability)."
+          },
+          "extra": {
+            "type": "object",
+            "description": "Additional mutation-specific metadata.",
+            "additionalProperties": true
+          }
+        }
+      }
+    }
+  }
+}

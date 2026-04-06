@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "insert_me/schemas/audit_result/1.0",
+  "title": "AuditResult",
+  "description": "Final classification of a completed insert_me run. Captures whether the run produced a valid, meaningful vulnerability case (VALID), a no-op that inserted nothing meaningful (NOOP), a case with unclear or conflicting signals (AMBIGUOUS), or an explicitly rejected case (INVALID). The classification is primarily deterministic (rule-based) and may optionally include LLM-assisted evidence.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "audit_id",
+    "run_id",
+    "classification",
+    "confidence",
+    "evidence"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Schema version string, e.g. '1.0'."
+    },
+    "audit_id": {
+      "type": "string",
+      "description": "Identifier for this audit result, derived deterministically from run_id."
+    },
+    "run_id": {
+      "type": "string",
+      "description": "16-character hex run identifier."
+    },
+    "classification": {
+      "type": "string",
+      "description": "The primary classification of this run's output.\n\n- VALID: The run produced a structurally sound, plausible, non-trivial vulnerability instance. Safe to include in a labelled corpus.\n- NOOP: The run completed but the applied mutation produced no meaningful semantic change (e.g. dead code, guarded by an always-false condition).\n- AMBIGUOUS: Conflicting signals — e.g. the mutation is structurally sound but semantic plausibility is uncertain. Requires human review before corpus inclusion.\n- INVALID: The run produced output that fails structural checks or is clearly not a real vulnerability instance. Should not be included in a corpus.",
+      "enum": ["VALID", "NOOP", "AMBIGUOUS", "INVALID"]
+    },
+    "confidence": {
+      "type": "string",
+      "description": "Confidence level in the classification.\n\n- high: Multiple strong signals agree.\n- medium: Signals agree but some checks were skipped or had low coverage.\n- low: Few signals available, classification may be incorrect.",
+      "enum": ["high", "medium", "low"]
+    },
+    "evidence": {
+      "type": "array",
+      "description": "Ordered list of evidence items supporting the classification. Each item represents one signal or observation.",
+      "minItems": 0,
+      "items": {
+        "type": "object",
+        "required": ["source", "observation", "weight"],
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "type": "string",
+            "description": "Origin of this evidence item.",
+            "enum": [
+              "validator",
+              "patcher",
+              "seeder",
+              "rule_engine",
+              "llm_adapter",
+              "human"
+            ]
+          },
+          "observation": {
+            "type": "string",
+            "description": "Plain-text description of what was observed.",
+            "minLength": 1
+          },
+          "weight": {
+            "type": "string",
+            "description": "How strongly this evidence supports or undermines the classification.",
+            "enum": ["strong", "moderate", "weak", "neutral", "contradicts"]
+          },
+          "detail": {
+            "type": "object",
+            "description": "Optional structured detail for machine consumption.",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "reviewer": {
+      "type": "object",
+      "description": "Who or what produced this audit result.",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Reviewer type.",
+          "enum": ["deterministic", "llm", "human"]
+        },
+        "name": {
+          "type": "string",
+          "description": "Name or identifier of the reviewer (e.g. 'rule_engine_v1', 'claude-3-7', 'alice@example.com')."
+        },
+        "model_version": {
+          "type": "string",
+          "description": "Model version string if reviewer type is 'llm'."
+        }
+      }
+    },
+    "audited_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 UTC timestamp of when the audit was produced."
+    },
+    "notes": {
+      "type": "string",
+      "description": "Free-text notes, especially for AMBIGUOUS cases requiring human follow-up."
+    }
+  }
+}

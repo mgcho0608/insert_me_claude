@@ -1,0 +1,52 @@
+{
+  "schema_version": "1.0",
+  "audit_id": "ar-c1d5a8f30e2b9741",
+  "run_id": "c1d5a8f30e2b9741",
+  "classification": "AMBIGUOUS",
+  "confidence": "low",
+  "evidence": [
+    {
+      "source": "validator",
+      "observation": "Structural checks passed. Syntax is valid, mutation is non-trivial, target is in function scope.",
+      "weight": "moderate",
+      "detail": {
+        "result_id": "vr-c1d5a8f30e2b9741",
+        "overall": "PASS"
+      }
+    },
+    {
+      "source": "rule_engine",
+      "observation": "The post-write access to the buffer is conditional on a runtime flag. Static analysis cannot confirm the write will be reached in all execution paths.",
+      "weight": "contradicts",
+      "detail": {
+        "conditional_expression": "if (config->enable_bulk_copy)",
+        "write_access_line": 204,
+        "is_always_reachable": false
+      }
+    },
+    {
+      "source": "rule_engine",
+      "observation": "The allocated buffer is passed to a helper function before the conditional write. The helper function's use of the buffer is not analysed in this run.",
+      "weight": "weak",
+      "detail": {
+        "helper_function": "buffer_init",
+        "call_line": 198
+      }
+    },
+    {
+      "source": "seeder",
+      "observation": "Candidate score for this target was 0.52, just above the minimum threshold of 0.50. Lower-scored targets are more likely to produce ambiguous mutations.",
+      "weight": "weak",
+      "detail": {
+        "candidate_score": 0.52,
+        "min_required": 0.50
+      }
+    }
+  ],
+  "reviewer": {
+    "type": "deterministic",
+    "name": "rule_engine_v1"
+  },
+  "audited_at": "2026-04-06T14:38:22Z",
+  "notes": "Human review recommended. The mutation is structurally sound but the downstream write path is conditional. A corpus consumer should verify manually whether this constitutes a reachable vulnerability before including in a labelled dataset."
+}

@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "insert_me/schemas/seed/1.0",
+  "title": "Seed",
+  "description": "A complete, self-contained case definition for one deterministic vulnerability insertion run. The seed bundles the integer seed, the target vulnerability class, the mutation strategy, and target-selection constraints. Given a seed file and a source tree, the pipeline is fully determined.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "seed_id",
+    "seed",
+    "cwe_id",
+    "vulnerability_class",
+    "mutation_strategy",
+    "target_pattern"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Schema version string, e.g. '1.0'."
+    },
+    "seed_id": {
+      "type": "string",
+      "description": "Stable, human-readable identifier for this seed definition. Should be unique within a corpus.",
+      "minLength": 1
+    },
+    "seed": {
+      "type": "integer",
+      "description": "Integer seed. Passed directly to random.seed(). Fully determines target ordering given a fixed source tree and spec."
+    },
+    "cwe_id": {
+      "type": "string",
+      "description": "CWE identifier for the vulnerability class to insert, e.g. 'CWE-122'.",
+      "pattern": "^CWE-[0-9]+$"
+    },
+    "vulnerability_class": {
+      "type": "string",
+      "description": "Human-readable name for the vulnerability class, e.g. 'Heap-based Buffer Overflow'.",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string",
+      "description": "Optional plain-text description of what this seed is intended to produce."
+    },
+    "mutation_strategy": {
+      "type": "string",
+      "description": "Strategy identifier used by the Patcher. Must correspond to a registered mutation strategy in the pipeline.",
+      "minLength": 1
+    },
+    "target_pattern": {
+      "type": "object",
+      "description": "Constraints on which code locations are eligible targets for this seed.",
+      "required": ["pattern_type"],
+      "additionalProperties": false,
+      "properties": {
+        "pattern_type": {
+          "type": "string",
+          "description": "Primary pattern type the Seeder uses to identify candidates.",
+          "enum": [
+            "malloc_call",
+            "calloc_call",
+            "realloc_call",
+            "free_call",
+            "pointer_deref",
+            "array_index",
+            "integer_arithmetic",
+            "string_operation",
+            "format_string",
+            "loop_bound",
+            "custom"
+          ]
+        },
+        "custom_pattern_id": {
+          "type": "string",
+          "description": "Required when pattern_type is 'custom'. References an externally registered pattern."
+        },
+        "constraints": {
+          "type": "object",
+          "description": "Pattern-specific constraints to narrow candidate selection.",
+          "additionalProperties": true
+        },
+        "require_function_scope": {
+          "type": "boolean",
+          "description": "If true, targets must be inside a function body (not at file/global scope).",
+          "default": true
+        },
+        "min_candidate_score": {
+          "type": "number",
+          "description": "Minimum plausibility score a candidate must reach to be selected (0.0–1.0).",
+          "minimum": 0.0,
+          "maximum": 1.0
+        }
+      }
+    },
+    "source_constraints": {
+      "type": "object",
+      "description": "Optional constraints on which source files are considered for target selection.",
+      "additionalProperties": false,
+      "properties": {
+        "file_patterns": {
+          "type": "array",
+          "description": "Glob patterns for source files to include. Default: all .c, .cpp, .cc, .h, .hpp.",
+          "items": { "type": "string" }
+        },
+        "exclude_patterns": {
+          "type": "array",
+          "description": "Glob patterns for source files to exclude (e.g. test files).",
+          "items": { "type": "string" }
+        },
+        "max_targets": {
+          "type": "integer",
+          "description": "Maximum number of patch targets to select for this run.",
+          "minimum": 1,
+          "default": 1
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Optional human-facing metadata. Does not affect pipeline behaviour.",
+      "additionalProperties": false,
+      "properties": {
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Freeform classification tags."
+        },
+        "difficulty": {
+          "type": "string",
+          "description": "Subjective difficulty rating for a detector to find this vulnerability.",
+          "enum": ["trivial", "easy", "medium", "hard", "expert"]
+        },
+        "references": {
+          "type": "array",
+          "description": "External references (CVE IDs, paper titles, URLs).",
+          "items": { "type": "string" }
+        },
+        "notes": {
+          "type": "string",
+          "description": "Free-text notes for human reviewers."
+        }
+      }
+    }
+  }
+}

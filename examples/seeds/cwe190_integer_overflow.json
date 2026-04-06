@@ -1,0 +1,34 @@
+{
+  "schema_version": "1.0",
+  "seed_id": "cwe190-integer-overflow-alloc-size-001",
+  "seed": 2048,
+  "cwe_id": "CWE-190",
+  "vulnerability_class": "Integer Overflow or Wraparound",
+  "description": "Insert an integer overflow in an allocation size calculation by replacing a safe multiplication with an unsafe one that can wrap around on large inputs. Specifically, removes a bounds check on a size operand before multiplying, so that very large values of n cause the product to wrap and the subsequent allocation to be undersized.",
+  "mutation_strategy": "remove_overflow_guard",
+  "target_pattern": {
+    "pattern_type": "integer_arithmetic",
+    "require_function_scope": true,
+    "min_candidate_score": 0.55,
+    "constraints": {
+      "arithmetic_op": "multiply",
+      "operand_type": "size_t_or_compatible",
+      "require_result_used_in_alloc": true,
+      "require_existing_guard_or_cast": true
+    }
+  },
+  "source_constraints": {
+    "file_patterns": ["*.c", "*.cpp"],
+    "exclude_patterns": ["*test*", "*_test.*", "*mock*"],
+    "max_targets": 1
+  },
+  "metadata": {
+    "tags": ["integer-overflow", "wraparound", "heap", "allocation", "arithmetic"],
+    "difficulty": "hard",
+    "references": [
+      "https://cwe.mitre.org/data/definitions/190.html",
+      "https://cwe.mitre.org/data/definitions/131.html"
+    ],
+    "notes": "Integer overflow leading to undersized heap allocation. Often a root cause for more easily observed heap overflows. Difficult to detect without tracking the relationship between the integer computation and the allocation site. Good test for dataflow and range analysis tools."
+  }
+}
