@@ -13,10 +13,11 @@ regardless of which optional components are active.
 
 ## Current Implementation Status
 
-**Phase 6 — Auditor minimal slice: complete.** The pipeline scans a real C/C++ source
+**Phase 7A — Juliet identity + per-project evaluation foundation: complete.** The pipeline scans a real C/C++ source
 tree, applies one mutation, validates the result with five rule-based checks, and writes a
 complete schema-valid bundle including real `ground_truth.json`, `audit.json`, and a
-verdict-derived `audit_result.json`.
+verdict-derived `audit_result.json`. The new Evaluator compares a normalized detector report
+against the ground truth oracle and produces match_result.json and coverage_result.json.
 
 | Pipeline stage | Status | Notes |
 |---|---|---|
@@ -24,7 +25,8 @@ verdict-derived `audit_result.json`.
 | Patcher | **Phase 4b** | `alloc_size_undercount` (CWE-122) + `insert_premature_free` (CWE-416); one mutation per run |
 | Validator | **Complete** (Phase 5) | Five deterministic checks; no compiler required |
 | Auditor | **Complete** (Phase 6) | Deterministic slice; writes ground_truth, audit, audit_result |
-| LLM Adapter | Interface only | `NoOpAdapter` always available; `labels.json` deferred to Phase 7 |
+| Evaluator | **Complete** (Phase 7A) | Optional separate step; compares detector reports against ground truth |
+| LLM Adapter | Interface only | `NoOpAdapter` always available; LLM adjudicator deferred to Phase 7B |
 
 The pipeline orchestrator (`pipeline/__init__.py`) coordinates all four stages.
 Each stage's `run()` method is implemented and called in sequence.
@@ -163,6 +165,26 @@ when implemented.
 The `llm_adapter` parameter is accepted but not invoked.  `labels.json` is never written
 in this phase.  Deferred to Phase 7.
 
+### Evaluator (`pipeline/evaluator.py`) — Phase 7A COMPLETE
+
+**Deterministic. Optional, post-run step.**
+
+- Accepts: an insert_me output bundle path, a normalized detector report dict, and a tool name.
+- Loads `ground_truth.json` from the bundle to get the mutation oracle.
+- For each mutation, compares against all detector findings using a 3-level precedence hierarchy:
+  - `exact` — same file basename + same CWE ID + finding line within ±2 of mutation line
+  - `family` — both CWEs map to the same CWE family group (18 CWEs across 9 families)
+  - `semantic` — keyword from the mutation's CWE family found in the finding message; marks `adjudication_pending=True`
+  - `no_match` — none of the above
+- Tracks false positives: findings not linked to any mutation.
+- Writes `match_result.json` (per-mutation detail) and `coverage_result.json` (summary statistics).
+- LLM adjudication is an optional boundary: when disabled, `semantic` cases are flagged but not resolved.
+  The evaluation never fails due to absent LLM.
+
+**Invoked via:** `insert-me evaluate --bundle PATH --tool-report PATH --tool NAME`
+
+Not wired into `run_pipeline()` — it is a separate, optional post-run step.
+
 ### LLM Adapter (`llm/adapter.py`)
 
 **Optional. Replaceable.**
@@ -171,7 +193,8 @@ in this phase.  Deferred to Phase 7.
 - Default implementation: `NoOpAdapter` — returns empty enrichments. Always available.
 - Optional implementations: thin wrappers around any LLM API.
 - **Swapping the adapter has zero effect on deterministic outputs.**  Only `labels.json`
-  and optional description fields change.
+  (Auditor enrichment) and `adjudication_result.json` (Evaluator adjudication, Phase 7B)
+  change.
 
 ---
 
@@ -247,19 +270,20 @@ This also means:
 ```
 src/insert_me/
 ├── __init__.py          # Package version, public re-exports
-├── cli.py               # CLI entrypoint (argparse) — run/validate-bundle/audit
+├── cli.py               # CLI entrypoint (argparse) — run/validate-bundle/audit/evaluate
 ├── config.py            # Config loader + dataclass (TOML + CLI overrides)
 ├── schema.py            # Schema loader, artifact validation, validate_bundle()
 ├── artifacts.py         # BundlePaths, run ID derivation, write_json_artifact
 ├── pipeline/
-│   ├── __init__.py      # Orchestrator — run_pipeline() [Phases 3–5 wired]
+│   ├── __init__.py      # Orchestrator — run_pipeline() [Phases 3–6 wired]
 │   ├── seeder.py        # Seeder, PatchTarget, PatchTargetList  [Phase 3: COMPLETE]
 │   ├── patcher.py       # Patcher, Mutation, PatchResult        [Phase 4b: two strategies]
 │   ├── validator.py     # Validator, ValidationVerdict           [Phase 5: COMPLETE]
-│   └── auditor.py       # Auditor, GroundTruthRecord, AuditRecord [Phase 6: COMPLETE]
+│   ├── auditor.py       # Auditor, GroundTruthRecord, AuditRecord [Phase 6: COMPLETE]
+│   └── evaluator.py     # Evaluator, MatchRecord, EvaluationResult [Phase 7A: COMPLETE]
 └── llm/
     ├── __init__.py      # Adapter registry
-    └── adapter.py       # LLMAdapter ABC + NoOpAdapter           [Phase 7: NoOp only]
+    └── adapter.py       # LLMAdapter ABC + NoOpAdapter           [Phase 7B: NoOp only]
 ```
 
 ---
@@ -290,6 +314,10 @@ Schema versions are carried in every artifact under `"schema_version"`.
 | `audit_result.schema.json` | Auditor classification: VALID/NOOP/AMBIGUOUS/INVALID |
 | `vuln_spec.json` | Ground truth mutation annotation |
 | `audit_record.json` | Provenance record |
+| `detector_report.schema.json` | Normalized detector report (Evaluator input) |
+| `match_result.schema.json` | Per-mutation match evaluation (Evaluator output) |
+| `coverage_result.schema.json` | Coverage summary statistics (Evaluator output) |
+| `adjudication_result.schema.json` | LLM adjudication results (Phase 7B, optional) |
 
 Schema loading, resolution (`.schema.json` vs `.json`), and validation are centralised in
 `src/insert_me/schema.py`. Use the `SCHEMA_*` constants — never hardcode schema names.

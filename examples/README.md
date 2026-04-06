@@ -2,7 +2,7 @@
 
 ---
 
-## Current phase (Phase 4b — two mutation strategies)
+## Current phase (Phase 7A — Juliet identity + per-project evaluation foundation)
 
 All four core pipeline stages are implemented.  You can run the pipeline today and get
 **a complete output bundle**: real bad/good source trees, `validation_result.json` from
@@ -105,6 +105,52 @@ hand-crafted examples that exercise the schema validators.
 
 ---
 
+---
+
+## `evaluation/` — evaluation demo fixtures
+
+Normalized detector reports for testing the `insert-me evaluate` command against the CWE-416 demo bundle.
+
+| File | Description | Expected match level |
+|---|---|---|
+| `exact_match_report.json` | Finding in `uaf_demo.c` at correct line with CWE-416 | `exact` |
+| `family_match_report.json` | Finding in `uaf_demo.c` with CWE-415 (double-free, same family) | `family` |
+| `no_match_report.json` | Finding in `other.c` with CWE-122 (different file and CWE) | `no_match` |
+
+**To run the evaluation demo:**
+
+```bash
+# Step 1: Run the CWE-416 pipeline to create a bundle
+insert-me run \
+  --seed-file examples/seeds/cwe416_use_after_free.json \
+  --source examples/demo/src
+
+# Step 2: Evaluate the exact-match report against the bundle (replace <run-id>)
+insert-me evaluate \
+  --bundle output/<run-id>/ \
+  --tool-report examples/evaluation/exact_match_report.json \
+  --tool cppcheck-demo
+
+# Step 3: Inspect results
+cat output/<run-id>/match_result.json
+cat output/<run-id>/coverage_result.json
+```
+
+**Expected result (exact match):**
+- `match_result.json` — one match record with `match_level: "exact"`, `coverage_rate: 1.0`
+- `coverage_result.json` — `matched: 1`, `unmatched: 0`, `false_positives: 0`, `coverage_rate: 1.0`
+
+**Family match example:**
+```bash
+insert-me evaluate \
+  --bundle output/<run-id>/ \
+  --tool-report examples/evaluation/family_match_report.json \
+  --tool cppcheck-demo
+```
+Result: `match_level: "family"` — CWE-415 (double-free) and CWE-416 (use-after-free) share the `use-after-free` family.
+
+---
+
 ## Planned examples (future phases)
 
 The following examples will be added as later pipeline stages are implemented:
@@ -112,6 +158,6 @@ The following examples will be added as later pipeline stages are implemented:
 | Example | Phase | Description |
 |---|---|---|
 | `basic_cwe122/` | Phase 8 | Additional CWE seeds exercising new strategies |
-| `no_llm/` | Phase 7 | Full run with `--no-llm`, confirming offline operation |
-| `custom_adapter/` | Phase 7 | Custom LLM adapter wiring example |
+| `no_llm/` | Phase 7B | Full run with `--no-llm`, confirming offline operation |
+| `custom_adapter/` | Phase 7B | Custom LLM adapter wiring example |
 | `multi_target/` | Phase 4b | Larger source tree, multiple ranked candidates |

@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "tool": "cppcheck-demo",
+  "tool_version": "2.13.0",
+  "generated_at": "2026-04-06T10:00:00Z",
+  "source_root": "examples/demo/src",
+  "findings": [
+    {
+      "finding_id": "cppcheck-003",
+      "file": "other.c",
+      "line": 15,
+      "cwe_id": "CWE-122",
+      "severity": "error",
+      "message": "Heap buffer overflow detected.",
+      "rule_id": "heapBufferOverflow"
+    }
+  ]
+}

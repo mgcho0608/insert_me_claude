@@ -210,21 +210,50 @@ source path + pipeline version).  No additional work needed.
 **Exit criterion met:** `insert-me run --seed-file examples/seeds/cwe122_heap_overflow.json --source examples/demo/src`
 produces a complete, schema-valid output bundle with `audit_result.json` classification `VALID`.
 
+**Note:** As of Phase 7A, the overall test count is ~360 (335 existing + ~25 evaluator tests).
+
 ---
 
-## Phase 7 — LLM Adapter (Optional Enrichment)
+## Phase 7A — Juliet identity + per-project evaluation foundation ✓ COMPLETE
 
-**Goal:** Pluggable LLM enrichment layer that does not break core pipeline if absent.
+**Goal:** Document the Juliet design contract governing insert_me mutations and implement
+the per-project evaluation framework.
+
+- [x] Juliet design contract documented: `docs/juliet_design_contract.md`
+- [x] Target product sentence established and propagated to README and docs
+- [x] 4 evaluation JSON schemas (draft-07): `detector_report`, `match_result`, `coverage_result`, `adjudication_result`
+- [x] `src/insert_me/pipeline/evaluator.py` — Evaluator class with 3-level match logic (exact/family/semantic/no_match)
+- [x] CWE family mapping (18 CWEs across 9 families) + semantic keyword hints
+- [x] `emit_match_result()` and `emit_coverage_result()` free functions
+- [x] `SCHEMA_DETECTOR_REPORT`, `SCHEMA_MATCH_RESULT`, `SCHEMA_COVERAGE_RESULT`, `SCHEMA_ADJUDICATION_RESULT` constants in `schema.py`
+- [x] Evaluation artifact paths added to `BundlePaths` in `artifacts.py`
+- [x] `insert-me evaluate` CLI subcommand
+- [x] Example evaluation fixtures: `examples/evaluation/` (exact/family/no_match reports)
+- [x] `docs/artifact_contracts.md` updated: §7 evaluation artifacts + Evaluation Flow section
+- [x] README, ROADMAP, ARCHITECTURE, examples/README updated
+- [x] `tests/test_evaluator.py` — 10 test classes covering all match levels, schema validation, CLI, coverage stats
+- [x] ~360 tests passing
+
+**Exit criterion met:** `insert-me evaluate --bundle output/<run-id>/ --tool-report examples/evaluation/exact_match_report.json --tool cppcheck-demo`
+produces `match_result.json` (match_level=exact) and `coverage_result.json` (coverage_rate=1.0).
+
+---
+
+## Phase 7B — LLM Adjudicator (Semantic Match Resolution) REMAINING
+
+**Goal:** Pluggable LLM adjudicator for semantic match cases and optional label enrichment.
 
 - [ ] Finalize `LLMAdapter` ABC interface
 - [ ] Implement one real adapter (HTTP endpoint, OpenAI-compatible API)
-- [ ] Wire into Auditor as optional enrichment step
-- [ ] Write `labels.json` when enabled
+- [ ] Wire LLM adjudicator into Evaluator for `adjudication_pending=True` cases
+- [ ] Write `adjudication_result.json` when LLM adjudicator enabled
+- [ ] Wire into Auditor as optional enrichment step for `labels.json`
 - [ ] Write tests: (a) NoOpAdapter produces valid output, (b) swapping adapters
-  does not change `ground_truth.json` or `audit.json`
+  does not change `ground_truth.json`, `audit.json`, `match_result.json`, or `coverage_result.json`
 
-**Exit criterion:** `--no-llm` and `--llm-adapter=noop` both work. `ground_truth.json` and
-`audit.json` are byte-identical in both modes.
+**Exit criterion:** `--no-llm` and `--llm-adapter=noop` both work. All deterministic artifacts are
+byte-identical in both modes. Semantic matches are adjudicated when LLM is enabled; flagged as
+`adjudication_pending=True` when not.
 
 ---
 
@@ -277,3 +306,7 @@ with no LLM required, is the minimum useful artifact.
 The MVP is now complete: `insert-me run --seed-file examples/seeds/cwe122_heap_overflow.json
 --source examples/demo/src` produces a full, schema-valid bundle (bad/good pair + ground truth
 + audit log + VALID classification) with no LLM required.
+
+**Phase 7A extends the MVP** with a per-project evaluation layer: `insert-me evaluate` compares
+any normalized detector report against the ground truth oracle and produces machine-readable
+coverage statistics.

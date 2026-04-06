@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "insert_me/schemas/detector_report/1.0",
+  "title": "DetectorReport",
+  "description": "Normalized detector report format. Represents the findings produced by a vulnerability detection tool (e.g. cppcheck, coverity, clang-analyzer) after analyzing a target source tree. Used as input to the insert_me evaluator.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "tool",
+    "findings"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Schema version string, e.g. '1.0'."
+    },
+    "tool": {
+      "type": "string",
+      "description": "Name of the detection tool that produced this report, e.g. 'cppcheck', 'coverity'."
+    },
+    "tool_version": {
+      "type": "string",
+      "description": "Version string of the detection tool. Optional."
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 UTC timestamp of when this report was generated. Optional."
+    },
+    "source_root": {
+      "type": "string",
+      "description": "Path to the source tree root that was analyzed. Optional."
+    },
+    "findings": {
+      "type": "array",
+      "description": "List of findings (potential vulnerabilities) reported by the tool.",
+      "items": {
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "finding_id": {
+            "type": "string",
+            "description": "Tool-assigned identifier for this finding. Optional."
+          },
+          "file": {
+            "type": "string",
+            "description": "Path to the source file containing the finding, as reported by the tool."
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based line number of the finding. Optional."
+          },
+          "cwe_id": {
+            "type": "string",
+            "pattern": "^CWE-\\d+$",
+            "description": "CWE identifier associated with this finding, e.g. 'CWE-416'. Optional."
+          },
+          "severity": {
+            "type": "string",
+            "description": "Severity level as reported by the tool, e.g. 'error', 'warning', 'high'. Optional."
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable description of the finding. Used for semantic matching. Optional."
+          },
+          "rule_id": {
+            "type": "string",
+            "description": "Tool-specific rule identifier that triggered this finding. Optional."
+          }
+        }
+      }
+    }
+  }
+}

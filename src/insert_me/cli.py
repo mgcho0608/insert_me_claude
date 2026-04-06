@@ -6,6 +6,7 @@ Commands
 run             Run the vulnerability insertion pipeline for a given seed file + source tree.
 validate-bundle Validate the schema conformance of an existing output bundle.
 audit           Pretty-print the audit record from an output bundle.
+evaluate        Evaluate a detector report against an insert_me output bundle.
 
 Canonical interface (primary)
 ------------------------------
@@ -23,6 +24,7 @@ Other commands
 --------------
     insert-me validate-bundle output/<run-id>/
     insert-me audit output/<run-id>/audit.json
+    insert-me evaluate --bundle output/<run-id>/ --tool-report report.json --tool cppcheck
 """
 
 import argparse
@@ -181,6 +183,59 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     audit_p.set_defaults(func=_cmd_audit)
 
+    # -----------------------------------------------------------------------
+    # evaluate
+    # -----------------------------------------------------------------------
+    eval_p = subparsers.add_parser(
+        "evaluate",
+        help="Evaluate a detector report against an insert_me output bundle.",
+        description=(
+            "Compare a normalized detector report (detector_report.schema.json)\n"
+            "against the ground truth mutations in an existing insert_me output bundle.\n\n"
+            "Produces match_result.json and coverage_result.json in the output directory.\n\n"
+            "Match levels (in order of precedence):\n"
+            "  exact    — same file basename, same CWE ID, line within ±2\n"
+            "  family   — same CWE family group\n"
+            "  semantic — keyword heuristic on finding message (adjudication_pending=True)\n"
+            "  no_match — none of the above\n\n"
+            "Example:\n"
+            "  insert-me evaluate \\\n"
+            "    --bundle output/abc123/ \\\n"
+            "    --tool-report examples/evaluation/exact_match_report.json \\\n"
+            "    --tool cppcheck-demo"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    eval_p.add_argument(
+        "--bundle",
+        type=Path,
+        required=True,
+        metavar="PATH",
+        help="Path to the existing insert_me output bundle directory (the run-id subdirectory).",
+    )
+    eval_p.add_argument(
+        "--tool-report",
+        type=Path,
+        required=True,
+        metavar="PATH",
+        help="Path to the normalized detector report JSON file (detector_report.schema.json).",
+    )
+    eval_p.add_argument(
+        "--tool",
+        type=str,
+        required=True,
+        metavar="NAME",
+        help="Tool name string, e.g. 'cppcheck', 'coverity'. Used in output artifact metadata.",
+    )
+    eval_p.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help="Directory where evaluation artifacts are written. Default: same as --bundle.",
+    )
+    eval_p.set_defaults(func=_cmd_evaluate)
+
     return parser
 
 
@@ -311,6 +366,94 @@ def _cmd_audit(args: argparse.Namespace) -> int:
     except json.JSONDecodeError as exc:
         print(f"[insert-me] error: invalid JSON in {audit_file}: {exc}", file=sys.stderr)
         return 1
+
+
+def _cmd_evaluate(args: argparse.Namespace) -> int:
+    import datetime
+    import json
+
+    from insert_me.pipeline.evaluator import Evaluator, emit_match_result, emit_coverage_result
+    from insert_me.schema import validate_artifact, SCHEMA_DETECTOR_REPORT
+
+    bundle_dir: Path = args.bundle
+    tool_report_path: Path = args.tool_report
+    tool_name: str = args.tool
+    output_dir: Path = args.output if args.output is not None else bundle_dir
+
+    # --- Validate inputs ---
+    if not bundle_dir.exists() or not bundle_dir.is_dir():
+        print(
+            f"[insert-me] error: bundle directory not found: {bundle_dir}",
+            file=sys.stderr,
+        )
+        return 1
+
+    if not tool_report_path.exists():
+        print(
+            f"[insert-me] error: tool report not found: {tool_report_path}",
+            file=sys.stderr,
+        )
+        return 1
+
+    ground_truth_path = bundle_dir / "ground_truth.json"
+    if not ground_truth_path.exists():
+        print(
+            f"[insert-me] error: ground_truth.json not found in bundle: {bundle_dir}",
+            file=sys.stderr,
+        )
+        return 1
+
+    # --- Load and schema-validate the tool report ---
+    try:
+        with open(tool_report_path, encoding="utf-8") as fh:
+            tool_report: dict = json.load(fh)
+    except json.JSONDecodeError as exc:
+        print(
+            f"[insert-me] error: invalid JSON in tool report: {exc}",
+            file=sys.stderr,
+        )
+        return 1
+
+    try:
+        validate_artifact(tool_report, SCHEMA_DETECTOR_REPORT)
+    except Exception as exc:
+        print(
+            f"[insert-me] error: tool report does not conform to detector_report schema: {exc}",
+            file=sys.stderr,
+        )
+        return 1
+
+    # --- Run evaluation ---
+    evaluator = Evaluator(bundle_dir, tool_report, tool_name)
+    try:
+        result = evaluator.run()
+    except FileNotFoundError as exc:
+        print(f"[insert-me] error: {exc}", file=sys.stderr)
+        return 1
+
+    now_utc = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    match_dict = emit_match_result(result, output_dir, now_utc)
+    coverage_dict = emit_coverage_result(result, output_dir, now_utc)
+
+    # --- Print summary ---
+    total = coverage_dict["total_mutations"]
+    matched = coverage_dict["matched"]
+    unmatched = coverage_dict["unmatched"]
+    coverage_rate = coverage_dict["coverage_rate"]
+    false_positives = coverage_dict["false_positives"]
+
+    print(f"[insert-me] evaluation complete")
+    print(f"  tool            : {tool_name}")
+    print(f"  bundle          : {bundle_dir}")
+    print(f"  total_mutations : {total}")
+    print(f"  matched         : {matched}")
+    print(f"  unmatched       : {unmatched}")
+    print(f"  coverage_rate   : {coverage_rate:.2%}")
+    print(f"  false_positives : {false_positives}")
+    print(f"  match_result    : {output_dir / 'match_result.json'}")
+    print(f"  coverage_result : {output_dir / 'coverage_result.json'}")
+    return 0
 
 
 # ---------------------------------------------------------------------------

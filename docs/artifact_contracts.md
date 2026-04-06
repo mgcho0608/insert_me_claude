@@ -11,12 +11,14 @@ when referencing schemas in code — never hardcode schema names.
 
 ## Current Phase
 
-**Phase 6 — Auditor minimal slice (complete). MVP reached.**
+**Phase 7A — Juliet identity + per-project evaluation foundation (complete).**
 
-All four core pipeline stages are now real.  In the default (real) mode the pipeline
-produces actual bad/good source trees, validates the mutation with five rule-based checks,
-and the Auditor writes `ground_truth.json`, `audit.json`, and `audit_result.json` from
-actual pipeline state.  `labels.json` enrichment (Phase 7 — LLM adapter) remains deferred.
+All four core pipeline stages are real.  In the default (real) mode the pipeline produces
+actual bad/good source trees, validates the mutation with five rule-based checks, and the
+Auditor writes `ground_truth.json`, `audit.json`, and `audit_result.json` from actual pipeline
+state.  The new `evaluate` command compares a normalized detector report against the ground
+truth oracle, producing `match_result.json` and `coverage_result.json`.
+`labels.json` enrichment (Phase 7B — LLM adjudicator) remains deferred.
 
 | Artifact field | Real mode (default) | Dry-run (`--dry-run`) | Future |
 |---|---|---|---|
@@ -45,7 +47,10 @@ output/<run-id>/
 ├── audit_result.json         Classification: VALID/NOOP/AMBIGUOUS/INVALID (§3)
 ├── ground_truth.json         Vulnerability annotation (§4)
 ├── audit.json                Provenance record (§5)
-└── labels.json               (optional) LLM-enriched semantic labels (§6)
+├── labels.json               (optional) LLM-enriched semantic labels (§6)
+├── match_result.json         (optional) Per-mutation match evaluation (§7, evaluate command)
+├── coverage_result.json      (optional) Coverage statistics (§7, evaluate command)
+└── adjudication_result.json  (optional) LLM adjudication of semantic matches (§7, Phase 7B)
 ```
 
 In real mode (default), `bad/` and `good/` contain the mutated and original source trees.
@@ -342,6 +347,131 @@ Key required fields:
 | `vulnerability_class` | string | Human-readable class name |
 | `mutation_strategy` | string | Strategy the Seeder/Patcher will apply |
 | `target_pattern` | object | Pattern the Seeder uses to find candidates |
+
+---
+
+## §7 Evaluation artifacts (Phase 7A)
+
+These three artifacts are produced by `insert-me evaluate` and are **never** produced
+by the core `insert-me run` pipeline. They are optional: absence of these files never
+indicates a broken run bundle.
+
+### §7.1 detector_report_ref
+
+The input to evaluation. A normalized detector report in `detector_report.schema.json` format.
+This file is **not written into the bundle** — it is provided by the caller at evaluation time.
+
+| Field | Type | Description |
+|---|---|---|
+| `schema_version` | string | Schema version |
+| `tool` | string | Detection tool name |
+| `findings` | array | List of findings (see schema for per-finding fields) |
+
+Each finding has a required `file` field and optional `line`, `cwe_id`, `severity`, `message`, `rule_id`.
+
+### §7.2 match_result.json
+
+Schema: `schemas/match_result.schema.json` (version 1.0)
+
+Per-mutation match evaluation. One `matches` entry per mutation in `ground_truth.mutations`.
+
+| Field | Type | Description |
+|---|---|---|
+| `schema_version` | string | Schema version |
+| `run_id` | string | Links to the evaluated bundle |
+| `tool` | string | Detection tool name |
+| `evaluated_at` | string | ISO 8601 UTC timestamp |
+| `mutations_evaluated` | integer | Count of mutations evaluated |
+| `matches` | array | Per-mutation match records (see §7.2.1) |
+
+#### §7.2.1 Match record
+
+| Field | Type | Description |
+|---|---|---|
+| `mutation_index` | integer | Index into `ground_truth.mutations` |
+| `mutation_type` | string | Mutation strategy identifier |
+| `file` | string | Relative path of mutated file |
+| `line` | integer | Mutation line number |
+| `cwe_id` | string | CWE of the inserted vulnerability |
+| `match_level` | string | `exact` / `family` / `semantic` / `no_match` |
+| `matched_finding` | object or null | The finding that matched, or null |
+| `rationale` | string | Human-readable explanation |
+| `adjudication_pending` | boolean | True when semantic match awaits LLM adjudication |
+
+**Match level semantics:**
+
+| Level | Condition |
+|---|---|
+| `exact` | Same file basename + same CWE ID + finding line within ±2 of mutation line |
+| `family` | Mutation CWE and finding CWE share a CWE family group |
+| `semantic` | Keyword from mutation's CWE family found in finding message |
+| `no_match` | No finding matched at any level |
+
+### §7.3 coverage_result.json
+
+Schema: `schemas/coverage_result.schema.json` (version 1.0)
+
+Summary statistics across all mutations.
+
+| Field | Type | Description |
+|---|---|---|
+| `schema_version` | string | Schema version |
+| `run_id` | string | Links to the evaluated bundle |
+| `tool` | string | Detection tool name |
+| `evaluated_at` | string | ISO 8601 UTC timestamp |
+| `total_mutations` | integer | Total mutations from `ground_truth.json` |
+| `matched` | integer | Mutations with level exact/family/semantic |
+| `unmatched` | integer | Mutations with level no_match |
+| `false_positives` | integer | Findings not linked to any mutation |
+| `coverage_rate` | number (0–1) | `matched / total_mutations` |
+| `by_level` | object | Per-level counts: `exact`, `family`, `semantic`, `no_match` |
+
+### §7.4 adjudication_result.json (Phase 7B)
+
+Schema: `schemas/adjudication_result.schema.json` (version 1.0)
+
+Written only when an LLM adjudicator is invoked for semantic match cases. Absence is never an error.
+
+| Field | Type | Description |
+|---|---|---|
+| `schema_version` | string | Schema version |
+| `run_id` | string | Links to the evaluated bundle |
+| `tool` | string | Detection tool name |
+| `adjudicator` | string | Adjudicator identifier, e.g. `"llm"`, `"heuristic"` |
+| `cases` | array | Per-case adjudication records |
+
+Each case: `mutation_index`, `finding_id` (string or null), `verdict` (match/no_match/ambiguous),
+optional `confidence` (0–1), optional `rationale`.
+
+---
+
+## Evaluation Flow
+
+```
+[output bundle]          ← existing insert_me run output
+    ground_truth.json    ← oracle: what was inserted, where, which CWE
+         │
+         ▼
+insert-me evaluate \
+  --bundle output/<run-id>/ \
+  --tool-report report.json \    ← normalized detector report (detector_report.schema.json)
+  --tool cppcheck
+         │
+         ▼
+  Evaluator.run()
+    For each mutation in ground_truth.mutations:
+      Try exact match  → same file basename + same CWE + line ±2
+      Try family match → same CWE family group
+      Try semantic match → keyword in finding message (adjudication_pending=True)
+      Else: no_match
+         │
+         ├── match_result.json      ← per-mutation match evaluation
+         └── coverage_result.json   ← summary statistics
+```
+
+LLM adjudication (Phase 7B): when enabled, `adjudication_result.json` resolves
+`adjudication_pending=True` cases. When disabled, semantic matches remain flagged
+but the evaluation completes normally.
 
 ---
 

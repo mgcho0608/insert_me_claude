@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "tool": "cppcheck-demo",
+  "tool_version": "2.13.0",
+  "generated_at": "2026-04-06T10:00:00Z",
+  "source_root": "examples/demo/src",
+  "findings": [
+    {
+      "finding_id": "cppcheck-001",
+      "file": "uaf_demo.c",
+      "line": 42,
+      "cwe_id": "CWE-416",
+      "severity": "error",
+      "message": "Memory is freed and then used.",
+      "rule_id": "invalidPointer"
+    }
+  ]
+}

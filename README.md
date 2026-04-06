@@ -10,7 +10,7 @@
 
 ---
 
-## Current Status — Phase 6 Auditor (MVP reached)
+## Current Status — Phase 7A (Juliet identity + per-project evaluation foundation)
 
 | | |
 |---|---|
@@ -25,14 +25,15 @@
 | **Mutation strategies** | `alloc_size_undercount` — `malloc(<expr>)` → `malloc((<expr>) - 1)` (CWE-122) · `insert_premature_free` — inserts `free(ptr);` before a pointer dereference (CWE-416) |
 | **`validation_result.json`** | Real check results (5 checks) in real mode; `overall: SKIP` in dry-run |
 | **`audit_result.json`** | `VALID` (validator pass) · `INVALID` (fail) · `AMBIGUOUS` (skip+mutations) · `NOOP` (no mutations) |
+| **Evaluation strategy** | `exact` / `family` / `semantic` / `no_match` — per-mutation match against inserted ground truth |
 
 ---
 
 ## What it is
 
-`insert_me` is a framework that **inserts known vulnerabilities into C/C++ source trees in a
-controlled, reproducible, and auditable way**. Given a seed definition and a C/C++ source
-tree, it produces:
+insert_me is a deterministic, Juliet-derived seeded vulnerability insertion and per-project evaluation framework for C/C++ codebases. It inserts auditable bad/good variants into arbitrary target projects and evaluates how well a detector report matches the inserted ground truth, optionally using an LLM for semantic adjudication.
+
+Given a seed definition and a C/C++ source tree, it produces:
 
 - **Bad/good source pairs** — the original (good) and the mutated (bad) version side-by-side.
 - **Patch plan** — the planned transformations before any source files are modified.
@@ -70,7 +71,7 @@ For engineers picking this up for the first time inside an organisation:
 | | |
 |---|---|
 | **What it is** | A Python CLI that inserts one known vulnerability into a C/C++ source tree and produces a fully annotated, schema-validated output bundle. |
-| **Current maturity** | Phase 4b / MVP — all four core pipeline stages implemented and tested (335 tests). Not production-hardened; alpha-quality. |
+| **Current maturity** | Phase 7A — all four core pipeline stages + evaluator implemented and tested (~360 tests). Not production-hardened; alpha-quality. |
 | **Install path** | `pip install -e .` from source. No PyPI release exists yet. |
 | **Python versions** | 3.11, 3.12 — **CI-tested**. 3.10 — **statically reviewed only** (single shim: `tomllib` → `tomli`). No other version-specific features used. |
 | **Dependencies** | `jsonschema>=4.17` + `tomli>=1.2.0` on Python 3.10 only. No other mandatory runtime dependencies. |
@@ -86,7 +87,7 @@ For engineers picking this up for the first time inside an organisation:
 **What is NOT available yet:**
 - Additional mutation strategies (CWE-190) — Phase 4c
 - AST-based or compiler-backed patching/validation — future phases
-- LLM-enriched semantic labels (`labels.json`) — Phase 7
+- Phase 7B: LLM adjudicator integration for semantic match
 - Batch corpus generation — Phase 9
 
 ---
@@ -114,6 +115,11 @@ insert-me validate-bundle output/<run-id>/
 
 # Pretty-print an audit record
 insert-me audit output/<run-id>/audit.json
+
+# Evaluate a detector report against the inserted ground truth
+insert-me evaluate --bundle output/<run-id>/ \
+                   --tool-report report.json \
+                   --tool cppcheck
 ```
 
 The `--seed-file` argument takes a seed JSON file (see `seed.schema.json` and `examples/seeds/`).
@@ -177,10 +183,20 @@ Example seed files are in `examples/seeds/`:
          ▼
   [output bundle]
     bad/  good/  + all JSON artifacts above
+         │
+         │  (optional, separate step)
+         ▼
+  ┌─────────────┐
+  │  Evaluator  │  ✓ Phase 7A — match detector report against ground truth
+  └──────┬──────┘    (insert-me evaluate --bundle ... --tool-report ...)
+         │  match_result.json  coverage_result.json
+         ▼
+  [evaluation artifacts]
 ```
 
-An optional LLM adapter may be invoked after the Auditor for label enrichment (`labels.json`).
-This is a side-channel — it does not modify any deterministic artifact.
+An optional LLM adapter may be invoked after the Auditor for label enrichment (`labels.json`),
+or after the Evaluator for semantic match adjudication (`adjudication_result.json`, Phase 7B).
+These are side-channels — they do not modify any deterministic artifact.
 
 ---
 

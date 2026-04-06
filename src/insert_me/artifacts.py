@@ -132,6 +132,9 @@ class BundlePaths:
     ground_truth: Path
     audit: Path
     labels: Optional[Path]
+    match_result: Optional[Path]
+    coverage_result: Optional[Path]
+    adjudication_result: Optional[Path]
 
     @classmethod
     def from_run_id(cls, output_root: Path, run_id: str) -> "BundlePaths":
@@ -147,6 +150,9 @@ class BundlePaths:
             ground_truth=root / "ground_truth.json",
             audit=root / "audit.json",
             labels=root / "labels.json",
+            match_result=root / "match_result.json",
+            coverage_result=root / "coverage_result.json",
+            adjudication_result=root / "adjudication_result.json",
         )
 
     def create_dirs(self) -> None:

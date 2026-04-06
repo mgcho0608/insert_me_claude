@@ -1,0 +1,106 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "insert_me/schemas/match_result/1.0",
+  "title": "MatchResult",
+  "description": "Per-mutation match evaluation. Records how each inserted mutation compares against the findings in a detector report. Produced by the insert_me evaluator.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_id",
+    "tool",
+    "evaluated_at",
+    "mutations_evaluated",
+    "matches"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Schema version string, e.g. '1.0'."
+    },
+    "run_id": {
+      "type": "string",
+      "description": "16-character hex run identifier linking this result to the insert_me output bundle."
+    },
+    "tool": {
+      "type": "string",
+      "description": "Name of the detection tool whose report was evaluated."
+    },
+    "evaluated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 UTC timestamp of when this evaluation was performed."
+    },
+    "mutations_evaluated": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total number of mutations from ground_truth.json that were evaluated."
+    },
+    "matches": {
+      "type": "array",
+      "description": "One match record per evaluated mutation.",
+      "items": {
+        "type": "object",
+        "required": [
+          "mutation_index",
+          "mutation_type",
+          "file",
+          "line",
+          "match_level",
+          "matched_finding",
+          "rationale"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "mutation_index": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Zero-based index into ground_truth.json mutations array."
+          },
+          "mutation_type": {
+            "type": "string",
+            "description": "Mutation strategy identifier, e.g. 'insert_premature_free'."
+          },
+          "file": {
+            "type": "string",
+            "description": "Relative path of the mutated source file."
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based line number of the mutation site."
+          },
+          "cwe_id": {
+            "type": "string",
+            "description": "CWE identifier of the inserted vulnerability, if known."
+          },
+          "match_level": {
+            "type": "string",
+            "enum": ["exact", "family", "semantic", "no_match"],
+            "description": "Quality of match: exact (file+CWE+line), family (same CWE family), semantic (keyword heuristic), or no_match."
+          },
+          "matched_finding": {
+            "description": "The detector finding that was matched, or null if no match.",
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rationale": {
+            "type": "string",
+            "description": "Human-readable explanation of why this match level was assigned."
+          },
+          "adjudication_pending": {
+            "type": "boolean",
+            "description": "If true, a semantic match was found but LLM adjudication has not been performed. Absent or false otherwise."
+          }
+        }
+      }
+    }
+  }
+}

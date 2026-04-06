@@ -45,6 +45,12 @@ SCHEMA_GROUND_TRUTH = "vuln_spec"
 SCHEMA_AUDIT_RECORD = "audit_record"
 SCHEMA_LABELS = "labels"
 
+# Evaluation artifact schemas (Phase 7A)
+SCHEMA_DETECTOR_REPORT = "detector_report"
+SCHEMA_MATCH_RESULT = "match_result"
+SCHEMA_COVERAGE_RESULT = "coverage_result"
+SCHEMA_ADJUDICATION_RESULT = "adjudication_result"
+
 # Ordered resolution priority: .schema.json tried first, then .json
 _SUFFIXES = [".schema.json", ".json"]
 
@@ -214,8 +220,12 @@ _BUNDLE_ARTIFACT_MAP: dict[str, str] = {
 }
 
 # labels.json is present only when the LLM adapter ran with write_labels=true.
+# Evaluation artifacts are present only when the evaluate command has been run.
 _BUNDLE_OPTIONAL_ARTIFACT_MAP: dict[str, str] = {
     "labels.json": SCHEMA_LABELS,
+    "match_result.json": SCHEMA_MATCH_RESULT,
+    "coverage_result.json": SCHEMA_COVERAGE_RESULT,
+    "adjudication_result.json": SCHEMA_ADJUDICATION_RESULT,
 }
 
 

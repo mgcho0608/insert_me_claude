@@ -1,0 +1,93 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "insert_me/schemas/coverage_result/1.0",
+  "title": "CoverageResult",
+  "description": "Summary statistics for an evaluation run. Aggregates match outcomes across all evaluated mutations to produce per-level counts and a coverage rate.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_id",
+    "tool",
+    "evaluated_at",
+    "total_mutations",
+    "matched",
+    "unmatched",
+    "false_positives",
+    "coverage_rate",
+    "by_level"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Schema version string, e.g. '1.0'."
+    },
+    "run_id": {
+      "type": "string",
+      "description": "16-character hex run identifier linking this result to the insert_me output bundle."
+    },
+    "tool": {
+      "type": "string",
+      "description": "Name of the detection tool whose report was evaluated."
+    },
+    "evaluated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 UTC timestamp of when this evaluation was performed."
+    },
+    "total_mutations": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total number of mutations from ground_truth.json."
+    },
+    "matched": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of mutations with match_level in (exact, family, semantic)."
+    },
+    "unmatched": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of mutations with match_level == no_match."
+    },
+    "false_positives": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of detector findings not linked to any inserted mutation."
+    },
+    "coverage_rate": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Fraction of mutations that were matched (matched / total_mutations). 0 if total_mutations is 0."
+    },
+    "by_level": {
+      "type": "object",
+      "description": "Per-level match counts.",
+      "required": ["exact", "family", "semantic", "no_match"],
+      "additionalProperties": false,
+      "properties": {
+        "exact": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Mutations matched at the exact level (same file, CWE, line ±2)."
+        },
+        "family": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Mutations matched at the family level (same CWE family group)."
+        },
+        "semantic": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Mutations matched via keyword heuristic on finding message."
+        },
+        "no_match": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Mutations with no corresponding finding."
+        }
+      }
+    }
+  }
+}
