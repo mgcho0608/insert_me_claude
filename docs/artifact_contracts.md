@@ -38,18 +38,18 @@ A single `insert_me run` produces one **output bundle** under `output/<run-id>/`
 
 ```
 output/<run-id>/
-├── bad/                      Mutated C/C++ source tree  (created but empty until Phase 4)
-├── good/                     Clean C/C++ source tree    (created but empty until Phase 4)
+├── bad/                      Mutated C/C++ source tree  (written in real mode; empty in dry-run)
+├── good/                     Clean C/C++ source tree    (written in real mode; empty in dry-run)
 ├── patch_plan.json           Seeder output: planned transformations (§1)
 ├── validation_result.json    Validator output: plausibility verdict (§2)
-├── audit_result.json         Auditor classification: VALID/NOOP/AMBIGUOUS/INVALID (§3)
+├── audit_result.json         Classification: VALID/NOOP/AMBIGUOUS/INVALID (§3)
 ├── ground_truth.json         Vulnerability annotation (§4)
 ├── audit.json                Provenance record (§5)
 └── labels.json               (optional) LLM-enriched semantic labels (§6)
 ```
 
-The `bad/` and `good/` subdirectories are created on every run and are empty until
-the Patcher is implemented (Phase 4).
+In real mode (default), `bad/` and `good/` contain the mutated and original source trees.
+In dry-run mode (`--dry-run`), both directories are created but left empty.
 
 The `<run-id>` is a 16-character hex string derived deterministically from:
 `SHA-256(canonical_seed_json || source_tree_path || pipeline_version)[:16]`
@@ -88,7 +88,8 @@ before any source files are modified.
 - `PENDING` — No qualifying candidates (source tree empty, no C/C++ files, or all
   candidates below `min_candidate_score`).
 
-`APPLIED` and `ABORTED` are produced by the Patcher (Phase 4, not yet implemented).
+`APPLIED` is produced by the Patcher when a mutation is successfully written.
+`ABORTED` is reserved for future use (no abort path is currently implemented).
 
 ### §1.1 Target record
 

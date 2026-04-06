@@ -46,13 +46,13 @@ The Auditor is not yet called; the orchestrator derives the audit classification
 │  └─────┬─────┘                                                        │
 │        |  [patch_plan.json]  <- schema: patch_plan.schema.json       │
 │        v                                                              │
-│  ┌───────────┐   PatchPlan -> mutated source tree                    │
-│  │  Patcher  │   DETERMINISTIC  [⧖ Phase 4 — STUB]                  │
+│  ┌───────────┐   PatchPlan -> bad/good source trees                  │
+│  │  Patcher  │   DETERMINISTIC  [⚡ Phase 4a — alloc_size_undercount]│
 │  └─────┬─────┘                                                        │
 │        |                                                              │
 │        v                                                              │
-│  ┌─────────────┐  source tree -> plausibility verdict                │
-│  │  Validator  │  DETERMINISTIC  [⧖ Phase 5 — STUB]                 │
+│  ┌─────────────┐  PatchResult -> plausibility verdict                │
+│  │  Validator  │  DETERMINISTIC  [✓ Phase 5 COMPLETE — 5 checks]    │
 │  └──────┬──────┘                                                      │
 │         |  [validation_result.json]  <- validation_result.schema.json│
 │         v                                                             │
@@ -63,7 +63,7 @@ The Auditor is not yet called; the orchestrator derives the audit classification
 │        ├───────────────────────────────┐                             │
 │        v                               v                             │
 │  [Output Bundle]                  ┌──────────────────┐              │
-│  bad/  good/  (empty until Ph.4)  │   LLM Adapter    │ OPTIONAL     │
+│  bad/  good/  (written in real mode)  │   LLM Adapter    │ OPTIONAL │
 │  patch_plan.json                  │  (label enrich.) │              │
 │  validation_result.json           └────────┬─────────┘              │
 │  audit_result.json                         | [labels.json]           │
@@ -243,10 +243,10 @@ src/insert_me/
 ├── schema.py            # Schema loader, artifact validation, validate_bundle()
 ├── artifacts.py         # BundlePaths, run ID derivation, write_json_artifact
 ├── pipeline/
-│   ├── __init__.py      # Orchestrator — run_pipeline() [Phase 2-3: full dry-run]
+│   ├── __init__.py      # Orchestrator — run_pipeline() [Phases 3–5 wired]
 │   ├── seeder.py        # Seeder, PatchTarget, PatchTargetList  [Phase 3: COMPLETE]
-│   ├── patcher.py       # Patcher, Mutation, PatchResult        [Phase 4: STUB]
-│   ├── validator.py     # Validator, ValidationVerdict           [Phase 5: STUB]
+│   ├── patcher.py       # Patcher, Mutation, PatchResult        [Phase 4a: PARTIAL]
+│   ├── validator.py     # Validator, ValidationVerdict           [Phase 5: COMPLETE]
 │   └── auditor.py       # Auditor, GroundTruthRecord, AuditRecord [Phase 6: STUB]
 └── llm/
     ├── __init__.py      # Adapter registry
