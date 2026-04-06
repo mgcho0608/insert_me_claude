@@ -11,21 +11,24 @@ when referencing schemas in code — never hardcode schema names.
 
 ## Current Phase
 
-**Phase 4a — Patcher minimal slice (`alloc_size_undercount`).**
+**Phase 5 — Validator (complete).**
 
-The Seeder and Patcher are real.  In the default (non-dry-run) mode the pipeline
-produces actual bad/good source trees.  Validator (Phase 5) and Auditor (Phase 6)
-remain pending; the orchestrator emits placeholder values for those stages.
+The Seeder, Patcher, and Validator are real.  In the default (non-dry-run) mode the
+pipeline produces actual bad/good source trees, validates the mutation with five
+rule-based checks, and derives `audit_result.json` classification from the verdict.
+Auditor (Phase 6) remains pending.
 
 | Artifact field | Real mode (default) | Dry-run (`--dry-run`) | Future |
 |---|---|---|---|
 | `patch_plan.json` `status` | `APPLIED` (mutated) · `PLANNED` (skipped) · `PENDING` (no sources) | `PLANNED` / `PENDING` | N/A |
 | `patch_plan.json` `targets` | Real Seeder output | Real Seeder output | N/A |
 | `bad/` `good/` | Written with real source trees | Empty dirs | N/A |
-| `ground_truth.json` `mutations` | Real record(s) when mutation applied | `[]` | Phase 6 adds full records |
-| `validation_result.json` `overall` | `SKIP` | `SKIP` | Phase 5 |
-| `audit_result.json` `classification` | `AMBIGUOUS` (mutated) · `NOOP` (no mutation) | `NOOP` | Phase 6 |
-| `audit.json` `validation_verdict.passed` | `false` | `false` | Phase 5 |
+| `ground_truth.json` `mutations` | Real record(s) when mutation applied | `[]` | N/A |
+| `ground_truth.json` `validation_passed` | `true` when Validator passes | `false` | N/A |
+| `validation_result.json` `overall` | `PASS` / `FAIL` / `SKIP` | `SKIP` | N/A |
+| `validation_result.json` `checks` | Real check results (5 checks) | `[]` | N/A |
+| `audit_result.json` `classification` | `VALID` (pass) · `INVALID` (fail) · `AMBIGUOUS` (skip+mut) · `NOOP` | `NOOP` | Phase 6 |
+| `audit.json` `validation_verdict.passed` | Real verdict | `false` | N/A |
 
 ---
 

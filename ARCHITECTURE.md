@@ -13,20 +13,21 @@ regardless of which optional components are active.
 
 ## Current Implementation Status
 
-**Phase 3 — Seeder: complete.** The pipeline can scan a real C/C++ source tree, extract ranked
-patch targets, and emit a schema-valid output bundle.  Source files are never modified.
+**Phase 5 — Validator: complete.** The pipeline scans a real C/C++ source tree, applies
+one mutation, validates the result with five deterministic rule-based checks, and emits
+a schema-valid output bundle with a real `validation_result.json`.
 
 | Pipeline stage | Status | Notes |
 |---|---|---|
 | Seeder | **Complete** (Phase 3) | Lexical/regex source scan; real targets in `patch_plan.json` |
 | Patcher | **Partial** (Phase 4a) | `alloc_size_undercount` strategy only; one mutation per run |
-| Validator | **Stub** (Phase 5) | `Validator.run()` raises `NotImplementedError` |
+| Validator | **Complete** (Phase 5) | Five deterministic checks; no compiler required |
 | Auditor | **Stub** (Phase 6) | `Auditor.run()` raises `NotImplementedError` |
 | LLM Adapter | Interface only | `NoOpAdapter` always available; real adapters deferred |
 
-The pipeline orchestrator (`pipeline/__init__.py`) coordinates Seeder and Patcher
-directly.  Validator and Auditor class methods are not yet called; the orchestrator
-emits placeholder artifacts for those stages.
+The pipeline orchestrator (`pipeline/__init__.py`) coordinates Seeder, Patcher, and Validator.
+The Auditor is not yet called; the orchestrator derives the audit classification
+(`VALID`/`INVALID`/`AMBIGUOUS`/`NOOP`) from the Validator verdict.
 
 ---
 
@@ -117,16 +118,26 @@ No LLM calls.  No file writes.  `Seeder.run()` is fully implemented.
 Future strategies (`insert_premature_free`, integer overflow variants, etc.) are
 registered in `_STRATEGY_HANDLERS` when implemented.
 
-### Validator (`pipeline/validator.py`) — Phase 5 STUB
+### Validator (`pipeline/validator.py`) — Phase 5 COMPLETE
 
-**Deterministic (planned).**
+**Deterministic.**
 
-- Will accept a `PatchResult`.
-- Will run rule-based checks: syntactic well-formedness, non-triviality, scope sanity.
-- Output: `ValidationVerdict` — pass/fail + per-check `CheckResult` records.
+- Accepts: a `PatchResult` (or `None` in dry-run mode) and the original `source_root`.
+- In dry-run mode: returns an empty SKIP verdict immediately without file I/O.
+- In real mode: runs five checks — `mutation_applied`, `good_tree_integrity`,
+  `bad_tree_changed`, `mutation_scope`, `simple_syntax_sanity`.
+- No compiler invocation; all checks are rule-based and operate on file contents.
+- Output: `ValidationVerdict` — `overall` (PASS/FAIL/SKIP) + per-check `CheckResult` records.
 
-`Validator.run()` currently raises `NotImplementedError`.  The dataclasses
-(`ValidationVerdict`, `CheckResult`, `CheckStatus`) are defined and stable.
+**Checks summary:**
+
+| Check | Passes when |
+|---|---|
+| `mutation_applied` | At least one `Mutation` record exists in `PatchResult` |
+| `good_tree_integrity` | `good/` copy of mutated file is byte-identical to original source |
+| `bad_tree_changed` | `bad/` file differs from `good/` and contains `mutated_fragment` |
+| `mutation_scope` | Exactly 1 file differs between `bad/` and `good/` |
+| `simple_syntax_sanity` | Mutated line has balanced parentheses; file is non-empty |
 
 ### Auditor (`pipeline/auditor.py`) — Phase 6 STUB
 
@@ -174,10 +185,12 @@ seed.json + source tree
         [Patcher not invoked; bad/ and good/ created as empty dirs]
         |
     Both modes:
+        Validator.run()           [REAL — 5 rule-based checks in real mode; SKIP in dry-run]
+        |
         |-- patch_plan.json         (APPLIED/PLANNED/PENDING; real Seeder targets)
-        |-- validation_result.json  (overall=SKIP, Validator pending Phase 5)
-        |-- audit_result.json       (AMBIGUOUS if mutated, NOOP otherwise)
-        |-- ground_truth.json       (real mutation record if applied, else mutations=[])
+        |-- validation_result.json  (real check results; overall=SKIP in dry-run)
+        |-- audit_result.json       (VALID/INVALID/AMBIGUOUS/NOOP from Validator verdict)
+        |-- ground_truth.json       (real mutation record + validation_passed)
         |-- audit.json              (full provenance, real source_hash)
         |
         v
@@ -192,7 +205,7 @@ seed.json + source tree
 |---|---|---|---|---|
 | Seeder | Yes | No | **Yes (Phase 3)** | `patch_plan.json` |
 | Patcher | Yes | No | No (Phase 4) | `bad/` `good/` trees |
-| Validator (rule checks) | Yes | No | No (Phase 5) | `validation_result.json` |
+| Validator (rule checks) | Yes | No | **Yes (Phase 5)** | `validation_result.json` |
 | Validator (soft score) | No | Optional | No (Phase 5+) | adds field to `validation_result.json` |
 | Auditor (structural) | Yes | No | No (Phase 6) | `ground_truth.json` `audit.json` `audit_result.json` |
 | Auditor (label enrich.) | No | Optional | No (Phase 7) | `labels.json` |

@@ -6,11 +6,11 @@ Canonical pipeline stages:
 
 Current implementation status
 ------------------------------
-Phase 3 (Seeder) and Phase 4a (Patcher — alloc_size_undercount strategy) are
-implemented.  The pipeline produces real bad/good source trees when a compatible
-target is found and the run is not in dry-run mode.
+Phase 3 (Seeder), Phase 4a (Patcher — alloc_size_undercount strategy), and
+Phase 5 (Validator — five deterministic checks) are implemented.
 
-Validator (Phase 5) and Auditor with real classifications (Phase 6) are deferred.
+The pipeline produces real bad/good source trees, validates the mutation, and
+emits schema-valid artifacts.  Auditor with real classifications (Phase 6) is deferred.
 
 Run modes
 ---------
@@ -62,6 +62,7 @@ from insert_me.artifacts import (
 from insert_me.config import Config
 from insert_me.pipeline.patcher import Mutation, Patcher, PatchResult
 from insert_me.pipeline.seeder import PatchTarget, PatchTargetList, Seeder
+from insert_me.pipeline.validator import Validator, ValidationVerdict
 from insert_me.schema import (
     SCHEMA_AUDIT_RECORD,
     SCHEMA_AUDIT_RESULT,
@@ -183,6 +184,16 @@ def run_pipeline(config: Config, *, dry_run: bool = False) -> BundlePaths:
         plan_status = "PENDING"
 
     # ------------------------------------------------------------------
+    # 6b. Run Validator
+    # ------------------------------------------------------------------
+    validator = Validator(
+        patch_result=patch_result,
+        source_root=source_root,
+        dry_run=dry_run,
+    )
+    verdict: ValidationVerdict = validator.run()
+
+    # ------------------------------------------------------------------
     # 7. Emit patch_plan.json
     # ------------------------------------------------------------------
     patch_plan: dict[str, Any] = {
@@ -210,10 +221,14 @@ def run_pipeline(config: Config, *, dry_run: bool = False) -> BundlePaths:
         "result_id": f"vr-{run_id}",
         "run_id": run_id,
         "plan_id": plan_id,
-        "overall": "SKIP",
-        "checks": [],
-        "notes": "Validation skipped: Validator not yet implemented (Phase 5).",
+        "overall": verdict.overall,
+        "checks": [
+            {"name": c.name, "status": c.status.value, "reason": c.reason}
+            for c in verdict.checks
+        ],
     }
+    if verdict.notes:
+        validation_result["notes"] = verdict.notes
     write_json_artifact(bundle.validation_result, validation_result)
     validate_artifact(validation_result, SCHEMA_VALIDATION_RESULT)
 
@@ -221,15 +236,31 @@ def run_pipeline(config: Config, *, dry_run: bool = False) -> BundlePaths:
     # 9. Emit audit_result.json
     # ------------------------------------------------------------------
     if applied_mutations:
-        classification = "AMBIGUOUS"
-        confidence = "low"
-        evidence_obs = (
-            f"Patcher applied {len(applied_mutations)} mutation(s) using strategy "
-            f"'{applied_mutations[0].mutation_type}'. "
-            "Validator not yet implemented (Phase 5) — classification is AMBIGUOUS "
-            "pending rule-based plausibility verification."
-        )
-        reviewer_name = "patcher_phase4_v1"
+        verdict_overall = verdict.overall
+        if verdict_overall == "PASS":
+            classification = "VALID"
+            confidence = "medium"
+            evidence_obs = (
+                f"Patcher applied {len(applied_mutations)} mutation(s) using strategy "
+                f"'{applied_mutations[0].mutation_type}'. "
+                "Validator passed all plausibility checks."
+            )
+        elif verdict_overall == "FAIL":
+            classification = "INVALID"
+            confidence = "medium"
+            evidence_obs = (
+                f"Patcher applied {len(applied_mutations)} mutation(s) but Validator "
+                "rejected the result — at least one plausibility check failed."
+            )
+        else:
+            classification = "AMBIGUOUS"
+            confidence = "low"
+            evidence_obs = (
+                f"Patcher applied {len(applied_mutations)} mutation(s) using strategy "
+                f"'{applied_mutations[0].mutation_type}'. "
+                "Validator verdict is SKIP — classification is AMBIGUOUS pending review."
+            )
+        reviewer_name = "validator_phase5_v1"
     elif n_targets > 0:
         classification = "NOOP"
         confidence = "low"
@@ -282,7 +313,7 @@ def run_pipeline(config: Config, *, dry_run: bool = False) -> BundlePaths:
         "spec_id": seed_data.get("seed_id", ""),
         "seed": seed_int,
         "mutations": [_mutation_to_dict(m) for m in applied_mutations],
-        "validation_passed": False,  # Validator pending Phase 5
+        "validation_passed": verdict.passed,
     }
     write_json_artifact(bundle.ground_truth, ground_truth)
     validate_artifact(ground_truth, SCHEMA_GROUND_TRUTH)
@@ -301,8 +332,11 @@ def run_pipeline(config: Config, *, dry_run: bool = False) -> BundlePaths:
         "pipeline_version": __version__,
         "timestamp_utc": now_utc,
         "validation_verdict": {
-            "passed": False,
-            "checks": [],
+            "passed": verdict.passed,
+            "checks": [
+                {"name": c.name, "status": c.status.value}
+                for c in verdict.checks
+            ],
         },
     }
     write_json_artifact(bundle.audit, audit_record)

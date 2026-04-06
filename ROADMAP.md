@@ -158,18 +158,23 @@ for `alloc_size_undercount` targets; good/bad trees are written; 204 tests pass.
 
 ---
 
-## Phase 5 — Validator (Rule-Based)
+## Phase 5 — Validator (Rule-Based) ✓ COMPLETE
 
 **Goal:** Automated plausibility checking of patch results.
 
-- [ ] Implement rule checks: syntactic well-formedness, mutation non-triviality,
-  file scope sanity, no obvious compile-break patterns
-- [ ] Populate `validation_result.json` with real check results
-- [ ] Integrate with a lightweight C/C++ syntax check (clang-format dry-run or similar)
-- [ ] Write tests for pass/fail cases
+- [x] Implement five deterministic rule-based checks (no compiler required):
+      `mutation_applied`, `good_tree_integrity`, `bad_tree_changed`,
+      `mutation_scope`, `simple_syntax_sanity`
+- [x] Populate `validation_result.json` with real check results
+- [x] Wire Validator into pipeline orchestrator (real mode runs checks; dry-run → SKIP)
+- [x] Drive `audit_result.json` classification from Validator verdict:
+      VALID (PASS), INVALID (FAIL), AMBIGUOUS (SKIP + mutations), NOOP (no mutations)
+- [x] Set `ground_truth.json` `validation_passed` from real verdict
+- [x] 29 Validator tests passing
 
-**Exit criterion:** Validator correctly rejects known-bad mutations and passes known-good ones
-in fixture tests.
+**Exit criterion met:** Validator correctly rejects known-bad mutations and passes known-good ones
+in fixture tests. `validation_result.json` carries real check results. `audit_result.json`
+classification reflects Validator output.
 
 ---
 

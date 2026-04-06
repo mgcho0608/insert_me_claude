@@ -2,11 +2,12 @@
 
 ---
 
-## Current phase (Phase 4a — Patcher minimal slice)
+## Current phase (Phase 5 — Validator complete)
 
-The Seeder and Patcher are implemented. You can run the pipeline today and get
+The Seeder, Patcher, and Validator are implemented. You can run the pipeline today and get
 **real bad/good source trees** with one inserted vulnerability (`alloc_size_undercount`
-strategy: `malloc(<expr>)` → `malloc((<expr>) - 1)`).
+strategy: `malloc(<expr>)` → `malloc((<expr>) - 1)`) plus a real `validation_result.json`
+from five rule-based plausibility checks.
 
 ---
 
@@ -35,7 +36,9 @@ insert-me validate-bundle output/<run-id>/
 - `patch_plan.json` — `status: "APPLIED"`, one target in `heap_buf.c`
 - `bad/heap_buf.c` — mutated: `malloc((user_len * sizeof(char)) - 1)`
 - `good/heap_buf.c` — byte-identical copy of original
-- `ground_truth.json` — one mutation record
+- `ground_truth.json` — one mutation record, `validation_passed: true`
+- `validation_result.json` — `overall: "PASS"`, five checks passing
+- `audit_result.json` — `classification: "VALID"`
 
 **To preview without modifying sources (dry-run):**
 

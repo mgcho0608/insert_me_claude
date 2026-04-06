@@ -10,20 +10,21 @@
 
 ---
 
-## Current Status — Phase 4a Patcher (minimal slice)
+## Current Status — Phase 5 Validator (complete)
 
 | | |
 |---|---|
 | **Canonical interface** | `insert-me run --seed-file PATH --source PATH` |
-| **Default mode** | Real patching — bad/good source trees are written |
+| **Default mode** | Real patching + rule-based validation |
 | **Dry-run mode** | `--dry-run` flag — all artifacts emitted, no source modifications |
 | **Artifacts emitted** | All 5 core artifacts, schema-validated on every run |
 | **`patch_plan.json` status** | `APPLIED` (mutation applied) · `PLANNED` (dry-run/no compatible target) · `PENDING` (no C/C++ sources found) |
 | **`ground_truth.json` mutations** | Real record when mutation applied; `[]` in dry-run |
+| **`ground_truth.json` validation_passed** | `true` when Validator passes; `false` in dry-run |
 | **`bad/` `good/` source trees** | Written in real mode; empty dirs in dry-run |
 | **Mutation strategy** | `alloc_size_undercount` only — `malloc(<expr>)` → `malloc((<expr>) - 1)` |
-| **`validation_result.json`** | `overall: SKIP` (Validator pending Phase 5) |
-| **`audit_result.json`** | `AMBIGUOUS` when mutation applied, `NOOP` otherwise (Auditor pending Phase 6) |
+| **`validation_result.json`** | Real check results (5 checks) in real mode; `overall: SKIP` in dry-run |
+| **`audit_result.json`** | `VALID` (validator pass) · `INVALID` (fail) · `AMBIGUOUS` (skip+mutations) · `NOOP` (no mutations) |
 
 ---
 
@@ -132,12 +133,12 @@ Example seed files are in `examples/seeds/`:
          │  patch_plan.json  ← patch_plan.schema.json
          ▼
   ┌─────────────┐
-  │   Patcher   │  ⧖ Phase 4 — apply mutations to source tree
+  │   Patcher   │  ⧖ Phase 4a — alloc_size_undercount strategy only
   └──────┬──────┘
          │
          ▼
   ┌─────────────────┐
-  │    Validator    │  ⧖ Phase 5 — rule-based plausibility checks
+  │    Validator    │  ✓ Phase 5 — five deterministic rule-based checks
   └──────┬──────────┘
          │  validation_result.json  ← validation_result.schema.json
          ▼
@@ -278,11 +279,11 @@ insert-me audit output/<run-id>/audit.json
 
 **What to expect today (real mode — default):**
 - `patch_plan.json` — `status: "APPLIED"`, one target from `heap_buf.c`
-- `ground_truth.json` — one mutation record: `malloc(user_len * sizeof(char))` → `malloc((user_len * sizeof(char)) - 1)`
+- `ground_truth.json` — one mutation record: `malloc(user_len * sizeof(char))` → `malloc((user_len * sizeof(char)) - 1)`, `validation_passed: true`
 - `bad/heap_buf.c` — mutated source (the vulnerability inserted)
 - `good/heap_buf.c` — byte-identical copy of the original
-- `validation_result.json` — `overall: "SKIP"` (Validator pending Phase 5)
-- `audit_result.json` — `classification: "AMBIGUOUS"` (pending Validator confirmation)
+- `validation_result.json` — `overall: "PASS"`, five rule-based checks all passing
+- `audit_result.json` — `classification: "VALID"` (Validator confirmed plausibility)
 - `validate-bundle` exits 0 — all artifacts are schema-valid
 
 To skip patching and emit plan-only artifacts:
