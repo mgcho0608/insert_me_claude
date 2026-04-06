@@ -6,12 +6,27 @@ Canonical pipeline stages:
 
 Current implementation status
 ------------------------------
-Phase 3 (Seeder) is now implemented: the pipeline performs real deterministic
-source discovery and candidate target generation. All output artifacts are
-emitted and schema-validated. No source files are modified.
+Phase 3 (Seeder) and Phase 4a (Patcher — alloc_size_undercount strategy) are
+implemented.  The pipeline produces real bad/good source trees when a compatible
+target is found and the run is not in dry-run mode.
 
-Patcher (Phase 4), Validator (Phase 5), and Auditor with real mutations (Phase 6)
-are deferred. The dry-run pipeline is the only execution mode for now.
+Validator (Phase 5) and Auditor with real classifications (Phase 6) are deferred.
+
+Run modes
+---------
+Real mode (default):
+    insert-me run --seed-file PATH --source PATH
+
+    The Seeder discovers candidates and the Patcher applies one mutation to the
+    first compatible target.  bad/ and good/ source trees are written.
+    patch_plan.json status is APPLIED when a mutation is made, PLANNED otherwise.
+
+Dry-run mode:
+    insert-me run --seed-file PATH --source PATH --dry-run
+
+    Same artifact contract as before: all five artifacts are emitted and
+    schema-validated, but no source files are modified and bad/good trees
+    remain empty.
 
 Usage
 -----
@@ -25,7 +40,7 @@ Usage
         seed_file=Path("examples/seeds/cwe122_heap_overflow.json"),
         source_path=Path("/path/to/project"),
     )
-    bundle = run_pipeline(config, dry_run=True)
+    bundle = run_pipeline(config, dry_run=False)
     print(bundle.root)
 """
 
@@ -45,6 +60,7 @@ from insert_me.artifacts import (
     write_json_artifact,
 )
 from insert_me.config import Config
+from insert_me.pipeline.patcher import Mutation, Patcher, PatchResult
 from insert_me.pipeline.seeder import PatchTarget, PatchTargetList, Seeder
 from insert_me.schema import (
     SCHEMA_AUDIT_RECORD,
@@ -61,24 +77,15 @@ def run_pipeline(config: Config, *, dry_run: bool = False) -> BundlePaths:
     """
     Execute the insert_me pipeline.
 
-    The pipeline now includes a real Seeder pass: it discovers C/C++ source
-    files under source_path and extracts deterministic candidate targets using
-    lexical heuristics. No source files are modified.
-
     Parameters
     ----------
     config:
-        Fully-resolved Config dataclass. Must have at least one of:
-        - ``config.pipeline.seed_file`` (canonical path to a seed JSON file)
-        - ``config.pipeline.seed`` + ``config.pipeline.spec_path`` (legacy)
-        And ``config.pipeline.source_path`` (path to C/C++ source root).
-        If source_path does not exist, the Seeder returns no candidates and
-        patch_plan.json is emitted with status=PENDING and empty targets.
-
+        Fully-resolved Config dataclass.
     dry_run:
-        When True, no source files are modified. Currently always True
-        regardless of this flag; the flag is preserved for interface
-        compatibility when the Patcher is added in Phase 4.
+        When True, all five artifacts are emitted and schema-validated but
+        no source files are modified and bad/good trees remain empty.
+        When False (default), the Patcher is invoked for the first compatible
+        target; bad/ and good/ source trees are written.
 
     Returns
     -------
@@ -101,7 +108,6 @@ def run_pipeline(config: Config, *, dry_run: bool = False) -> BundlePaths:
     # ------------------------------------------------------------------
     seed_data, input_path = _resolve_seed_input(config)
 
-    # Validate canonical seed input against schema (legacy path skips this)
     if config.pipeline.seed_file is not None:
         validate_artifact(seed_data, SCHEMA_SEED)
 
@@ -146,13 +152,39 @@ def run_pipeline(config: Config, *, dry_run: bool = False) -> BundlePaths:
         "%Y-%m-%dT%H:%M:%SZ"
     )
     plan_id = f"plan-{run_id}"
-    spec_hash = _sha256_file(input_path) if input_path and input_path.exists() else "dry-run"
+    spec_hash = (
+        _sha256_file(input_path)
+        if input_path and input_path.exists()
+        else "dry-run"
+    )
     n_targets = len(target_list.targets)
 
     # ------------------------------------------------------------------
-    # 6. Emit patch_plan.json
+    # 6. Run Patcher (real mode only)
     # ------------------------------------------------------------------
-    plan_status = "PLANNED" if n_targets > 0 else "PENDING"
+    patch_result: PatchResult | None = None
+    applied_mutations: list[Mutation] = []
+
+    if not dry_run and n_targets > 0:
+        patcher = Patcher(
+            targets=target_list,
+            bad_root=bundle.bad_dir,
+            good_root=bundle.good_dir,
+        )
+        patch_result = patcher.run()
+        applied_mutations = patch_result.mutations
+
+    # Derive plan status from patcher outcome
+    if not dry_run and applied_mutations:
+        plan_status = "APPLIED"
+    elif n_targets > 0:
+        plan_status = "PLANNED"
+    else:
+        plan_status = "PENDING"
+
+    # ------------------------------------------------------------------
+    # 7. Emit patch_plan.json
+    # ------------------------------------------------------------------
     patch_plan: dict[str, Any] = {
         "schema_version": ARTIFACT_SCHEMA_VERSION,
         "plan_id": plan_id,
@@ -171,7 +203,7 @@ def run_pipeline(config: Config, *, dry_run: bool = False) -> BundlePaths:
     validate_artifact(patch_plan, SCHEMA_PATCH_PLAN)
 
     # ------------------------------------------------------------------
-    # 7. Emit validation_result.json
+    # 8. Emit validation_result.json
     # ------------------------------------------------------------------
     validation_result: dict[str, Any] = {
         "schema_version": ARTIFACT_SCHEMA_VERSION,
@@ -180,34 +212,51 @@ def run_pipeline(config: Config, *, dry_run: bool = False) -> BundlePaths:
         "plan_id": plan_id,
         "overall": "SKIP",
         "checks": [],
-        "notes": "Validation skipped: Patcher not yet implemented (Phase 4).",
+        "notes": "Validation skipped: Validator not yet implemented (Phase 5).",
     }
     write_json_artifact(bundle.validation_result, validation_result)
     validate_artifact(validation_result, SCHEMA_VALIDATION_RESULT)
 
     # ------------------------------------------------------------------
-    # 8. Emit audit_result.json
+    # 9. Emit audit_result.json
     # ------------------------------------------------------------------
-    if n_targets > 0:
+    if applied_mutations:
+        classification = "AMBIGUOUS"
+        confidence = "low"
+        evidence_obs = (
+            f"Patcher applied {len(applied_mutations)} mutation(s) using strategy "
+            f"'{applied_mutations[0].mutation_type}'. "
+            "Validator not yet implemented (Phase 5) — classification is AMBIGUOUS "
+            "pending rule-based plausibility verification."
+        )
+        reviewer_name = "patcher_phase4_v1"
+    elif n_targets > 0:
+        classification = "NOOP"
+        confidence = "low"
         evidence_obs = (
             f"Seeder identified {n_targets} candidate target(s) "
             f"(pattern_type={seed_data.get('target_pattern', {}).get('pattern_type', 'unknown')}, "
             f"skipped={target_list.skipped_count}). "
-            f"No mutations applied — Patcher not yet implemented (Phase 4)."
+            "No compatible target found for the requested mutation strategy, "
+            "or run is in dry-run mode — no mutations applied."
         )
+        reviewer_name = "seeder_dry_run_v1"
     else:
+        classification = "NOOP"
+        confidence = "low"
         evidence_obs = (
             "Seeder found no candidate targets matching the pattern "
             f"(pattern_type={seed_data.get('target_pattern', {}).get('pattern_type', 'unknown')}) "
             "in the source tree. No mutations applied."
         )
+        reviewer_name = "seeder_dry_run_v1"
 
     audit_result: dict[str, Any] = {
         "schema_version": ARTIFACT_SCHEMA_VERSION,
         "audit_id": f"ar-{run_id}",
         "run_id": run_id,
-        "classification": "NOOP",
-        "confidence": "low",
+        "classification": classification,
+        "confidence": confidence,
         "evidence": [
             {
                 "source": "rule_engine",
@@ -217,14 +266,14 @@ def run_pipeline(config: Config, *, dry_run: bool = False) -> BundlePaths:
         ],
         "reviewer": {
             "type": "deterministic",
-            "name": "seeder_dry_run_v1",
+            "name": reviewer_name,
         },
     }
     write_json_artifact(bundle.audit_result, audit_result)
     validate_artifact(audit_result, SCHEMA_AUDIT_RESULT)
 
     # ------------------------------------------------------------------
-    # 9. Emit ground_truth.json
+    # 10. Emit ground_truth.json
     # ------------------------------------------------------------------
     ground_truth: dict[str, Any] = {
         "schema_version": ARTIFACT_SCHEMA_VERSION,
@@ -232,14 +281,14 @@ def run_pipeline(config: Config, *, dry_run: bool = False) -> BundlePaths:
         "cwe_id": seed_data.get("cwe_id", "CWE-0"),
         "spec_id": seed_data.get("seed_id", ""),
         "seed": seed_int,
-        "mutations": [],
-        "validation_passed": False,
+        "mutations": [_mutation_to_dict(m) for m in applied_mutations],
+        "validation_passed": False,  # Validator pending Phase 5
     }
     write_json_artifact(bundle.ground_truth, ground_truth)
     validate_artifact(ground_truth, SCHEMA_GROUND_TRUTH)
 
     # ------------------------------------------------------------------
-    # 10. Emit audit.json
+    # 11. Emit audit.json
     # ------------------------------------------------------------------
     audit_record: dict[str, Any] = {
         "schema_version": ARTIFACT_SCHEMA_VERSION,
@@ -279,6 +328,18 @@ def _target_to_dict(target: PatchTarget, idx: int) -> dict[str, Any]:
     }
 
 
+def _mutation_to_dict(mutation: Mutation) -> dict[str, Any]:
+    """Convert a Mutation to a ground_truth mutation record (schema-compliant)."""
+    return {
+        "file": str(mutation.target.file),
+        "line": mutation.target.line,
+        "mutation_type": mutation.mutation_type,
+        "original_fragment": mutation.original_fragment,
+        "mutated_fragment": mutation.mutated_fragment,
+        "extra": mutation.extra,
+    }
+
+
 def _resolve_seed_input(
     config: Config,
 ) -> tuple[dict[str, Any], Path | None]:
@@ -288,12 +349,6 @@ def _resolve_seed_input(
     Canonical path: config.pipeline.seed_file → load and return JSON.
     Legacy path:    config.pipeline.seed + config.pipeline.spec_path
                     → construct a minimal seed_data dict.
-
-    Returns
-    -------
-    (seed_data, input_path)
-        seed_data: parsed dict ready for pipeline use
-        input_path: path to the seed/spec file (for hashing), or None
     """
     if config.pipeline.seed_file is not None:
         seed_file = config.pipeline.seed_file

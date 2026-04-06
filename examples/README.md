@@ -2,11 +2,11 @@
 
 ---
 
-## Current phase (Phase 3 — Seeder complete)
+## Current phase (Phase 4a — Patcher minimal slice)
 
-The Seeder is fully implemented. You can run the pipeline today against any
-C/C++ source tree and get a schema-valid output bundle with **real patch
-targets** in `patch_plan.json`.
+The Seeder and Patcher are implemented. You can run the pipeline today and get
+**real bad/good source trees** with one inserted vulnerability (`alloc_size_undercount`
+strategy: `malloc(<expr>)` → `malloc((<expr>) - 1)`).
 
 ---
 
@@ -19,7 +19,7 @@ A minimal C file with two clearly labeled Seeder candidates:
 - `malloc(user_len * sizeof(char))` — heap buffer size with arithmetic
 - `for (i <= count)` — off-by-one loop bound
 
-**To run:**
+**To run (real mode — default):**
 
 ```bash
 # From the repository root
@@ -31,9 +31,22 @@ insert-me run \
 insert-me validate-bundle output/<run-id>/
 ```
 
-**Expected result:** `patch_plan.json` with `status: "PLANNED"` and at least
-one target entry pointing into `heap_buf.c`.  All five core artifacts are
-produced and schema-valid.  No source files are modified.
+**Expected result:**
+- `patch_plan.json` — `status: "APPLIED"`, one target in `heap_buf.c`
+- `bad/heap_buf.c` — mutated: `malloc((user_len * sizeof(char)) - 1)`
+- `good/heap_buf.c` — byte-identical copy of original
+- `ground_truth.json` — one mutation record
+
+**To preview without modifying sources (dry-run):**
+
+```bash
+insert-me run \
+  --seed-file examples/seeds/cwe122_heap_overflow.json \
+  --source examples/demo/src \
+  --dry-run
+```
+
+Dry-run: `status: "PLANNED"`, no source copies, `ground_truth.json` `mutations: []`.
 
 ---
 

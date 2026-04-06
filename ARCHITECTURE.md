@@ -19,15 +19,14 @@ patch targets, and emit a schema-valid output bundle.  Source files are never mo
 | Pipeline stage | Status | Notes |
 |---|---|---|
 | Seeder | **Complete** (Phase 3) | Lexical/regex source scan; real targets in `patch_plan.json` |
-| Patcher | **Stub** (Phase 4) | `Patcher.run()` raises `NotImplementedError` |
+| Patcher | **Partial** (Phase 4a) | `alloc_size_undercount` strategy only; one mutation per run |
 | Validator | **Stub** (Phase 5) | `Validator.run()` raises `NotImplementedError` |
 | Auditor | **Stub** (Phase 6) | `Auditor.run()` raises `NotImplementedError` |
 | LLM Adapter | Interface only | `NoOpAdapter` always available; real adapters deferred |
 
-In the current phase, the pipeline orchestrator (`pipeline/__init__.py`) directly
-produces all five core artifacts without invoking the Patcher, Validator, or Auditor
-class methods.  Those classes hold the data structures and documented interfaces for
-future phases.
+The pipeline orchestrator (`pipeline/__init__.py`) coordinates Seeder and Patcher
+directly.  Validator and Auditor class methods are not yet called; the orchestrator
+emits placeholder artifacts for those stages.
 
 ---
 
@@ -95,17 +94,28 @@ future phases.
 
 No LLM calls.  No file writes.  `Seeder.run()` is fully implemented.
 
-### Patcher (`pipeline/patcher.py`) — Phase 4 STUB
+### Patcher (`pipeline/patcher.py`) — Phase 4a PARTIAL
 
-**Deterministic (planned).**
+**Deterministic.**
 
-- Will accept a `PatchTargetList` and a source tree path.
-- Will apply rule-based mutations to produce the **bad** (vulnerable) tree.
-- Will copy the original to produce the **good** (clean) tree.
-- Output: `PatchResult` — paths to bad/good trees and applied `Mutation` records.
+- Copies source_root byte-identically to `good/`.
+- Copies source_root to `bad/` and applies one line-level mutation to the first compatible target.
+- Output: `PatchResult` — paths to bad/good trees, list of `Mutation` records (0 or 1).
 
-`Patcher.run()` currently raises `NotImplementedError`.  The dataclasses
-(`Mutation`, `PatchResult`) are defined and stable.
+**Currently implemented strategy:**
+
+| Strategy | Rule |
+|---|---|
+| `alloc_size_undercount` | `malloc(<expr>)` → `malloc((<expr>) - 1)` |
+
+**Phase 4 scope limits:**
+- One mutation per run (first compatible target only).
+- No AST parser — regex + paren-counting only.
+- If the target line has no malloc call, or the strategy is unrecognised, the target
+  is added to `skipped_targets` and `bad/` remains identical to `good/`.
+
+Future strategies (`insert_premature_free`, integer overflow variants, etc.) are
+registered in `_STRATEGY_HANDLERS` when implemented.
 
 ### Validator (`pipeline/validator.py`) — Phase 5 STUB
 
@@ -155,18 +165,24 @@ seed.json + source tree
         |
         |-- patch_plan.json         (status=PLANNED/PENDING, real targets)
         |
-    [orchestrator produces remaining artifacts in dry-run mode]
-        |-- validation_result.json  (overall=SKIP, checks=[])
-        |-- audit_result.json       (classification=NOOP, confidence=low)
-        |-- ground_truth.json       (mutations=[], validation_passed=false)
+    Real mode (default: --dry-run not set):
+        Patcher.run()             [REAL — copies source, applies one mutation]
+        |-- bad/                  mutated source tree
+        |-- good/                 byte-identical copy of original
+        |
+    Dry-run mode (--dry-run flag):
+        [Patcher not invoked; bad/ and good/ created as empty dirs]
+        |
+    Both modes:
+        |-- patch_plan.json         (APPLIED/PLANNED/PENDING; real Seeder targets)
+        |-- validation_result.json  (overall=SKIP, Validator pending Phase 5)
+        |-- audit_result.json       (AMBIGUOUS if mutated, NOOP otherwise)
+        |-- ground_truth.json       (real mutation record if applied, else mutations=[])
         |-- audit.json              (full provenance, real source_hash)
         |
         v
     output/<run-id>/
 ```
-
-`bad/` and `good/` subdirectories are created but remain empty until the
-Patcher is implemented in Phase 4.
 
 ---
 

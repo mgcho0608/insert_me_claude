@@ -127,23 +127,34 @@ across repeated runs for the same seed + source tree. `patch_plan.json` carries 
 
 ---
 
-## Phase 4 — Patcher (Deterministic)
+## Phase 4 — Patcher (Deterministic) ⚡ PARTIALLY COMPLETE (Phase 4a)
 
 **Goal:** Apply mutations from a `PatchTargetList` to produce bad/good source trees.
 
-- [x] Define `Mutation` and `PatchResult` dataclasses (complete — stubs in `patcher.py`)
-- [ ] Implement mutation strategies for Phase 1 CWE set (start narrow: 1–3 CWEs)
-- [ ] Implement bad/good tree copy + apply
-- [ ] Verify round-trip: good tree is byte-identical to original
-- [ ] Wire Patcher into pipeline orchestrator; remove dry-run placeholder logic
-- [ ] Write tests for each mutation strategy on fixture sources
-- [ ] Confirm determinism: same seed + spec → same diff
+### Phase 4a — complete
 
-Note: `source_hash` is already computed by the real Seeder (Phase 3) and written to
-`patch_plan.json` and `audit.json`. No placeholder removal needed for that field.
+- [x] Define `Mutation` and `PatchResult` dataclasses
+- [x] Implement `alloc_size_undercount` strategy: `malloc(<expr>)` → `malloc((<expr>) - 1)`
+- [x] Implement bad/good tree copy (`_copy_tree`): good is byte-identical to original
+- [x] Wire Patcher into pipeline orchestrator: real mode (default) vs dry-run (`--dry-run`)
+- [x] `patch_plan.json` status `APPLIED` when mutation applied, `PLANNED` in dry-run
+- [x] `ground_truth.json` populated with real `Mutation` records when applied
+- [x] Strategy registry (`_STRATEGY_HANDLERS`) in place for future strategies
+- [x] 32 Patcher tests passing; demo fixture produces real bad/good trees
 
-**Exit criterion:** `Patcher.run(targets, source_path)` produces a `PatchResult` with a
-reproducible diff that compiles (at least syntactically) in the fixture environment.
+### Phase 4b — remaining
+
+- [ ] Implement additional mutation strategies for Phase 1 CWE set:
+      `insert_premature_free` (CWE-416), `integer_size_overflow` (CWE-190)
+- [ ] Handle multi-file source trees with multiple targets across files
+- [ ] Confirm determinism: same seed + spec → same diff across runs
+- [ ] Benchmark copy performance on mid-size source trees (~100k LOC)
+
+Note: `source_hash` is already computed by the Seeder and written to
+`patch_plan.json` and `audit.json`. No placeholder removal needed.
+
+**Phase 4a exit criterion met:** `Patcher.run()` produces a real `PatchResult`
+for `alloc_size_undercount` targets; good/bad trees are written; 204 tests pass.
 
 ---
 

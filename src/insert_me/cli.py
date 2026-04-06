@@ -135,7 +135,8 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "Emit all output artifacts without modifying source files. "
-            "This is the primary mode until the Patcher (Phase 4) is implemented."
+            "When not set (default), the Patcher is invoked and bad/good "
+            "source trees are written when a compatible target is found."
         ),
     )
     run_p.set_defaults(func=_cmd_run)
@@ -246,7 +247,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     # ------------------------------------------------------------------
     # Run pipeline
     # ------------------------------------------------------------------
-    dry_run = args.dry_run or True  # always dry-run until Patcher is implemented
+    dry_run = args.dry_run  # False by default; --dry-run skips Patcher
 
     print(f"[insert-me] starting {'dry-run ' if dry_run else ''}pipeline")
     if config.pipeline.seed_file:

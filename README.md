@@ -10,18 +10,20 @@
 
 ---
 
-## Current Status — Phase 3 Complete
+## Current Status — Phase 4a Patcher (minimal slice)
 
 | | |
 |---|---|
 | **Canonical interface** | `insert-me run --seed-file PATH --source PATH` |
-| **Current mode** | Dry-run: Seeder is real, Patcher/Validator/Auditor are stubs |
-| **Artifacts emitted today** | All 5 core artifacts, schema-validated on every run |
-| **Source modifications** | None — source files are never modified in the current phase |
-| **`patch_plan.json` targets** | Real Seeder output (`PLANNED`) when C/C++ files exist |
+| **Default mode** | Real patching — bad/good source trees are written |
+| **Dry-run mode** | `--dry-run` flag — all artifacts emitted, no source modifications |
+| **Artifacts emitted** | All 5 core artifacts, schema-validated on every run |
+| **`patch_plan.json` status** | `APPLIED` (mutation applied) · `PLANNED` (dry-run/no compatible target) · `PENDING` (no C/C++ sources found) |
+| **`ground_truth.json` mutations** | Real record when mutation applied; `[]` in dry-run |
+| **`bad/` `good/` source trees** | Written in real mode; empty dirs in dry-run |
+| **Mutation strategy** | `alloc_size_undercount` only — `malloc(<expr>)` → `malloc((<expr>) - 1)` |
 | **`validation_result.json`** | `overall: SKIP` (Validator pending Phase 5) |
-| **`audit_result.json`** | `classification: NOOP` (Auditor pending Phase 6) |
-| **`bad/` `good/` dirs** | Created but empty (Patcher pending Phase 4) |
+| **`audit_result.json`** | `AMBIGUOUS` when mutation applied, `NOOP` otherwise (Auditor pending Phase 6) |
 
 ---
 
@@ -274,16 +276,22 @@ insert-me validate-bundle output/<run-id>/
 insert-me audit output/<run-id>/audit.json
 ```
 
-**What to expect today:**
-- `patch_plan.json` — `status: "PLANNED"`, targets listing real lines from `heap_buf.c`
-  (the `malloc(user_len * sizeof(char))` call and the `for (i <= count)` loop bound)
-- `validation_result.json` — `overall: "SKIP"` (Validator is not yet implemented)
-- `audit_result.json` — `classification: "NOOP"` (no mutations applied yet)
-- `ground_truth.json` — `mutations: []` (Patcher is not yet implemented)
+**What to expect today (real mode — default):**
+- `patch_plan.json` — `status: "APPLIED"`, one target from `heap_buf.c`
+- `ground_truth.json` — one mutation record: `malloc(user_len * sizeof(char))` → `malloc((user_len * sizeof(char)) - 1)`
+- `bad/heap_buf.c` — mutated source (the vulnerability inserted)
+- `good/heap_buf.c` — byte-identical copy of the original
+- `validation_result.json` — `overall: "SKIP"` (Validator pending Phase 5)
+- `audit_result.json` — `classification: "AMBIGUOUS"` (pending Validator confirmation)
 - `validate-bundle` exits 0 — all artifacts are schema-valid
 
-The `--dry-run` flag is accepted but redundant; the pipeline is always dry-run until
-the Patcher (Phase 4) is implemented.
+To skip patching and emit plan-only artifacts:
+```bash
+insert-me run --seed-file examples/seeds/cwe122_heap_overflow.json \
+              --source examples/demo/src \
+              --dry-run
+```
+Dry-run: `patch_plan.json` status is `PLANNED`, `ground_truth.json` mutations is `[]`, no source copies.
 
 ---
 

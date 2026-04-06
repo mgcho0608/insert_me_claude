@@ -119,13 +119,14 @@ def test_demo_seed_and_source_exist():
 
 
 def test_demo_cli_run_produces_bundle(tmp_path):
-    """CLI run against the demo fixture must exit 0 and write an output bundle."""
+    """CLI run (dry-run mode) against the demo fixture must exit 0 and write all artifacts."""
     result = subprocess.run(
         [
             sys.executable, "-m", "insert_me.cli", "run",
             "--seed-file", str(DEMO_SEED),
             "--source", str(DEMO_SOURCE),
             "--output", str(tmp_path / "output"),
+            "--dry-run",
         ],
         capture_output=True,
         text=True,
@@ -147,19 +148,19 @@ def test_demo_cli_run_produces_bundle(tmp_path):
     ):
         assert (bundle / artifact).exists(), f"Missing artifact: {artifact}"
 
-    # bad/ and good/ dirs must exist (even though empty until Patcher is implemented)
     assert (bundle / "bad").is_dir()
     assert (bundle / "good").is_dir()
 
 
 def test_demo_bundle_has_planned_targets(tmp_path):
-    """patch_plan.json must have status PLANNED and real targets from heap_buf.c."""
+    """Dry-run: patch_plan.json must have status PLANNED and real Seeder targets."""
     subprocess.run(
         [
             sys.executable, "-m", "insert_me.cli", "run",
             "--seed-file", str(DEMO_SEED),
             "--source", str(DEMO_SOURCE),
             "--output", str(tmp_path / "output"),
+            "--dry-run",
         ],
         capture_output=True,
         check=True,
@@ -168,16 +169,13 @@ def test_demo_bundle_has_planned_targets(tmp_path):
     plan = json.loads((bundle / "patch_plan.json").read_text(encoding="utf-8"))
 
     assert plan["status"] == "PLANNED", (
-        f"Expected PLANNED, got {plan['status']}. "
-        "The demo source may have no qualifying C files."
+        f"Expected PLANNED (dry-run), got {plan['status']}."
     )
-    assert len(plan["targets"]) > 0, "Expected at least one target from demo source"
-
-    # Every target must point into demo source and have a valid score
+    assert len(plan["targets"]) > 0, "Expected at least one Seeder target"
     for t in plan["targets"]:
         assert 0.0 <= t["candidate_score"] <= 1.0
         assert t["line"] >= 1
-        assert t["file"]  # non-empty
+        assert t["file"]
 
 
 def test_demo_validate_bundle_passes(tmp_path):
@@ -188,6 +186,7 @@ def test_demo_validate_bundle_passes(tmp_path):
             "--seed-file", str(DEMO_SEED),
             "--source", str(DEMO_SOURCE),
             "--output", str(tmp_path / "output"),
+            "--dry-run",
         ],
         capture_output=True,
         check=True,
@@ -203,3 +202,67 @@ def test_demo_validate_bundle_passes(tmp_path):
         f"validate-bundle failed:\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
     assert "valid" in result.stdout.lower()
+
+
+def test_demo_real_mode_applies_mutation(tmp_path):
+    """Real mode (no --dry-run): mutation applied, bad/ and good/ differ."""
+    result = subprocess.run(
+        [
+            sys.executable, "-m", "insert_me.cli", "run",
+            "--seed-file", str(DEMO_SEED),
+            "--source", str(DEMO_SOURCE),
+            "--output", str(tmp_path / "output"),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        f"CLI exited {result.returncode}\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
+    bundle = next((tmp_path / "output").iterdir())
+
+    # patch_plan status must be APPLIED
+    plan = json.loads((bundle / "patch_plan.json").read_text(encoding="utf-8"))
+    assert plan["status"] == "APPLIED"
+
+    # ground_truth must have one real mutation record
+    gt = json.loads((bundle / "ground_truth.json").read_text(encoding="utf-8"))
+    assert len(gt["mutations"]) == 1
+    m = gt["mutations"][0]
+    assert m["mutation_type"] == "alloc_size_undercount"
+    assert "malloc(" in m["original_fragment"]
+    assert "- 1)" in m["mutated_fragment"]
+
+    # bad/ and good/ must contain the C file
+    bad_files = list((bundle / "bad").rglob("*.c"))
+    good_files = list((bundle / "good").rglob("*.c"))
+    assert len(bad_files) > 0
+    assert len(good_files) > 0
+
+    # The C file in bad/ must differ from good/
+    bad_c = bad_files[0]
+    good_c = bundle / "good" / bad_c.relative_to(bundle / "bad")
+    assert bad_c.read_text(encoding="utf-8") != good_c.read_text(encoding="utf-8")
+
+
+def test_demo_real_mode_validate_bundle_passes(tmp_path):
+    """validate-bundle must exit 0 on a real-mode bundle."""
+    subprocess.run(
+        [
+            sys.executable, "-m", "insert_me.cli", "run",
+            "--seed-file", str(DEMO_SEED),
+            "--source", str(DEMO_SOURCE),
+            "--output", str(tmp_path / "output"),
+        ],
+        capture_output=True,
+        check=True,
+    )
+    bundle = next((tmp_path / "output").iterdir())
+    result = subprocess.run(
+        [sys.executable, "-m", "insert_me.cli", "validate-bundle", str(bundle)],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        f"validate-bundle failed:\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )

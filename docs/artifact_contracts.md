@@ -11,20 +11,21 @@ when referencing schemas in code — never hardcode schema names.
 
 ## Current Phase
 
-**Phase 3 — Seeder complete.**
+**Phase 4a — Patcher minimal slice (`alloc_size_undercount`).**
 
-All five core artifacts are produced on every run and validated against their schemas.
-The Patcher, Validator, and Auditor class methods are stubs (Phase 4–6); the pipeline
-orchestrator emits placeholder values for artifacts that depend on them:
+The Seeder and Patcher are real.  In the default (non-dry-run) mode the pipeline
+produces actual bad/good source trees.  Validator (Phase 5) and Auditor (Phase 6)
+remain pending; the orchestrator emits placeholder values for those stages.
 
-| Artifact field | Current value | When real value arrives |
-|---|---|---|
-| `patch_plan.json` `status` | `PLANNED` (targets found) or `PENDING` (no sources) | N/A — Seeder is real |
-| `patch_plan.json` `targets` | Real Seeder output | N/A — Seeder is real |
-| `validation_result.json` `overall` | `SKIP` | Phase 5 |
-| `audit_result.json` `classification` | `NOOP` | Phase 6 |
-| `ground_truth.json` `mutations` | `[]` | Phase 6 |
-| `audit.json` `validation_verdict.passed` | `false` | Phase 5 |
+| Artifact field | Real mode (default) | Dry-run (`--dry-run`) | Future |
+|---|---|---|---|
+| `patch_plan.json` `status` | `APPLIED` (mutated) · `PLANNED` (skipped) · `PENDING` (no sources) | `PLANNED` / `PENDING` | N/A |
+| `patch_plan.json` `targets` | Real Seeder output | Real Seeder output | N/A |
+| `bad/` `good/` | Written with real source trees | Empty dirs | N/A |
+| `ground_truth.json` `mutations` | Real record(s) when mutation applied | `[]` | Phase 6 adds full records |
+| `validation_result.json` `overall` | `SKIP` | `SKIP` | Phase 5 |
+| `audit_result.json` `classification` | `AMBIGUOUS` (mutated) · `NOOP` (no mutation) | `NOOP` | Phase 6 |
+| `audit.json` `validation_verdict.passed` | `false` | `false` | Phase 5 |
 
 ---
 
