@@ -2,8 +2,8 @@
 Configuration loading for insert_me.
 
 Config is loaded from a TOML file. All keys have defaults defined here so that
-the pipeline is fully runnable from a minimal config or from the built-in defaults
-with no user-supplied file.
+the pipeline is fully runnable from a minimal config or from the built-in
+defaults with no user-supplied file.
 
 Load order (later entries override earlier):
     1. Built-in defaults (this module)
@@ -13,8 +13,9 @@ Load order (later entries override earlier):
 Config sections
 ---------------
 [pipeline]
-    seed            int     — overridable by --seed
-    spec_path       str     — path to spec TOML
+    seed_file       str     — path to seed JSON file (canonical primary input)
+    seed            int     — legacy: integer seed (use seed_file instead)
+    spec_path       str     — legacy: path to spec TOML (use seed_file instead)
     source_path     str     — path to source tree root
     output_root     str     — where to write output bundles (default: ./output)
     run_id          str     — override auto-derived run ID (default: derived)
@@ -50,10 +51,11 @@ from typing import Optional
 
 @dataclass
 class PipelineConfig:
-    seed: Optional[int] = None
-    spec_path: Optional[Path] = None
+    seed_file: Optional[Path] = None    # canonical: path to seed JSON file
+    seed: Optional[int] = None          # legacy: integer seed
+    spec_path: Optional[Path] = None    # legacy: path to spec TOML
     source_path: Optional[Path] = None
-    output_root: Path = Path("output")
+    output_root: Path = field(default_factory=lambda: Path("output"))
     run_id: Optional[str] = None
 
 
@@ -110,16 +112,63 @@ def load_config(config_path: Optional[Path] = None) -> Config:
     FileNotFoundError
         If config_path is supplied but does not exist.
     ValueError
-        If the config file contains unrecognised keys (strict mode).
+        If the config file contains unrecognised section keys.
     """
-    # TODO(phase2): implement full loader with key validation and type coercion
-    if config_path is not None:
-        if not config_path.exists():
-            raise FileNotFoundError(f"Config file not found: {config_path}")
-        with open(config_path, "rb") as fh:
-            raw = tomllib.load(fh)
-        _ = raw  # TODO(phase2): merge raw into Config dataclass
-    return Config()
+    cfg = Config()
+    if config_path is None:
+        return cfg
+
+    if not config_path.exists():
+        raise FileNotFoundError(f"Config file not found: {config_path}")
+
+    with open(config_path, "rb") as fh:
+        raw = tomllib.load(fh)
+
+    if "pipeline" in raw:
+        p = raw["pipeline"]
+        if "seed_file" in p:
+            cfg.pipeline.seed_file = Path(p["seed_file"])
+        if "seed" in p:
+            cfg.pipeline.seed = int(p["seed"])
+        if "spec_path" in p:
+            cfg.pipeline.spec_path = Path(p["spec_path"])
+        if "source_path" in p:
+            cfg.pipeline.source_path = Path(p["source_path"])
+        if "output_root" in p:
+            cfg.pipeline.output_root = Path(p["output_root"])
+        if "run_id" in p:
+            cfg.pipeline.run_id = str(p["run_id"])
+
+    if "llm" in raw:
+        l = raw["llm"]
+        if "enabled" in l:
+            cfg.llm.enabled = bool(l["enabled"])
+        if "adapter" in l:
+            cfg.llm.adapter = str(l["adapter"])
+        if "endpoint" in l:
+            cfg.llm.endpoint = str(l["endpoint"])
+        if "model" in l:
+            cfg.llm.model = str(l["model"])
+        if "timeout_seconds" in l:
+            cfg.llm.timeout_seconds = int(l["timeout_seconds"])
+
+    if "validator" in raw:
+        v = raw["validator"]
+        if "check_syntax" in v:
+            cfg.validator.check_syntax = bool(v["check_syntax"])
+        if "check_trivial" in v:
+            cfg.validator.check_trivial = bool(v["check_trivial"])
+        if "check_scope" in v:
+            cfg.validator.check_scope = bool(v["check_scope"])
+
+    if "auditor" in raw:
+        a = raw["auditor"]
+        if "write_labels" in a:
+            cfg.auditor.write_labels = bool(a["write_labels"])
+        if "output_format" in a:
+            cfg.auditor.output_format = str(a["output_format"])
+
+    return cfg
 
 
 def apply_cli_overrides(config: Config, **overrides: object) -> Config:
@@ -129,15 +178,29 @@ def apply_cli_overrides(config: Config, **overrides: object) -> Config:
     Parameters
     ----------
     config:
-        Base Config to override.
+        Base Config to override (mutated in place and returned).
     **overrides:
         Flat key=value pairs. Supported keys:
-            seed, spec_path, source_path, output_root, run_id, no_llm
+            seed_file, seed, spec_path, source_path, output_root, run_id,
+            no_llm
 
     Returns
     -------
     Config
-        Updated Config (mutated in place and returned).
+        Updated Config.
     """
-    # TODO(phase2): implement override application
+    if overrides.get("seed_file") is not None:
+        config.pipeline.seed_file = Path(overrides["seed_file"])  # type: ignore[arg-type]
+    if overrides.get("seed") is not None:
+        config.pipeline.seed = int(overrides["seed"])  # type: ignore[arg-type]
+    if overrides.get("spec_path") is not None:
+        config.pipeline.spec_path = Path(overrides["spec_path"])  # type: ignore[arg-type]
+    if overrides.get("source_path") is not None:
+        config.pipeline.source_path = Path(overrides["source_path"])  # type: ignore[arg-type]
+    if overrides.get("output_root") is not None:
+        config.pipeline.output_root = Path(overrides["output_root"])  # type: ignore[arg-type]
+    if overrides.get("run_id") is not None:
+        config.pipeline.run_id = str(overrides["run_id"])
+    if overrides.get("no_llm"):
+        config.llm.enabled = False
     return config

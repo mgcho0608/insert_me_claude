@@ -202,16 +202,19 @@ def validate_artifact_file(path: Path, schema_name: str) -> None:
 # ---------------------------------------------------------------------------
 
 # Mapping: artifact filename → schema name for bundle-level validation.
+# All five core artifacts are produced by the dry-run pipeline.
+# validate_bundle silently skips any artifact that is absent, so
+# bundles from older pipeline versions remain compatible.
 _BUNDLE_ARTIFACT_MAP: dict[str, str] = {
+    "patch_plan.json": SCHEMA_PATCH_PLAN,
+    "validation_result.json": SCHEMA_VALIDATION_RESULT,
+    "audit_result.json": SCHEMA_AUDIT_RESULT,
     "ground_truth.json": SCHEMA_GROUND_TRUTH,
     "audit.json": SCHEMA_AUDIT_RECORD,
 }
 
-# These are present only when optional pipeline stages ran.
+# labels.json is present only when the LLM adapter ran with write_labels=true.
 _BUNDLE_OPTIONAL_ARTIFACT_MAP: dict[str, str] = {
-    "audit_result.json": SCHEMA_AUDIT_RESULT,
-    "validation_result.json": SCHEMA_VALIDATION_RESULT,
-    "patch_plan.json": SCHEMA_PATCH_PLAN,
     "labels.json": SCHEMA_LABELS,
 }
 
@@ -241,12 +244,11 @@ def validate_bundle(bundle_dir: Path) -> list[str]:
     if not bundle_dir.is_dir():
         return [f"Bundle path is not a directory: {bundle_dir}"]
 
-    # Required artifacts
+    # Core artifacts — validate if present, skip silently if absent.
+    # A dry-run bundle will have all five; older or partial bundles may have fewer.
     for filename, schema_name in _BUNDLE_ARTIFACT_MAP.items():
         artifact_path = bundle_dir / filename
         if not artifact_path.exists():
-            # Required artifacts missing is an error only after Phase 6
-            # is implemented. For now, skip silently.
             continue
         _validate_and_collect(artifact_path, schema_name, errors)
 

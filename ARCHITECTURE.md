@@ -44,12 +44,20 @@ regardless of which optional components are active.
 │        ▼                                 ▼                           │
 │  [Output Bundle]                  ┌──────────────────┐              │
 │  bad/  good/                      │   LLM Adapter    │ OPTIONAL     │
-│  ground_truth.json                │  (label enrich.) │              │
-│  audit.json                       └────────┬─────────┘              │
+│  patch_plan.json                  │  (label enrich.) │              │
+│  validation_result.json           └────────┬─────────┘              │
 │  audit_result.json                         │ [labels.json]           │
-│  validation_result.json                    │                         │
+│  ground_truth.json                         │                         │
+│  audit.json                               │                         │
 └──────────────────────────────────────────────────────────────────────┘
 ```
+
+### Current implementation status
+
+The dry-run pipeline (Phase 2) exercises the full artifact contract end-to-end:
+all five core artifacts are emitted and schema-validated on every run.
+Real AST mutation (Seeder, Patcher, Validator, Auditor with live source) is
+implemented in Phases 3–6.
 
 ---
 
@@ -59,7 +67,7 @@ regardless of which optional components are active.
 
 **Deterministic.**
 
-- Accepts: a numeric seed, a vulnerability specification (TOML), and a source tree path.
+- Accepts: a seed artifact (seed JSON), and a source tree path.
 - Expands the seed into a ranked, ordered list of **patch targets**: candidate locations in the
   source tree where the specified vulnerability class can be plausibly inserted.
 - Uses only static analysis (AST walking, pattern matching) and the seed for ordering decisions.
