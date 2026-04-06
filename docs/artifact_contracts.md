@@ -9,14 +9,33 @@ when referencing schemas in code — never hardcode schema names.
 
 ---
 
+## Current Phase
+
+**Phase 3 — Seeder complete.**
+
+All five core artifacts are produced on every run and validated against their schemas.
+The Patcher, Validator, and Auditor class methods are stubs (Phase 4–6); the pipeline
+orchestrator emits placeholder values for artifacts that depend on them:
+
+| Artifact field | Current value | When real value arrives |
+|---|---|---|
+| `patch_plan.json` `status` | `PLANNED` (targets found) or `PENDING` (no sources) | N/A — Seeder is real |
+| `patch_plan.json` `targets` | Real Seeder output | N/A — Seeder is real |
+| `validation_result.json` `overall` | `SKIP` | Phase 5 |
+| `audit_result.json` `classification` | `NOOP` | Phase 6 |
+| `ground_truth.json` `mutations` | `[]` | Phase 6 |
+| `audit.json` `validation_verdict.passed` | `false` | Phase 5 |
+
+---
+
 ## Output Bundle Layout
 
 A single `insert_me run` produces one **output bundle** under `output/<run-id>/`:
 
 ```
 output/<run-id>/
-├── bad/                      Mutated C/C++ source tree (vulnerability inserted)
-├── good/                     Clean C/C++ source tree (byte-identical to original)
+├── bad/                      Mutated C/C++ source tree  (created but empty until Phase 4)
+├── good/                     Clean C/C++ source tree    (created but empty until Phase 4)
 ├── patch_plan.json           Seeder output: planned transformations (§1)
 ├── validation_result.json    Validator output: plausibility verdict (§2)
 ├── audit_result.json         Auditor classification: VALID/NOOP/AMBIGUOUS/INVALID (§3)
@@ -25,11 +44,14 @@ output/<run-id>/
 └── labels.json               (optional) LLM-enriched semantic labels (§6)
 ```
 
+The `bad/` and `good/` subdirectories are created on every run and are empty until
+the Patcher is implemented (Phase 4).
+
 The `<run-id>` is a 16-character hex string derived deterministically from:
 `SHA-256(canonical_seed_json || source_tree_path || pipeline_version)[:16]`
 
 All five core artifacts (`patch_plan`, `validation_result`, `audit_result`,
-`ground_truth`, `audit`) are produced by every run including dry-run mode.
+`ground_truth`, `audit`) are produced by every run.
 `labels.json` is produced only when the LLM adapter is enabled with `write_labels = true`.
 
 ---
@@ -47,15 +69,22 @@ before any source files are modified.
 | Field | Type | Description |
 |---|---|---|
 | `schema_version` | string | Schema version, e.g. `"1.0"` |
-| `plan_id` | string | Deterministic identifier for this plan |
+| `plan_id` | string | Deterministic identifier for this plan (`plan-<run_id>`) |
 | `run_id` | string | 16-char hex run identifier |
 | `seed_id` | string | `seed_id` from the input seed artifact |
 | `seed` | integer | Integer seed (carried from seed artifact) |
 | `status` | string | `PENDING` / `PLANNED` / `APPLIED` / `ABORTED` |
 | `created_at` | string | ISO 8601 UTC timestamp |
 | `targets` | array | Ordered list of planned patch targets (see §1.1) |
+| `skipped_candidates` | integer | Candidates found but filtered out (below min_score or beyond max_targets) |
+| `source_tree_hash` | string | 16-char hex SHA-256 of the source file set (same as `audit.json` `source_hash`) |
 
-In dry-run mode: `status = "PENDING"`, `targets = []`.
+**`status` semantics in current phase:**
+- `PLANNED` — Seeder found at least one candidate meeting the score threshold.
+- `PENDING` — No qualifying candidates (source tree empty, no C/C++ files, or all
+  candidates below `min_candidate_score`).
+
+`APPLIED` and `ABORTED` are produced by the Patcher (Phase 4, not yet implemented).
 
 ### §1.1 Target record
 
@@ -63,12 +92,12 @@ Each entry in `targets`:
 
 | Field | Type | Description |
 |---|---|---|
-| `target_id` | string | Stable local identifier within this plan |
+| `target_id` | string | Stable local identifier within this plan (e.g. `"t0001"`) |
 | `file` | string | Source file path relative to source tree root |
 | `line` | integer (≥1) | 1-based line number of primary mutation point |
-| `mutation_strategy` | string | Strategy the Patcher will apply |
+| `mutation_strategy` | string | Strategy the Patcher will apply (from seed file) |
 | `candidate_score` | number (0–1) | Plausibility score assigned by the Seeder |
-| `context` | object | AST-walking context (strategy-specific) |
+| `context` | object | Lexical context: `expression` (matched line) + `function_name` |
 
 ---
 
@@ -84,13 +113,14 @@ Rule-based plausibility verdict on the applied mutations. Fully deterministic �
 | Field | Type | Description |
 |---|---|---|
 | `schema_version` | string | Schema version, e.g. `"1.0"` |
-| `result_id` | string | Deterministic identifier for this result |
+| `result_id` | string | Deterministic identifier for this result (`vr-<run_id>`) |
 | `run_id` | string | 16-char hex run identifier |
 | `plan_id` | string | Links to the patch_plan that was validated |
 | `overall` | string | `PASS` / `FAIL` / `SKIP` |
 | `checks` | array | Per-check results (see §2.1) |
+| `notes` | string | Optional note (used in current phase to explain SKIP) |
 
-In dry-run mode: `overall = "SKIP"`, `checks = []`.
+**Current phase:** `overall = "SKIP"`, `checks = []`.
 
 ### §2.1 Check record
 
@@ -115,13 +145,15 @@ optional LLM-assisted evidence items.
 | Field | Type | Description |
 |---|---|---|
 | `schema_version` | string | Schema version, e.g. `"1.0"` |
-| `audit_id` | string | Deterministic identifier for this audit |
+| `audit_id` | string | Deterministic identifier for this audit (`ar-<run_id>`) |
 | `run_id` | string | 16-char hex run identifier |
 | `classification` | string | `VALID` / `NOOP` / `AMBIGUOUS` / `INVALID` |
 | `confidence` | string | `high` / `medium` / `low` |
 | `evidence` | array | Evidence items supporting the classification (see §3.1) |
+| `reviewer` | object | `{ "type": "deterministic", "name": "<reviewer_id>" }` |
 
-In dry-run mode: `classification = "NOOP"`, `confidence = "low"`, one neutral evidence item.
+**Current phase:** `classification = "NOOP"`, `confidence = "low"`, one neutral evidence item
+noting Seeder candidate count and that no mutations were applied.
 
 ### §3.1 Evidence record
 
@@ -162,7 +194,8 @@ This is the primary artifact consumed by `check_me` and `bench_me`.
 | `validation_passed` | boolean | Whether the Validator accepted the mutation |
 | `mutations` | array | Applied mutation records (see §4.1) |
 
-In dry-run mode: `mutations = []`, `validation_passed = false`.
+**Current phase:** `mutations = []`, `validation_passed = false`.
+Real mutation records are populated by the Auditor in Phase 6.
 
 ### §4.1 Mutation record
 
@@ -200,24 +233,26 @@ verify the run's inputs and pipeline version.
 | `spec_path` | string | Path to the seed/spec file at time of run |
 | `spec_hash` | string | SHA-256 hex of the seed/spec file contents |
 | `source_root` | string | Path to source tree root |
-| `source_hash` | string | Content hash of source tree (or `"dry-run"`) |
+| `source_hash` | string | 16-char hex SHA-256 of the source file set, or `"no-sources"` if no C/C++ files were found |
 | `pipeline_version` | string | insert_me package version |
 | `timestamp_utc` | string | ISO 8601 UTC timestamp |
 | `validation_verdict` | object | Validator result summary (see §5.1) |
+
+`source_hash` is computed by the Seeder over all discovered C/C++ source files
+(sorted relative paths + file byte contents). It is identical to `patch_plan.json`
+`source_tree_hash`.
 
 ### §5.1 validation_verdict
 
 ```json
 {
   "passed": false,
-  "checks": [
-    { "name": "syntax", "status": "pass" },
-    { "name": "non_trivial", "status": "pass" }
-  ]
+  "checks": []
 }
 ```
 
-`status` is one of: `"pass"`, `"fail"`, `"skip"`.
+`checks` is an array of `{ "name": string, "status": "pass"|"fail"|"skip" }` objects.
+In the current phase, `passed = false` and `checks = []`.
 
 ---
 
@@ -226,7 +261,8 @@ verify the run's inputs and pipeline version.
 Produced only when the LLM adapter is enabled and `auditor.write_labels = true`.
 **Absence of this file never indicates a broken run.**
 
-Schema: `schemas/labels.json` (version 1.0) — not yet defined; consumers must check `schema_version`.
+Schema: `schemas/labels.json` — schema file is not yet defined. Consumers must check
+`schema_version` before parsing. The LLM enrichment layer is planned for Phase 7.
 
 ### Fields
 
@@ -256,6 +292,9 @@ across artifacts and for referencing a specific run in external systems.
 
 The `plan_id` in `patch_plan.json` is echoed in `validation_result.json` to link
 the two artifacts explicitly.
+
+`source_hash` in `audit.json` and `source_tree_hash` in `patch_plan.json` are the
+same value, both derived from the Seeder's source scan.
 
 ---
 
@@ -299,8 +338,8 @@ trees as the analysis targets. `audit.json` provides reproducibility metadata.
 ### validate-bundle
 
 Run `insert-me validate-bundle output/<run-id>/` to verify that all present
-artifacts in a bundle conform to their schemas. This command is safe to run on
-any bundle, including dry-run bundles.
+artifacts in a bundle conform to their schemas. Safe to run on any bundle,
+including current-phase bundles.
 
 ### Corpus indexing
 

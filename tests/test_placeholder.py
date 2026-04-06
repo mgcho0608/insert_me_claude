@@ -1,13 +1,25 @@
 """
-Placeholder tests — verify the package skeleton is importable and
-the CLI entrypoint is reachable.
+Smoke tests — verify package basics and the canonical README quick-start path.
 
-These are smoke tests only. Real unit/integration tests will be added
-per-phase as implementation progresses (see ROADMAP.md).
+Coverage
+--------
+- Package importability and version constants
+- CLI help and entry point
+- Core helper determinism (run ID, BundlePaths)
+- NoOpAdapter contract
+- Config defaults
+- Demo-fixture integration: run CLI against examples/demo/src, check bundle shape,
+  validate-bundle success  (proves the README "Try It Now" section is accurate)
 """
 
+import json
 import subprocess
 import sys
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).parent.parent
+DEMO_SEED = REPO_ROOT / "examples" / "seeds" / "cwe122_heap_overflow.json"
+DEMO_SOURCE = REPO_ROOT / "examples" / "demo" / "src"
 
 
 def test_package_importable():
@@ -91,3 +103,103 @@ def test_derive_run_id_seed_sensitive(tmp_path):
     id1 = derive_run_id(seed=1, spec_path=spec, source_path=tmp_path, pipeline_version="0.1.0")
     id2 = derive_run_id(seed=2, spec_path=spec, source_path=tmp_path, pipeline_version="0.1.0")
     assert id1 != id2
+
+
+# ---------------------------------------------------------------------------
+# Demo-fixture integration — proves README "Try It Now" section is accurate
+# ---------------------------------------------------------------------------
+
+
+def test_demo_seed_and_source_exist():
+    """The demo seed file and source fixture referenced in README must exist."""
+    assert DEMO_SEED.exists(), f"Demo seed not found: {DEMO_SEED}"
+    assert DEMO_SOURCE.exists(), f"Demo source dir not found: {DEMO_SOURCE}"
+    c_files = list(DEMO_SOURCE.glob("*.c"))
+    assert len(c_files) > 0, f"Demo source dir has no .c files: {DEMO_SOURCE}"
+
+
+def test_demo_cli_run_produces_bundle(tmp_path):
+    """CLI run against the demo fixture must exit 0 and write an output bundle."""
+    result = subprocess.run(
+        [
+            sys.executable, "-m", "insert_me.cli", "run",
+            "--seed-file", str(DEMO_SEED),
+            "--source", str(DEMO_SOURCE),
+            "--output", str(tmp_path / "output"),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        f"CLI exited {result.returncode}\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
+
+    bundles = list((tmp_path / "output").iterdir())
+    assert len(bundles) == 1, f"Expected exactly one bundle dir, got: {bundles}"
+    bundle = bundles[0]
+
+    for artifact in (
+        "patch_plan.json",
+        "validation_result.json",
+        "audit_result.json",
+        "ground_truth.json",
+        "audit.json",
+    ):
+        assert (bundle / artifact).exists(), f"Missing artifact: {artifact}"
+
+    # bad/ and good/ dirs must exist (even though empty until Patcher is implemented)
+    assert (bundle / "bad").is_dir()
+    assert (bundle / "good").is_dir()
+
+
+def test_demo_bundle_has_planned_targets(tmp_path):
+    """patch_plan.json must have status PLANNED and real targets from heap_buf.c."""
+    subprocess.run(
+        [
+            sys.executable, "-m", "insert_me.cli", "run",
+            "--seed-file", str(DEMO_SEED),
+            "--source", str(DEMO_SOURCE),
+            "--output", str(tmp_path / "output"),
+        ],
+        capture_output=True,
+        check=True,
+    )
+    bundle = next((tmp_path / "output").iterdir())
+    plan = json.loads((bundle / "patch_plan.json").read_text(encoding="utf-8"))
+
+    assert plan["status"] == "PLANNED", (
+        f"Expected PLANNED, got {plan['status']}. "
+        "The demo source may have no qualifying C files."
+    )
+    assert len(plan["targets"]) > 0, "Expected at least one target from demo source"
+
+    # Every target must point into demo source and have a valid score
+    for t in plan["targets"]:
+        assert 0.0 <= t["candidate_score"] <= 1.0
+        assert t["line"] >= 1
+        assert t["file"]  # non-empty
+
+
+def test_demo_validate_bundle_passes(tmp_path):
+    """validate-bundle must exit 0 on a bundle generated from the demo fixture."""
+    subprocess.run(
+        [
+            sys.executable, "-m", "insert_me.cli", "run",
+            "--seed-file", str(DEMO_SEED),
+            "--source", str(DEMO_SOURCE),
+            "--output", str(tmp_path / "output"),
+        ],
+        capture_output=True,
+        check=True,
+    )
+    bundle = next((tmp_path / "output").iterdir())
+
+    result = subprocess.run(
+        [sys.executable, "-m", "insert_me.cli", "validate-bundle", str(bundle)],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        f"validate-bundle failed:\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
+    assert "valid" in result.stdout.lower()

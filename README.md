@@ -2,6 +2,27 @@
 
 **Deterministic, project-scale seeded vulnerability generation for C/C++.**
 
+> **Repository:** `insert_me_claude` is the public incubation repository for the `insert_me`
+> package. The package name, CLI command (`insert-me`), and all artifact identities are
+> `insert_me` throughout. The `_claude` suffix in the repository name reflects its origin as
+> a Claude-assisted build and carries no meaning for end users or downstream integrators.
+> When this project moves to a production home, the `insert_me` package identity is what carries forward.
+
+---
+
+## Current Status — Phase 3 Complete
+
+| | |
+|---|---|
+| **Canonical interface** | `insert-me run --seed-file PATH --source PATH` |
+| **Current mode** | Dry-run: Seeder is real, Patcher/Validator/Auditor are stubs |
+| **Artifacts emitted today** | All 5 core artifacts, schema-validated on every run |
+| **Source modifications** | None — source files are never modified in the current phase |
+| **`patch_plan.json` targets** | Real Seeder output (`PLANNED`) when C/C++ files exist |
+| **`validation_result.json`** | `overall: SKIP` (Validator pending Phase 5) |
+| **`audit_result.json`** | `classification: NOOP` (Auditor pending Phase 6) |
+| **`bad/` `good/` dirs** | Created but empty (Patcher pending Phase 4) |
+
 ---
 
 ## What it is
@@ -217,20 +238,64 @@ This means:
 
 ---
 
+## Try It Now
+
+These commands work against the bundled demo fixture today.
+
+```bash
+# 1. Install (editable)
+pip install -e .
+
+# 2. Run against the demo fixture
+insert-me run \
+  --seed-file examples/seeds/cwe122_heap_overflow.json \
+  --source examples/demo/src
+```
+
+Example output:
+```
+[insert-me] starting dry-run pipeline
+  seed-file : examples/seeds/cwe122_heap_overflow.json
+  source    : examples/demo/src
+  output    : output
+[insert-me] bundle written to: output/a3f9c1e8b2d47065/
+  patch_plan.json       : output/a3f9c1e8b2d47065/patch_plan.json
+  validation_result.json: output/a3f9c1e8b2d47065/validation_result.json
+  audit_result.json     : output/a3f9c1e8b2d47065/audit_result.json
+  ground_truth.json     : output/a3f9c1e8b2d47065/ground_truth.json
+  audit.json            : output/a3f9c1e8b2d47065/audit.json
+```
+
+```bash
+# 3. Validate the bundle (replace <run-id> with the actual run ID printed above)
+insert-me validate-bundle output/<run-id>/
+
+# 4. Inspect the audit record
+insert-me audit output/<run-id>/audit.json
+```
+
+**What to expect today:**
+- `patch_plan.json` — `status: "PLANNED"`, targets listing real lines from `heap_buf.c`
+  (the `malloc(user_len * sizeof(char))` call and the `for (i <= count)` loop bound)
+- `validation_result.json` — `overall: "SKIP"` (Validator is not yet implemented)
+- `audit_result.json` — `classification: "NOOP"` (no mutations applied yet)
+- `ground_truth.json` — `mutations: []` (Patcher is not yet implemented)
+- `validate-bundle` exits 0 — all artifacts are schema-valid
+
+The `--dry-run` flag is accepted but redundant; the pipeline is always dry-run until
+the Patcher (Phase 4) is implemented.
+
+---
+
 ## Quick Start
 
 ```bash
 # Install (editable)
 pip install -e .
 
-# Run with a seed file (canonical)
+# Run with a seed file against any C/C++ source tree
 insert-me run --seed-file examples/seeds/cwe122_heap_overflow.json \
               --source /path/to/c-project
-
-# Run in explicit dry-run mode (emits artifacts, does not modify source)
-insert-me run --seed-file examples/seeds/cwe122_heap_overflow.json \
-              --source /path/to/c-project \
-              --dry-run
 
 # Validate a completed output bundle
 insert-me validate-bundle output/<run-id>/
@@ -238,12 +303,6 @@ insert-me validate-bundle output/<run-id>/
 # Show audit record
 insert-me audit output/<run-id>/audit.json
 ```
-
-**Current implementation status (Phase 3 complete):**
-- The **Seeder** is fully implemented: real lexical source discovery, deterministic candidate
-  ranking, and `patch_plan.json` with actual targets (status `PLANNED`) when C/C++ files exist.
-- Patcher (Phase 4), Validator (Phase 5), and Auditor with real mutations (Phase 6) are deferred.
-  All five output artifacts are always emitted and schema-validated; source files are never modified.
 
 ---
 

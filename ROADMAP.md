@@ -131,13 +131,16 @@ across repeated runs for the same seed + source tree. `patch_plan.json` carries 
 
 **Goal:** Apply mutations from a `PatchTargetList` to produce bad/good source trees.
 
-- [ ] Define `Mutation` and `PatchResult` dataclasses
+- [x] Define `Mutation` and `PatchResult` dataclasses (complete — stubs in `patcher.py`)
 - [ ] Implement mutation strategies for Phase 1 CWE set (start narrow: 1–3 CWEs)
 - [ ] Implement bad/good tree copy + apply
 - [ ] Verify round-trip: good tree is byte-identical to original
+- [ ] Wire Patcher into pipeline orchestrator; remove dry-run placeholder logic
 - [ ] Write tests for each mutation strategy on fixture sources
 - [ ] Confirm determinism: same seed + spec → same diff
-- [ ] Remove dry-run source_hash placeholder; compute real source tree hash
+
+Note: `source_hash` is already computed by the real Seeder (Phase 3) and written to
+`patch_plan.json` and `audit.json`. No placeholder removal needed for that field.
 
 **Exit criterion:** `Patcher.run(targets, source_path)` produces a `PatchResult` with a
 reproducible diff that compiles (at least syntactically) in the fixture environment.
