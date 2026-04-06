@@ -5,9 +5,9 @@ The Patcher takes a PatchTargetList produced by the Seeder and applies
 line-level mutations to a copy of the source tree, producing the bad
 (vulnerable) and good (clean) trees side by side.
 
-Phase 4 implementation scope
------------------------------
-Two mutation strategies are currently implemented:
+Phase 4 / Phase 9 implementation scope
+---------------------------------------
+Four mutation strategies are currently implemented:
 
     alloc_size_undercount  (CWE-122)
         Transforms ``malloc(<expr>)`` → ``malloc((<expr>) - 1)``.
@@ -19,6 +19,15 @@ Two mutation strategies are currently implemented:
         producing a use-after-free.  The pointer name is extracted from the
         arrow operator (``ptr->field``) or explicit dereference (``*ptr``)
         on the target line.
+
+    insert_double_free  (CWE-415)
+        Inserts a duplicate ``free(<ptr>);`` before an existing free() call,
+        producing a double-free.  Matches simple identifiers and single
+        arrow dereferences (``ptr->field``).
+
+    remove_free_call  (CWE-401)
+        Replaces a ``free(<ptr>);`` call with a comment, introducing a
+        memory leak (missing release of memory after effective lifetime).
 
 Applied only to the first compatible target from the PatchTargetList
 (one mutation per run in this phase).
@@ -197,6 +206,74 @@ def _mutate_insert_premature_free(line: str) -> _StrategyResult | None:
     original_fragment = line.rstrip("\n").rstrip("\r")
     mutated_fragment = f"free({ptr});"
     extra: dict[str, Any] = {"freed_pointer": ptr}
+
+    return (mutated_line, original_fragment, mutated_fragment, extra)
+
+
+# ---------------------------------------------------------------------------
+# Strategy: insert_double_free
+# ---------------------------------------------------------------------------
+
+#: Matches a free() call statement.
+#: Captures leading whitespace (group 1) and the pointer expression (group 2).
+#: Handles both simple identifiers (free(ptr)) and single arrow dereferences
+#: (free(ptr->field)), which are the most common patterns in C cleanup code.
+_FREE_CALL_RE: re.Pattern[str] = re.compile(
+    r"(\s*)free\s*\(\s*(\w+(?:\s*->\s*\w+)?)\s*\)\s*;"
+)
+
+
+@_register("insert_double_free")
+def _mutate_insert_double_free(line: str) -> _StrategyResult | None:
+    """
+    Insert a duplicate ``free(<ptr>);`` immediately before an existing free() call.
+
+    The returned ``mutated_line`` prepends an additional free() at the same
+    indentation, creating a double-free (CWE-415).
+
+    Returns (mutated_line, original_fragment, mutated_fragment, extra), or
+    None when the line does not contain a bare ``free(ptr);`` statement.
+    """
+    m = _FREE_CALL_RE.match(line)
+    if not m:
+        return None
+
+    indent = m.group(1)
+    ptr = m.group(2)
+
+    free_line = f"{indent}free({ptr});\n"
+    mutated_line = free_line + line  # prepend duplicate free; keep original
+
+    original_fragment = line.rstrip("\n").rstrip("\r")
+    mutated_fragment = f"free({ptr});"
+    extra: dict[str, Any] = {"freed_pointer": ptr}
+
+    return (mutated_line, original_fragment, mutated_fragment, extra)
+
+
+# ---------------------------------------------------------------------------
+# Strategy: remove_free_call
+# ---------------------------------------------------------------------------
+
+@_register("remove_free_call")
+def _mutate_remove_free_call(line: str) -> _StrategyResult | None:
+    """
+    Replace a ``free(<ptr>);`` call with a comment, introducing a memory leak (CWE-401).
+
+    Returns (mutated_line, original_fragment, mutated_fragment, extra), or
+    None when the line does not contain a bare ``free(ptr);`` statement.
+    """
+    m = _FREE_CALL_RE.match(line)
+    if not m:
+        return None
+
+    indent = m.group(1)
+    ptr = m.group(2)
+
+    original_fragment = line.rstrip("\n").rstrip("\r")
+    mutated_fragment = f"/* CWE-401: free({ptr}) removed - memory leak */"
+    mutated_line = f"{indent}{mutated_fragment}\n"
+    extra: dict[str, Any] = {"leaked_pointer": ptr}
 
     return (mutated_line, original_fragment, mutated_fragment, extra)
 

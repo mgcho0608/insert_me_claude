@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "seed_id": "cwe401-sandbox-003",
+  "seed": 52,
+  "cwe_id": "CWE-401",
+  "vulnerability_class": "Memory Leak",
+  "description": "Remove a free() call in sandbox_eval C source at a cleanup site, leaving a heap buffer allocated indefinitely and accumulating leaked memory across repeated function calls.",
+  "mutation_strategy": "remove_free_call",
+  "target_pattern": {
+    "pattern_type": "free_call",
+    "require_function_scope": true,
+    "min_candidate_score": 0.4,
+    "constraints": {}
+  },
+  "source_constraints": {
+    "file_patterns": [
+      "*.c",
+      "*.cpp"
+    ],
+    "exclude_patterns": [
+      "*test*",
+      "*_test.*",
+      "*mock*",
+      "*stub*"
+    ],
+    "max_targets": 1
+  },
+  "metadata": {
+    "tags": [
+      "heap",
+      "memory-leak",
+      "resource",
+      "sandbox-eval"
+    ],
+    "difficulty": "easy",
+    "notes": "Targets free() call sites in sandbox_eval C source files \u2014 removes a deallocation to leave heap memory unreleased.",
+    "references": [
+      "https://cwe.mitre.org/data/definitions/401.html"
+    ]
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "schema_version": "1.0",
+  "seed_id": "cwe416-target-b-005",
+  "seed": 109,
+  "cwe_id": "CWE-416",
+  "vulnerability_class": "Use After Free",
+  "description": "Insert a premature free in target-b source (dynarray.c, bstree.c, or strmap.c) on a heap-allocated key or value pointer before the data structure's cleanup routine completes, creating dangling-pointer dereferences.",
+  "mutation_strategy": "insert_premature_free",
+  "target_pattern": {
+    "pattern_type": "pointer_deref",
+    "require_function_scope": true,
+    "min_candidate_score": 0.6,
+    "constraints": {
+      "require_prior_malloc_in_scope": true,
+      "require_no_existing_free_between": true
+    }
+  },
+  "source_constraints": {
+    "file_patterns": [
+      "*.c",
+      "*.cpp"
+    ],
+    "exclude_patterns": [
+      "*test*",
+      "*_test.*",
+      "*mock*",
+      "*stub*",
+      "bstree.c"
+    ],
+    "max_targets": 1
+  },
+  "metadata": {
+    "tags": [
+      "heap",
+      "use-after-free",
+      "temporal",
+      "target-b"
+    ],
+    "difficulty": "medium",
+    "notes": "Targets pointer dereference sites in dynarray.c, bstree.c, and strmap.c \u2014 injects a free() before subsequent uses of the same pointer.",
+    "references": [
+      "https://cwe.mitre.org/data/definitions/416.html"
+    ]
+  }
+}

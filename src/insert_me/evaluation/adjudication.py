@@ -65,6 +65,14 @@ _STRATEGY_KEYWORDS: dict[str, list[str]] = {
         "heap overflow", "heap buffer", "overrun", "underallocate",
         "allocation size", "size undercount", "heap corruption",
     ],
+    "insert_double_free": [
+        "double free", "double-free", "freed twice", "already freed",
+        "duplicate free", "second free",
+    ],
+    "remove_free_call": [
+        "memory leak", "leak", "not freed", "unreleased", "missing free",
+        "resource leak", "lost pointer",
+    ],
 }
 
 

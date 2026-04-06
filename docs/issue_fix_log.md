@@ -248,9 +248,67 @@ All 406 tests still pass.
 
 ---
 
+---
+
+## IFL-007 — free() with complex arguments produces NOOP mutations
+
+**Observed:** CWE-415/401 seeds targeting `bstree.c` selected `free((*cur)->value)`
+(line 97) as the top candidate.  The patcher's `_FREE_CALL_RE` only matched
+`free(\w+)` or `free(\w+->\w+)`, so `(*cur)->value` (parenthesised dereference)
+did not match.  The pipeline ran but produced a NOOP bundle — auditor classified
+`NOOP`, quality gate rejected with C2/C3 failures.
+
+**Evidence:** `audit_result.classification == NOOP` for cwe401_tb_001 (seed=131) on
+first run against target_b.
+
+**Root cause:** `_FREE_CALL_RE` was `r"(\s*)free\s*\(\s*(\w+)\s*\)\s*;"` — only
+matched single word-character identifiers.  The seeder had no penalty for complex
+`free()` argument expressions.
+
+**Fix (two parts):**
+
+1. Extended `_FREE_CALL_RE` in `patcher.py` to match single arrow dereferences:
+   ```python
+   _FREE_CALL_RE = re.compile(r"(\s*)free\s*\(\s*(\w+(?:\s*->\s*\w+)?)\s*\)\s*;")
+   ```
+
+2. Added a `-0.50` penalty in `seeder.py` for `free_call` candidates whose argument
+   contains `(` or `[` (complex expressions that still won't match the patcher):
+   ```python
+   if re.search(r"\bfree\s*\(\s*[(\[]", line):
+       candidate.score = max(candidate.score - 0.50, 0.0)
+   ```
+
+**Verification:** Re-ran all 15 target_b seeds.  No NOOP cases.  100% reproduced.
+
+**Status:** FIXED (Phase 9)
+
+---
+
+## IFL-008 — Duplicate file:line targets in target_b CWE-416 seeds
+
+**Observed:** Seeds cwe416_tb_002, cwe416_tb_003, cwe416_tb_004, cwe416_tb_005 all
+selected `bstree.c:209` or `bstree.c:210` — lines in `bst_copy()` which score 0.85
+and dominate the CWE-416 candidate list for bstree.c.
+
+**Evidence:** Quality gate rejected cases 14 and 15 with C7 (duplicate target).
+
+**Root cause:** `bst_copy()` is the only function in bstree.c with a close
+malloc-then-deref pattern on consecutive lines.  Different seed integers produce the
+same top-3 candidates because only 3 eligible lines exist.
+
+**Fix:** Added `exclude_patterns: ["bstree.c"]` to seeds cwe416_tb_004 and
+cwe416_tb_005 so the seeder searches only dynarray.c and strmap.c for those seeds.
+
+**Verification:** Re-ran all 15 target_b seeds.  15/15 unique targets.  100% accept rate.
+
+**Status:** FIXED (Phase 9)
+
+---
+
 ## Open Issues
 
-No open issues at time of Phase 8 initial pass.
+No open issues at time of Phase 9 initial pass.
 
 ### Issue Template
 

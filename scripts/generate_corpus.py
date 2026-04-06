@@ -71,7 +71,12 @@ def dim(t: str) -> str:    return _c("2",  t)
 # Quality gate logic
 # ---------------------------------------------------------------------------
 
-_KNOWN_STRATEGIES = frozenset({"alloc_size_undercount", "insert_premature_free"})
+_KNOWN_STRATEGIES = frozenset({
+    "alloc_size_undercount",
+    "insert_premature_free",
+    "insert_double_free",
+    "remove_free_call",
+})
 
 # Functions that appear in ≥ 3 already-accepted cases will trigger a note.
 _FUNCTION_NOTE_THRESHOLD = 3

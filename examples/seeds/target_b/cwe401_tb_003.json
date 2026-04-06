@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "seed_id": "cwe401-target-b-003",
+  "seed": 133,
+  "cwe_id": "CWE-401",
+  "vulnerability_class": "Memory Leak",
+  "description": "Remove a free() call in target-b source (dynarray.c, bstree.c, or strmap.c) on a temporary working buffer used during an insert or resize operation, causing a per-call leak that accumulates under repeated invocations.",
+  "mutation_strategy": "remove_free_call",
+  "target_pattern": {
+    "pattern_type": "free_call",
+    "require_function_scope": true,
+    "min_candidate_score": 0.4,
+    "constraints": {}
+  },
+  "source_constraints": {
+    "file_patterns": [
+      "*.c",
+      "*.cpp"
+    ],
+    "exclude_patterns": [
+      "*test*",
+      "*_test.*",
+      "*mock*",
+      "*stub*"
+    ],
+    "max_targets": 1
+  },
+  "metadata": {
+    "tags": [
+      "heap",
+      "memory-leak",
+      "resource",
+      "target-b"
+    ],
+    "difficulty": "easy",
+    "notes": "Targets free() call sites in dynarray.c, bstree.c, and strmap.c \u2014 removes a deallocation to leave heap memory unreleased.",
+    "references": [
+      "https://cwe.mitre.org/data/definitions/401.html"
+    ]
+  }
+}

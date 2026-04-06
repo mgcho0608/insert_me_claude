@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "seed_id": "cwe415-sandbox-005",
+  "seed": 44,
+  "cwe_id": "CWE-415",
+  "vulnerability_class": "Double Free",
+  "description": "Insert a double-free in sandbox_eval C source by injecting a free() immediately following an existing free() on the same heap-allocated pointer, simulating a common error-handling double-free pattern.",
+  "mutation_strategy": "insert_double_free",
+  "target_pattern": {
+    "pattern_type": "free_call",
+    "require_function_scope": true,
+    "min_candidate_score": 0.4,
+    "constraints": {}
+  },
+  "source_constraints": {
+    "file_patterns": ["*.c", "*.cpp"],
+    "exclude_patterns": ["*test*", "*_test.*", "*mock*", "*stub*"],
+    "max_targets": 1
+  },
+  "metadata": {
+    "tags": ["heap", "double-free", "temporal", "sandbox-eval"],
+    "difficulty": "medium",
+    "notes": "Targets free() call sites in sandbox_eval C source files — injects a duplicate free() after the original to produce a double-free condition.",
+    "references": ["https://cwe.mitre.org/data/definitions/415.html"]
+  }
+}

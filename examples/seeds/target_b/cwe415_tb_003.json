@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "seed_id": "cwe415-target-b-003",
+  "seed": 127,
+  "cwe_id": "CWE-415",
+  "vulnerability_class": "Double Free",
+  "description": "Insert a double-free in target-b source (dynarray.c, bstree.c, or strmap.c) by appending an extra free() on a pointer whose deallocation already occurs in the function's normal exit path, simulating a missed-null-check double-free.",
+  "mutation_strategy": "insert_double_free",
+  "target_pattern": {
+    "pattern_type": "free_call",
+    "require_function_scope": true,
+    "min_candidate_score": 0.4,
+    "constraints": {}
+  },
+  "source_constraints": {
+    "file_patterns": [
+      "*.c",
+      "*.cpp"
+    ],
+    "exclude_patterns": [
+      "*test*",
+      "*_test.*",
+      "*mock*",
+      "*stub*"
+    ],
+    "max_targets": 1
+  },
+  "metadata": {
+    "tags": [
+      "heap",
+      "double-free",
+      "temporal",
+      "target-b"
+    ],
+    "difficulty": "medium",
+    "notes": "Targets free() call sites in dynarray.c, bstree.c, and strmap.c \u2014 injects a duplicate free() after the original to produce a double-free condition.",
+    "references": [
+      "https://cwe.mitre.org/data/definitions/415.html"
+    ]
+  }
+}

@@ -433,6 +433,26 @@ class Seeder:
                 ):
                     candidate.score = max(candidate.score - 0.35, 0.0)
 
+            # For free_call: penalise targets that are inside loop bodies or
+            # conditional guard expressions.  These produce secondary flaws
+            # (loop-multiplied free, or double-free in null-check error path).
+            if self._pattern_type == "free_call":
+                # Penalise free() calls that are the guard expression itself.
+                if re.match(r"\s*(?:if|while|for)\s*\(", line):
+                    candidate.score = max(candidate.score - 0.20, 0.0)
+
+                # Penalise free() calls inside a loop body — the free would
+                # execute on every iteration instead of once.
+                if _is_inside_loop_body(lines, lineno - 1):
+                    candidate.score = max(candidate.score - 0.30, 0.0)
+
+                # Penalise free() calls with complex argument expressions:
+                # free((*ptr)->field) or free(arr[i]) cannot be matched by
+                # the patcher's simple identifier regex and will produce a
+                # NOOP mutation.  Strongly penalise to prefer simple args.
+                if re.search(r"\bfree\s*\(\s*[(\[]", line):
+                    candidate.score = max(candidate.score - 0.50, 0.0)
+
             candidates.append(candidate)
 
         return candidates
