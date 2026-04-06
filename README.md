@@ -104,22 +104,22 @@ Example seed files are in `examples/seeds/`:
        │
        ▼
   ┌─────────────┐
-  │   Seeder    │  Expand seed → PatchTargetList
+  │   Seeder    │  ✓ Implemented — lexical source scan → ranked PatchTargetList
   └──────┬──────┘
          │  patch_plan.json  ← patch_plan.schema.json
          ▼
   ┌─────────────┐
-  │   Patcher   │  Apply AST-level mutations to source tree
+  │   Patcher   │  ⧖ Phase 4 — apply mutations to source tree
   └──────┬──────┘
          │
          ▼
   ┌─────────────────┐
-  │    Validator    │  Rule-based plausibility checks
+  │    Validator    │  ⧖ Phase 5 — rule-based plausibility checks
   └──────┬──────────┘
          │  validation_result.json  ← validation_result.schema.json
          ▼
   ┌─────────────┐
-  │   Auditor   │  Write ground truth, provenance, and classification
+  │   Auditor   │  ⧖ Phase 6 — ground truth, provenance, classification
   └──────┬──────┘
          │  ground_truth.json  audit.json  audit_result.json
          ▼
@@ -129,6 +129,31 @@ Example seed files are in `examples/seeds/`:
 
 An optional LLM adapter may be invoked after the Auditor for label enrichment (`labels.json`).
 This is a side-channel — it does not modify any deterministic artifact.
+
+---
+
+## Seeder: Supported Pattern Types
+
+The Seeder uses lexical/regex heuristics (no external AST parser) to extract ranked patch
+candidates from C/C++ source files. Each seed file specifies a `pattern_type`; the Seeder
+scores candidates with strategy-specific rules (base score 0.4, capped at 1.0).
+
+| `pattern_type` | Detected constructs | Notes |
+|---|---|---|
+| `malloc_call` | `malloc(...)` | Higher score for arithmetic in size arg |
+| `calloc_call` | `calloc(...)` | Two-argument alloc |
+| `realloc_call` | `realloc(...)` | Reallocation patterns |
+| `free_call` | `free(...)` | Double-free / use-after-free sites |
+| `string_operation` | `strcpy`, `strncpy`, `strcat`, `strncat`, `sprintf`, `gets`, `scanf`, `memcpy`, `memmove`, `read`, `recv`, `recvfrom` | Scored by danger level: `gets` > `read`/`recv` > `memcpy`/`strcpy` > others |
+| `format_string` | `printf`, `fprintf`, `sprintf`, `snprintf`, `vprintf`, `vfprintf`, `vsprintf` | Extra score for bare variable as format arg |
+| `integer_arithmetic` | `x * sizeof(...)` patterns | Integer overflow in size calculations |
+| `array_index` | `arr[...]` subscript access | Extra score for arithmetic in subscript |
+| `loop_bound` | `for (...)` headers | Extra score for `<=` condition (off-by-one) |
+| `pointer_deref` | `*ptr`, `ptr->field` | Arrow operator scores higher |
+| `custom` | Union of all dangerous patterns | Fallback for novel CWEs |
+
+Deterministic ordering: score descending → (file, line) ascending → seed-integer shuffle
+within equal-score tiers, so different seeds explore different candidates first.
 
 ---
 
@@ -214,8 +239,11 @@ insert-me validate-bundle output/<run-id>/
 insert-me audit output/<run-id>/audit.json
 ```
 
-The current implementation runs in **dry-run mode** (all artifacts are emitted but no source
-tree mutations are applied). Full AST patching is implemented in Phase 4.
+**Current implementation status (Phase 3 complete):**
+- The **Seeder** is fully implemented: real lexical source discovery, deterministic candidate
+  ranking, and `patch_plan.json` with actual targets (status `PLANNED`) when C/C++ files exist.
+- Patcher (Phase 4), Validator (Phase 5), and Auditor with real mutations (Phase 6) are deferred.
+  All five output artifacts are always emitted and schema-validated; source files are never modified.
 
 ---
 
