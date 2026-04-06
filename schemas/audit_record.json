@@ -74,7 +74,7 @@
               "name": { "type": "string" },
               "status": {
                 "type": "string",
-                "enum": ["pass", "fail", "skip"]
+                "enum": ["pass", "fail", "skip", "error"]
               },
               "reason": { "type": "string" }
             }

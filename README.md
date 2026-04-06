@@ -10,12 +10,12 @@
 
 ---
 
-## Current Status — Phase 5 Validator (complete)
+## Current Status — Phase 6 Auditor (MVP reached)
 
 | | |
 |---|---|
 | **Canonical interface** | `insert-me run --seed-file PATH --source PATH` |
-| **Default mode** | Real patching + rule-based validation |
+| **Default mode** | Real patching + validation + audit |
 | **Dry-run mode** | `--dry-run` flag — all artifacts emitted, no source modifications |
 | **Artifacts emitted** | All 5 core artifacts, schema-validated on every run |
 | **`patch_plan.json` status** | `APPLIED` (mutation applied) · `PLANNED` (dry-run/no compatible target) · `PENDING` (no C/C++ sources found) |
@@ -143,7 +143,7 @@ Example seed files are in `examples/seeds/`:
          │  validation_result.json  ← validation_result.schema.json
          ▼
   ┌─────────────┐
-  │   Auditor   │  ⧖ Phase 6 — full Auditor (classification, evidence)
+  │   Auditor   │  ✓ Phase 6 — ground truth, provenance, classification
   └──────┬──────┘
          │  audit_result.json  ground_truth.json  audit.json
          ▼

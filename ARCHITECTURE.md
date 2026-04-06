@@ -13,21 +13,21 @@ regardless of which optional components are active.
 
 ## Current Implementation Status
 
-**Phase 5 — Validator: complete.** The pipeline scans a real C/C++ source tree, applies
-one mutation, validates the result with five deterministic rule-based checks, and emits
-a schema-valid output bundle with a real `validation_result.json`.
+**Phase 6 — Auditor minimal slice: complete.** The pipeline scans a real C/C++ source
+tree, applies one mutation, validates the result with five rule-based checks, and writes a
+complete schema-valid bundle including real `ground_truth.json`, `audit.json`, and a
+verdict-derived `audit_result.json`.
 
 | Pipeline stage | Status | Notes |
 |---|---|---|
 | Seeder | **Complete** (Phase 3) | Lexical/regex source scan; real targets in `patch_plan.json` |
 | Patcher | **Partial** (Phase 4a) | `alloc_size_undercount` strategy only; one mutation per run |
 | Validator | **Complete** (Phase 5) | Five deterministic checks; no compiler required |
-| Auditor | **Stub** (Phase 6) | `Auditor.run()` raises `NotImplementedError` |
-| LLM Adapter | Interface only | `NoOpAdapter` always available; real adapters deferred |
+| Auditor | **Complete** (Phase 6) | Deterministic slice; writes ground_truth, audit, audit_result |
+| LLM Adapter | Interface only | `NoOpAdapter` always available; `labels.json` deferred to Phase 7 |
 
-The pipeline orchestrator (`pipeline/__init__.py`) coordinates Seeder, Patcher, and Validator.
-The Auditor is not yet called; the orchestrator derives the audit classification
-(`VALID`/`INVALID`/`AMBIGUOUS`/`NOOP`) from the Validator verdict.
+The pipeline orchestrator (`pipeline/__init__.py`) coordinates all four stages.
+Each stage's `run()` method is implemented and called in sequence.
 
 ---
 
@@ -57,7 +57,7 @@ The Auditor is not yet called; the orchestrator derives the audit classification
 │         |  [validation_result.json]  <- validation_result.schema.json│
 │         v                                                             │
 │  ┌───────────┐   -> ground_truth.json, audit.json, audit_result.json │
-│  │  Auditor  │   DETERMINISTIC  [⧖ Phase 6 — STUB]                  │
+│  │  Auditor  │   DETERMINISTIC  [✓ Phase 6 COMPLETE — minimal slice] │
 │  └─────┬─────┘                                                        │
 │        |                                                              │
 │        ├───────────────────────────────┐                             │
@@ -139,17 +139,28 @@ registered in `_STRATEGY_HANDLERS` when implemented.
 | `mutation_scope` | Exactly 1 file differs between `bad/` and `good/` |
 | `simple_syntax_sanity` | Mutated line has balanced parentheses; file is non-empty |
 
-### Auditor (`pipeline/auditor.py`) — Phase 6 STUB
+### Auditor (`pipeline/auditor.py`) — Phase 6 COMPLETE (minimal slice)
 
-**Deterministic (planned).**
+**Deterministic.**
 
-- Will accept `PatchResult`, `ValidationVerdict`, config, spec, seed, pipeline version.
-- Will write `ground_truth.json` and `audit.json`.
-- Optional LLM adapter call for `labels.json` enrichment.
-- Output: `GroundTruthRecord`, `AuditRecord`.
+- Accepts: `PatchResult | None`, `ValidationVerdict`, `BundlePaths`, run metadata
+  (run_id, seed, seed_data, pipeline_version, spec_path, spec_hash, source_root, source_hash).
+- Writes three artifacts in order: `ground_truth.json` → `audit.json` → `audit_result.json`.
+- All three are schema-validated before writing.
+- Output: `(GroundTruthRecord, AuditRecord)`.
 
-`Auditor.run()` currently raises `NotImplementedError`.  The dataclasses
-(`GroundTruthRecord`, `AuditRecord`, `MutationRecord`) are defined and stable.
+**Classification logic for `audit_result.json`:**
+
+| Condition | Classification | Confidence |
+|---|---|---|
+| Mutations present + Validator PASS | `VALID` | medium |
+| Mutations present + Validator FAIL | `INVALID` | medium |
+| Mutations present + Validator SKIP | `AMBIGUOUS` | low |
+| No mutations (dry-run or no compatible target) | `NOOP` | low |
+
+**`labels.json` enrichment (Phase 7):**
+The `llm_adapter` parameter is accepted but not invoked.  `labels.json` is never written
+in this phase.  Deferred to Phase 7.
 
 ### LLM Adapter (`llm/adapter.py`)
 
@@ -165,33 +176,30 @@ registered in `_STRATEGY_HANDLERS` when implemented.
 
 ## Artifact Flow (current phase)
 
-The pipeline orchestrator currently produces all five core artifacts directly,
-without calling Patcher/Validator/Auditor.run():
-
 ```
 seed.json + source tree
         |
         v
-    Seeder.run()          [REAL — lexical scan + ranking]
+    Seeder.run()             [REAL — lexical scan + ranking]
         |
-        |-- patch_plan.json         (status=PLANNED/PENDING, real targets)
+        |-- patch_plan.json  (orchestrator; APPLIED/PLANNED/PENDING)
         |
-    Real mode (default: --dry-run not set):
-        Patcher.run()             [REAL — copies source, applies one mutation]
-        |-- bad/                  mutated source tree
-        |-- good/                 byte-identical copy of original
+    Real mode (default):
+        Patcher.run()        [REAL — copies source, applies one mutation]
+        |-- bad/             mutated source tree
+        |-- good/            byte-identical copy of original
         |
-    Dry-run mode (--dry-run flag):
+    Dry-run mode (--dry-run):
         [Patcher not invoked; bad/ and good/ created as empty dirs]
         |
     Both modes:
-        Validator.run()           [REAL — 5 rule-based checks in real mode; SKIP in dry-run]
+        Validator.run()      [REAL — 5 checks in real mode; SKIP in dry-run]
+        |-- validation_result.json  (orchestrator)
         |
-        |-- patch_plan.json         (APPLIED/PLANNED/PENDING; real Seeder targets)
-        |-- validation_result.json  (real check results; overall=SKIP in dry-run)
-        |-- audit_result.json       (VALID/INVALID/AMBIGUOUS/NOOP from Validator verdict)
-        |-- ground_truth.json       (real mutation record + validation_passed)
-        |-- audit.json              (full provenance, real source_hash)
+        Auditor.run()        [REAL — writes 3 artifacts, schema-validated]
+        |-- ground_truth.json       (real mutation records; empty in dry-run)
+        |-- audit.json              (full provenance, real validation_verdict)
+        |-- audit_result.json       (VALID/INVALID/AMBIGUOUS/NOOP)
         |
         v
     output/<run-id>/
@@ -204,10 +212,10 @@ seed.json + source tree
 | Component | Deterministic? | LLM-dependent? | Implemented? | Output artifact |
 |---|---|---|---|---|
 | Seeder | Yes | No | **Yes (Phase 3)** | `patch_plan.json` |
-| Patcher | Yes | No | No (Phase 4) | `bad/` `good/` trees |
+| Patcher | Yes | No | **Partial (Phase 4a)** | `bad/` `good/` trees |
 | Validator (rule checks) | Yes | No | **Yes (Phase 5)** | `validation_result.json` |
 | Validator (soft score) | No | Optional | No (Phase 5+) | adds field to `validation_result.json` |
-| Auditor (structural) | Yes | No | No (Phase 6) | `ground_truth.json` `audit.json` `audit_result.json` |
+| Auditor (structural) | Yes | No | **Yes (Phase 6)** | `ground_truth.json` `audit.json` `audit_result.json` |
 | Auditor (label enrich.) | No | Optional | No (Phase 7) | `labels.json` |
 | LLM Adapter | N/A | Yes | Stub (NoOp) | (side-channel only) |
 
@@ -247,7 +255,7 @@ src/insert_me/
 │   ├── seeder.py        # Seeder, PatchTarget, PatchTargetList  [Phase 3: COMPLETE]
 │   ├── patcher.py       # Patcher, Mutation, PatchResult        [Phase 4a: PARTIAL]
 │   ├── validator.py     # Validator, ValidationVerdict           [Phase 5: COMPLETE]
-│   └── auditor.py       # Auditor, GroundTruthRecord, AuditRecord [Phase 6: STUB]
+│   └── auditor.py       # Auditor, GroundTruthRecord, AuditRecord [Phase 6: COMPLETE]
 └── llm/
     ├── __init__.py      # Adapter registry
     └── adapter.py       # LLMAdapter ABC + NoOpAdapter           [Phase 7: NoOp only]

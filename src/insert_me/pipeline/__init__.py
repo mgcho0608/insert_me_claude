@@ -6,27 +6,29 @@ Canonical pipeline stages:
 
 Current implementation status
 ------------------------------
-Phase 3 (Seeder), Phase 4a (Patcher — alloc_size_undercount strategy), and
-Phase 5 (Validator — five deterministic checks) are implemented.
+Phase 3 (Seeder), Phase 4a (Patcher — alloc_size_undercount strategy),
+Phase 5 (Validator — five deterministic checks), and Phase 6 (Auditor —
+ground truth + provenance + audit result) are implemented.
 
-The pipeline produces real bad/good source trees, validates the mutation, and
-emits schema-valid artifacts.  Auditor with real classifications (Phase 6) is deferred.
+The pipeline produces real bad/good source trees, validates the mutation,
+and writes a complete, schema-valid output bundle in real mode.
 
 Run modes
 ---------
 Real mode (default):
     insert-me run --seed-file PATH --source PATH
 
-    The Seeder discovers candidates and the Patcher applies one mutation to the
-    first compatible target.  bad/ and good/ source trees are written.
-    patch_plan.json status is APPLIED when a mutation is made, PLANNED otherwise.
+    Seeder discovers candidates; Patcher applies one mutation; Validator runs
+    five plausibility checks; Auditor writes ground_truth.json, audit.json,
+    and audit_result.json.  patch_plan.json status is APPLIED when a mutation
+    is made, PLANNED when no compatible target was found.
 
 Dry-run mode:
     insert-me run --seed-file PATH --source PATH --dry-run
 
-    Same artifact contract as before: all five artifacts are emitted and
-    schema-validated, but no source files are modified and bad/good trees
-    remain empty.
+    All five artifacts are emitted and schema-validated, but no source files
+    are modified (bad/ and good/ remain empty), Validator returns SKIP, and
+    Auditor records an honest NOOP classification.
 
 Usage
 -----
@@ -60,13 +62,11 @@ from insert_me.artifacts import (
     write_json_artifact,
 )
 from insert_me.config import Config
+from insert_me.pipeline.auditor import Auditor
 from insert_me.pipeline.patcher import Mutation, Patcher, PatchResult
 from insert_me.pipeline.seeder import PatchTarget, PatchTargetList, Seeder
 from insert_me.pipeline.validator import Validator, ValidationVerdict
 from insert_me.schema import (
-    SCHEMA_AUDIT_RECORD,
-    SCHEMA_AUDIT_RESULT,
-    SCHEMA_GROUND_TRUTH,
     SCHEMA_PATCH_PLAN,
     SCHEMA_SEED,
     SCHEMA_VALIDATION_RESULT,
@@ -83,10 +83,11 @@ def run_pipeline(config: Config, *, dry_run: bool = False) -> BundlePaths:
     config:
         Fully-resolved Config dataclass.
     dry_run:
-        When True, all five artifacts are emitted and schema-validated but
-        no source files are modified and bad/good trees remain empty.
-        When False (default), the Patcher is invoked for the first compatible
-        target; bad/ and good/ source trees are written.
+        When True, all artifacts are emitted and schema-validated but no
+        source files are modified and bad/good trees remain empty.  The
+        Validator returns SKIP and the Auditor records NOOP.
+        When False (default), the Patcher is invoked and Validator runs
+        five plausibility checks.
 
     Returns
     -------
@@ -194,7 +195,7 @@ def run_pipeline(config: Config, *, dry_run: bool = False) -> BundlePaths:
     verdict: ValidationVerdict = validator.run()
 
     # ------------------------------------------------------------------
-    # 7. Emit patch_plan.json
+    # 7. Emit patch_plan.json  (Seeder output — orchestrator owns this)
     # ------------------------------------------------------------------
     patch_plan: dict[str, Any] = {
         "schema_version": ARTIFACT_SCHEMA_VERSION,
@@ -214,7 +215,7 @@ def run_pipeline(config: Config, *, dry_run: bool = False) -> BundlePaths:
     validate_artifact(patch_plan, SCHEMA_PATCH_PLAN)
 
     # ------------------------------------------------------------------
-    # 8. Emit validation_result.json
+    # 8. Emit validation_result.json  (Validator output — orchestrator owns this)
     # ------------------------------------------------------------------
     validation_result: dict[str, Any] = {
         "schema_version": ARTIFACT_SCHEMA_VERSION,
@@ -233,114 +234,22 @@ def run_pipeline(config: Config, *, dry_run: bool = False) -> BundlePaths:
     validate_artifact(validation_result, SCHEMA_VALIDATION_RESULT)
 
     # ------------------------------------------------------------------
-    # 9. Emit audit_result.json
+    # 9. Run Auditor — writes ground_truth.json, audit.json, audit_result.json
     # ------------------------------------------------------------------
-    if applied_mutations:
-        verdict_overall = verdict.overall
-        if verdict_overall == "PASS":
-            classification = "VALID"
-            confidence = "medium"
-            evidence_obs = (
-                f"Patcher applied {len(applied_mutations)} mutation(s) using strategy "
-                f"'{applied_mutations[0].mutation_type}'. "
-                "Validator passed all plausibility checks."
-            )
-        elif verdict_overall == "FAIL":
-            classification = "INVALID"
-            confidence = "medium"
-            evidence_obs = (
-                f"Patcher applied {len(applied_mutations)} mutation(s) but Validator "
-                "rejected the result — at least one plausibility check failed."
-            )
-        else:
-            classification = "AMBIGUOUS"
-            confidence = "low"
-            evidence_obs = (
-                f"Patcher applied {len(applied_mutations)} mutation(s) using strategy "
-                f"'{applied_mutations[0].mutation_type}'. "
-                "Validator verdict is SKIP — classification is AMBIGUOUS pending review."
-            )
-        reviewer_name = "validator_phase5_v1"
-    elif n_targets > 0:
-        classification = "NOOP"
-        confidence = "low"
-        evidence_obs = (
-            f"Seeder identified {n_targets} candidate target(s) "
-            f"(pattern_type={seed_data.get('target_pattern', {}).get('pattern_type', 'unknown')}, "
-            f"skipped={target_list.skipped_count}). "
-            "No compatible target found for the requested mutation strategy, "
-            "or run is in dry-run mode — no mutations applied."
-        )
-        reviewer_name = "seeder_dry_run_v1"
-    else:
-        classification = "NOOP"
-        confidence = "low"
-        evidence_obs = (
-            "Seeder found no candidate targets matching the pattern "
-            f"(pattern_type={seed_data.get('target_pattern', {}).get('pattern_type', 'unknown')}) "
-            "in the source tree. No mutations applied."
-        )
-        reviewer_name = "seeder_dry_run_v1"
-
-    audit_result: dict[str, Any] = {
-        "schema_version": ARTIFACT_SCHEMA_VERSION,
-        "audit_id": f"ar-{run_id}",
-        "run_id": run_id,
-        "classification": classification,
-        "confidence": confidence,
-        "evidence": [
-            {
-                "source": "rule_engine",
-                "observation": evidence_obs,
-                "weight": "neutral",
-            }
-        ],
-        "reviewer": {
-            "type": "deterministic",
-            "name": reviewer_name,
-        },
-    }
-    write_json_artifact(bundle.audit_result, audit_result)
-    validate_artifact(audit_result, SCHEMA_AUDIT_RESULT)
-
-    # ------------------------------------------------------------------
-    # 10. Emit ground_truth.json
-    # ------------------------------------------------------------------
-    ground_truth: dict[str, Any] = {
-        "schema_version": ARTIFACT_SCHEMA_VERSION,
-        "run_id": run_id,
-        "cwe_id": seed_data.get("cwe_id", "CWE-0"),
-        "spec_id": seed_data.get("seed_id", ""),
-        "seed": seed_int,
-        "mutations": [_mutation_to_dict(m) for m in applied_mutations],
-        "validation_passed": verdict.passed,
-    }
-    write_json_artifact(bundle.ground_truth, ground_truth)
-    validate_artifact(ground_truth, SCHEMA_GROUND_TRUTH)
-
-    # ------------------------------------------------------------------
-    # 11. Emit audit.json
-    # ------------------------------------------------------------------
-    audit_record: dict[str, Any] = {
-        "schema_version": ARTIFACT_SCHEMA_VERSION,
-        "run_id": run_id,
-        "seed": seed_int,
-        "spec_path": str(input_path) if input_path else "",
-        "spec_hash": spec_hash,
-        "source_root": str(source_root),
-        "source_hash": target_list.source_hash,
-        "pipeline_version": __version__,
-        "timestamp_utc": now_utc,
-        "validation_verdict": {
-            "passed": verdict.passed,
-            "checks": [
-                {"name": c.name, "status": c.status.value}
-                for c in verdict.checks
-            ],
-        },
-    }
-    write_json_artifact(bundle.audit, audit_record)
-    validate_artifact(audit_record, SCHEMA_AUDIT_RECORD)
+    auditor = Auditor(
+        patch_result=patch_result,
+        verdict=verdict,
+        bundle=bundle,
+        run_id=run_id,
+        seed=seed_int,
+        seed_data=seed_data,
+        pipeline_version=__version__,
+        spec_path=input_path,
+        spec_hash=spec_hash,
+        source_root=source_root,
+        source_hash=target_list.source_hash,
+    )
+    auditor.run()
 
     return bundle
 
@@ -359,18 +268,6 @@ def _target_to_dict(target: PatchTarget, idx: int) -> dict[str, Any]:
         "mutation_strategy": target.mutation_strategy,
         "candidate_score": round(target.score, 4),
         "context": target.context,
-    }
-
-
-def _mutation_to_dict(mutation: Mutation) -> dict[str, Any]:
-    """Convert a Mutation to a ground_truth mutation record (schema-compliant)."""
-    return {
-        "file": str(mutation.target.file),
-        "line": mutation.target.line,
-        "mutation_type": mutation.mutation_type,
-        "original_fragment": mutation.original_fragment,
-        "mutated_fragment": mutation.mutated_fragment,
-        "extra": mutation.extra,
     }
 
 

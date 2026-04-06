@@ -11,12 +11,12 @@ when referencing schemas in code — never hardcode schema names.
 
 ## Current Phase
 
-**Phase 5 — Validator (complete).**
+**Phase 6 — Auditor minimal slice (complete). MVP reached.**
 
-The Seeder, Patcher, and Validator are real.  In the default (non-dry-run) mode the
-pipeline produces actual bad/good source trees, validates the mutation with five
-rule-based checks, and derives `audit_result.json` classification from the verdict.
-Auditor (Phase 6) remains pending.
+All four core pipeline stages are now real.  In the default (real) mode the pipeline
+produces actual bad/good source trees, validates the mutation with five rule-based checks,
+and the Auditor writes `ground_truth.json`, `audit.json`, and `audit_result.json` from
+actual pipeline state.  `labels.json` enrichment (Phase 7 — LLM adapter) remains deferred.
 
 | Artifact field | Real mode (default) | Dry-run (`--dry-run`) | Future |
 |---|---|---|---|
@@ -27,7 +27,7 @@ Auditor (Phase 6) remains pending.
 | `ground_truth.json` `validation_passed` | `true` when Validator passes | `false` | N/A |
 | `validation_result.json` `overall` | `PASS` / `FAIL` / `SKIP` | `SKIP` | N/A |
 | `validation_result.json` `checks` | Real check results (5 checks) | `[]` | N/A |
-| `audit_result.json` `classification` | `VALID` (pass) · `INVALID` (fail) · `AMBIGUOUS` (skip+mut) · `NOOP` | `NOOP` | Phase 6 |
+| `audit_result.json` `classification` | `VALID` (pass) · `INVALID` (fail) · `AMBIGUOUS` (skip+mut) · `NOOP` | `NOOP` | N/A |
 | `audit.json` `validation_verdict.passed` | Real verdict | `false` | N/A |
 
 ---
@@ -199,8 +199,9 @@ This is the primary artifact consumed by `check_me` and `bench_me`.
 | `validation_passed` | boolean | Whether the Validator accepted the mutation |
 | `mutations` | array | Applied mutation records (see §4.1) |
 
-**Current phase:** `mutations = []`, `validation_passed = false`.
-Real mutation records are populated by the Auditor in Phase 6.
+**Current phase:** In real mode, `mutations` contains actual mutation records from the
+Patcher and `validation_passed` reflects the Validator verdict.  In dry-run mode,
+`mutations = []` and `validation_passed = false`.
 
 ### §4.1 Mutation record
 

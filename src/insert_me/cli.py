@@ -60,8 +60,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "run",
         help="Run the vulnerability insertion pipeline.",
         description=(
-            "Expand a seed definition against a C/C++ source tree, produce a\n"
-            "dry-run output bundle with all expected JSON artifacts.\n\n"
+            "Run the vulnerability insertion pipeline against a C/C++ source tree\n"
+            "and produce a complete, schema-validated output bundle.\n\n"
+            "Default (real) mode applies one mutation and runs full validation.\n"
+            "Use --dry-run to emit all artifacts without modifying source files.\n\n"
             "Primary input (canonical):\n"
             "  --seed-file PATH   Path to a seed JSON file (see seed.schema.json).\n"
             "                     The seed file contains the seed integer, CWE class,\n"

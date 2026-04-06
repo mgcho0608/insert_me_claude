@@ -2,12 +2,12 @@
 
 ---
 
-## Current phase (Phase 5 — Validator complete)
+## Current phase (Phase 6 — Auditor complete, MVP reached)
 
-The Seeder, Patcher, and Validator are implemented. You can run the pipeline today and get
-**real bad/good source trees** with one inserted vulnerability (`alloc_size_undercount`
-strategy: `malloc(<expr>)` → `malloc((<expr>) - 1)`) plus a real `validation_result.json`
-from five rule-based plausibility checks.
+All four core pipeline stages are implemented.  You can run the pipeline today and get
+**a complete output bundle**: real bad/good source trees, `validation_result.json` from
+five rule-based plausibility checks, and `ground_truth.json` / `audit.json` /
+`audit_result.json` from the real Auditor.
 
 ---
 
@@ -79,7 +79,7 @@ The following examples will be added as later pipeline stages are implemented:
 
 | Example | Phase | Description |
 |---|---|---|
-| `basic_cwe122/` | Phase 6 | End-to-end: seed → real mutation → bad/good pair |
-| `no_llm/` | Phase 6 | Full run with `--no-llm`, confirming offline operation |
+| `basic_cwe122/` | Phase 8 | Additional CWE seeds exercising new strategies |
+| `no_llm/` | Phase 7 | Full run with `--no-llm`, confirming offline operation |
 | `custom_adapter/` | Phase 7 | Custom LLM adapter wiring example |
-| `multi_target/` | Phase 6 | Larger source tree, multiple ranked candidates |
+| `multi_target/` | Phase 4b | Larger source tree, multiple ranked candidates |
