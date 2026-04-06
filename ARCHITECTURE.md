@@ -214,7 +214,7 @@ seed.json + source tree
 | Seeder | Yes | No | **Yes (Phase 3)** | `patch_plan.json` |
 | Patcher | Yes | No | **Partial (Phase 4a)** | `bad/` `good/` trees |
 | Validator (rule checks) | Yes | No | **Yes (Phase 5)** | `validation_result.json` |
-| Validator (soft score) | No | Optional | No (Phase 5+) | adds field to `validation_result.json` |
+| Validator (soft score) | No | Optional | Deferred (Phase 7+) | adds field to `validation_result.json` |
 | Auditor (structural) | Yes | No | **Yes (Phase 6)** | `ground_truth.json` `audit.json` `audit_result.json` |
 | Auditor (label enrich.) | No | Optional | No (Phase 7) | `labels.json` |
 | LLM Adapter | N/A | Yes | Stub (NoOp) | (side-channel only) |

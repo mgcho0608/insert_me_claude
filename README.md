@@ -311,7 +311,8 @@ insert-me run --seed-file examples/seeds/cwe122_heap_overflow.json \
               --source examples/demo/src \
               --dry-run
 ```
-Dry-run: `patch_plan.json` status is `PLANNED`, `ground_truth.json` mutations is `[]`, no source copies.
+Dry-run: `patch_plan.json` status is `PLANNED`, `ground_truth.json` mutations is `[]`,
+`audit_result.json` classification is `NOOP`, no source files are modified.
 
 ---
 

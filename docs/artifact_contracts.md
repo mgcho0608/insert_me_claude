@@ -125,7 +125,9 @@ Rule-based plausibility verdict on the applied mutations. Fully deterministic �
 | `checks` | array | Per-check results (see §2.1) |
 | `notes` | string | Optional note (used in current phase to explain SKIP) |
 
-**Current phase:** `overall = "SKIP"`, `checks = []`.
+**Real mode (default):** `overall` is `PASS` / `FAIL` based on the five rule-based checks. `checks` contains one record per check.
+
+**Dry-run mode:** `overall = "SKIP"`, `checks = []`.
 
 ### §2.1 Check record
 
@@ -157,8 +159,15 @@ optional LLM-assisted evidence items.
 | `evidence` | array | Evidence items supporting the classification (see §3.1) |
 | `reviewer` | object | `{ "type": "deterministic", "name": "<reviewer_id>" }` |
 
-**Current phase:** `classification = "NOOP"`, `confidence = "low"`, one neutral evidence item
-noting Seeder candidate count and that no mutations were applied.
+**Real mode (default):** Classification is derived from the Validator verdict:
+- `VALID` (`confidence = "medium"`) — mutations applied and Validator passed all checks
+- `INVALID` (`confidence = "medium"`) — mutations applied but Validator failed at least one check
+- `AMBIGUOUS` (`confidence = "low"`) — mutations applied but Validator skipped (edge case)
+- `NOOP` (`confidence = "low"`) — no mutations applied (dry-run or no qualifying targets)
+
+**Dry-run mode:** `classification = "NOOP"`, `confidence = "low"`.
+
+Reviewer is always `{ "type": "deterministic", "name": "auditor_phase6_v1" }` in the current phase.
 
 ### §3.1 Evidence record
 
@@ -252,13 +261,20 @@ verify the run's inputs and pipeline version.
 
 ```json
 {
-  "passed": false,
-  "checks": []
+  "passed": true,
+  "checks": [
+    {"name": "mutation_applied", "status": "pass"},
+    {"name": "good_tree_integrity", "status": "pass"},
+    {"name": "bad_tree_changed", "status": "pass"},
+    {"name": "mutation_scope", "status": "pass"},
+    {"name": "simple_syntax_sanity", "status": "pass"}
+  ]
 }
 ```
 
-`checks` is an array of `{ "name": string, "status": "pass"|"fail"|"skip" }` objects.
-In the current phase, `passed = false` and `checks = []`.
+`checks` is an array of `{ "name": string, "status": "pass"|"fail"|"skip"|"error" }` objects.
+In **real mode**, `passed` reflects the actual Validator verdict and `checks` lists each of the five
+rule-based checks. In **dry-run mode**, `passed = false` and `checks = []`.
 
 ---
 
