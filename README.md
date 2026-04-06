@@ -133,9 +133,9 @@ Example seed files are in `examples/seeds/`:
          │  patch_plan.json  ← patch_plan.schema.json
          ▼
   ┌─────────────┐
-  │   Patcher   │  ⧖ Phase 4a — alloc_size_undercount strategy only
+  │   Patcher   │  ⚡ Phase 4a — alloc_size_undercount strategy only
   └──────┬──────┘
-         │
+         │  bad/  good/  source trees
          ▼
   ┌─────────────────┐
   │    Validator    │  ✓ Phase 5 — five deterministic rule-based checks
@@ -143,9 +143,9 @@ Example seed files are in `examples/seeds/`:
          │  validation_result.json  ← validation_result.schema.json
          ▼
   ┌─────────────┐
-  │   Auditor   │  ⧖ Phase 6 — ground truth, provenance, classification
+  │   Auditor   │  ⧖ Phase 6 — full Auditor (classification, evidence)
   └──────┬──────┘
-         │  ground_truth.json  audit.json  audit_result.json
+         │  audit_result.json  ground_truth.json  audit.json
          ▼
   [output bundle]
     bad/  good/  + all JSON artifacts above
@@ -178,6 +178,25 @@ scores candidates with strategy-specific rules (base score 0.4, capped at 1.0).
 
 Deterministic ordering: score descending → (file, line) ascending → seed-integer shuffle
 within equal-score tiers, so different seeds explore different candidates first.
+
+---
+
+## Validator: Plausibility Checks
+
+After applying a mutation, the Validator runs five deterministic, compiler-free checks:
+
+| Check | Passes when |
+|---|---|
+| `mutation_applied` | At least one mutation record was produced by the Patcher |
+| `good_tree_integrity` | `good/` copy of the mutated file is byte-identical to the original source |
+| `bad_tree_changed` | `bad/` file differs from `good/` and contains the expected `mutated_fragment` |
+| `mutation_scope` | Exactly one file differs between `bad/` and `good/` |
+| `simple_syntax_sanity` | The mutated line has balanced parentheses; the file is non-empty |
+
+In dry-run mode, validation is skipped (`overall: "SKIP"`, `checks: []`).
+
+The Validator verdict drives the `audit_result.json` classification:
+`VALID` (all pass) · `INVALID` (any fail) · `AMBIGUOUS` (skip with mutations) · `NOOP` (no mutations).
 
 ---
 
@@ -257,24 +276,24 @@ insert-me run \
 
 Example output:
 ```
-[insert-me] starting dry-run pipeline
+[insert-me] starting pipeline
   seed-file : examples/seeds/cwe122_heap_overflow.json
   source    : examples/demo/src
   output    : output
-[insert-me] bundle written to: output/a3f9c1e8b2d47065/
-  patch_plan.json       : output/a3f9c1e8b2d47065/patch_plan.json
-  validation_result.json: output/a3f9c1e8b2d47065/validation_result.json
-  audit_result.json     : output/a3f9c1e8b2d47065/audit_result.json
-  ground_truth.json     : output/a3f9c1e8b2d47065/ground_truth.json
-  audit.json            : output/a3f9c1e8b2d47065/audit.json
+[insert-me] bundle written to: output/9576dfc551a54e4c/
+  patch_plan.json       : output/9576dfc551a54e4c/patch_plan.json
+  validation_result.json: output/9576dfc551a54e4c/validation_result.json
+  audit_result.json     : output/9576dfc551a54e4c/audit_result.json
+  ground_truth.json     : output/9576dfc551a54e4c/ground_truth.json
+  audit.json            : output/9576dfc551a54e4c/audit.json
 ```
 
 ```bash
-# 3. Validate the bundle (replace <run-id> with the actual run ID printed above)
-insert-me validate-bundle output/<run-id>/
+# 3. Validate the bundle (replace 9576dfc551a54e4c with the run ID printed above)
+insert-me validate-bundle output/9576dfc551a54e4c/
 
 # 4. Inspect the audit record
-insert-me audit output/<run-id>/audit.json
+insert-me audit output/9576dfc551a54e4c/audit.json
 ```
 
 **What to expect today (real mode — default):**
