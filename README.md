@@ -10,7 +10,7 @@
 
 ---
 
-## Current Status — Phase 7A (Juliet identity + per-project evaluation foundation)
+## Current Status — Phase 7B-prep (deterministic semantic adjudication baseline)
 
 | | |
 |---|---|
@@ -26,12 +26,13 @@
 | **`validation_result.json`** | Real check results (5 checks) in real mode; `overall: SKIP` in dry-run |
 | **`audit_result.json`** | `VALID` (validator pass) · `INVALID` (fail) · `AMBIGUOUS` (skip+mutations) · `NOOP` (no mutations) |
 | **Evaluation strategy** | `exact` / `family` / `semantic` / `no_match` — per-mutation match against inserted ground truth |
+| **Adjudicator** | `HeuristicAdjudicator` (default, offline) · `DisabledAdjudicator` · `LLMAdjudicator` (Phase 7B placeholder) |
 
 ---
 
 ## What it is
 
-insert_me is a deterministic, Juliet-derived seeded vulnerability insertion and per-project evaluation framework for C/C++ codebases. It inserts auditable bad/good variants into arbitrary target projects and evaluates how well a detector report matches the inserted ground truth, optionally using an LLM for semantic adjudication.
+insert_me is a deterministic, Juliet-derived seeded vulnerability insertion and per-project evaluation framework for C/C++ codebases. It inserts auditable bad/good variants into arbitrary target projects and evaluates how well a detector report matches the inserted ground truth. Semantic matches are adjudicated offline by the built-in heuristic adjudicator (no LLM required); a plug-in point for a future internal LLM adjudicator is available but not yet wired.
 
 Given a seed definition and a C/C++ source tree, it produces:
 
@@ -71,7 +72,7 @@ For engineers picking this up for the first time inside an organisation:
 | | |
 |---|---|
 | **What it is** | A Python CLI that inserts one known vulnerability into a C/C++ source tree and produces a fully annotated, schema-validated output bundle. |
-| **Current maturity** | Phase 7A — all four core pipeline stages + evaluator implemented and tested (~360 tests). Not production-hardened; alpha-quality. |
+| **Current maturity** | Phase 7B-prep — all four core pipeline stages + evaluator + deterministic heuristic adjudicator implemented and tested (~406 tests). Not production-hardened; alpha-quality. |
 | **Install path** | `pip install -e .` from source. No PyPI release exists yet. |
 | **Python versions** | 3.11, 3.12 — **CI-tested**. 3.10 — **statically reviewed only** (single shim: `tomllib` → `tomli`). No other version-specific features used. |
 | **Dependencies** | `jsonschema>=4.17` + `tomli>=1.2.0` on Python 3.10 only. No other mandatory runtime dependencies. |
@@ -87,7 +88,7 @@ For engineers picking this up for the first time inside an organisation:
 **What is NOT available yet:**
 - Additional mutation strategies (CWE-190) — Phase 4c
 - AST-based or compiler-backed patching/validation — future phases
-- Phase 7B: LLM adjudicator integration for semantic match
+- Phase 7B: real LLM adjudicator (placeholder exists; `LLMAdjudicator.adjudicate()` raises `NotImplementedError`)
 - Batch corpus generation — Phase 9
 
 ---
@@ -117,9 +118,11 @@ insert-me validate-bundle output/<run-id>/
 insert-me audit output/<run-id>/audit.json
 
 # Evaluate a detector report against the inserted ground truth
+# Default: HeuristicAdjudicator runs offline for semantic matches
 insert-me evaluate --bundle output/<run-id>/ \
                    --tool-report report.json \
-                   --tool cppcheck
+                   --tool cppcheck \
+                   [--adjudicator heuristic|disabled]
 ```
 
 The `--seed-file` argument takes a seed JSON file (see `seed.schema.json` and `examples/seeds/`).
@@ -191,12 +194,18 @@ Example seed files are in `examples/seeds/`:
   └──────┬──────┘    (insert-me evaluate --bundle ... --tool-report ...)
          │  match_result.json  coverage_result.json
          ▼
+  ┌───────────────────┐
+  │  Adjudicator      │  ✓ Phase 7B-prep — resolves semantic matches offline
+  └──────┬────────────┘    HeuristicAdjudicator (default) · DisabledAdjudicator
+         │  adjudication_result.json  (written only when verdicts exist)
+         ▼
   [evaluation artifacts]
 ```
 
-An optional LLM adapter may be invoked after the Auditor for label enrichment (`labels.json`),
-or after the Evaluator for semantic match adjudication (`adjudication_result.json`, Phase 7B).
-These are side-channels — they do not modify any deterministic artifact.
+An optional LLM adapter may be invoked after the Auditor for label enrichment (`labels.json`, Phase 7B).
+The adjudicator boundary is now hardened: `AdjudicatorBase` ABC accepts `HeuristicAdjudicator` (offline default),
+`DisabledAdjudicator`, or a future `LLMAdjudicator`. These are side-channels — they do not modify
+any deterministic artifact.
 
 ---
 

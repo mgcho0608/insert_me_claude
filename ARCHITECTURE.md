@@ -13,11 +13,12 @@ regardless of which optional components are active.
 
 ## Current Implementation Status
 
-**Phase 7A — Juliet identity + per-project evaluation foundation: complete.** The pipeline scans a real C/C++ source
+**Phase 7B-prep — deterministic semantic adjudication baseline: complete.** The pipeline scans a real C/C++ source
 tree, applies one mutation, validates the result with five rule-based checks, and writes a
 complete schema-valid bundle including real `ground_truth.json`, `audit.json`, and a
-verdict-derived `audit_result.json`. The new Evaluator compares a normalized detector report
-against the ground truth oracle and produces match_result.json and coverage_result.json.
+verdict-derived `audit_result.json`. The Evaluator compares a normalized detector report
+against the ground truth oracle and produces `match_result.json` and `coverage_result.json`.
+Semantic matches are adjudicated offline by the `HeuristicAdjudicator` (deterministic, no LLM required).
 
 | Pipeline stage | Status | Notes |
 |---|---|---|
@@ -26,7 +27,8 @@ against the ground truth oracle and produces match_result.json and coverage_resu
 | Validator | **Complete** (Phase 5) | Five deterministic checks; no compiler required |
 | Auditor | **Complete** (Phase 6) | Deterministic slice; writes ground_truth, audit, audit_result |
 | Evaluator | **Complete** (Phase 7A) | Optional separate step; compares detector reports against ground truth |
-| LLM Adapter | Interface only | `NoOpAdapter` always available; LLM adjudicator deferred to Phase 7B |
+| Adjudicator | **Phase 7B-prep** | `HeuristicAdjudicator` (offline default) · `DisabledAdjudicator` · `LLMAdjudicator` placeholder |
+| LLM Adapter | Interface only | `NoOpAdapter` always available; LLM enrichment (labels.json) deferred to Phase 7B |
 
 The pipeline orchestrator (`pipeline/__init__.py`) coordinates all four stages.
 Each stage's `run()` method is implemented and called in sequence.
@@ -178,10 +180,15 @@ in this phase.  Deferred to Phase 7.
   - `no_match` — none of the above
 - Tracks false positives: findings not linked to any mutation.
 - Writes `match_result.json` (per-mutation detail) and `coverage_result.json` (summary statistics).
-- LLM adjudication is an optional boundary: when disabled, `semantic` cases are flagged but not resolved.
-  The evaluation never fails due to absent LLM.
+- After matching, invokes the configured **Adjudicator** to resolve `semantic` cases:
+  - `HeuristicAdjudicator` (default) — deterministic offline scoring; produces MATCH/UNRESOLVED/NO_MATCH verdicts
+    based on file, line proximity, CWE family, and keyword signals.
+  - `DisabledAdjudicator` — no-op; semantic matches stay flagged as `adjudication_pending=True`.
+  - `LLMAdjudicator` — Phase 7B placeholder; raises `NotImplementedError`.
+- When verdicts exist, writes `adjudication_result.json` and adds `adjudication_summary` to `coverage_result.json`.
+- The evaluation never fails due to absent LLM; `--adjudicator disabled` is always safe.
 
-**Invoked via:** `insert-me evaluate --bundle PATH --tool-report PATH --tool NAME`
+**Invoked via:** `insert-me evaluate --bundle PATH --tool-report PATH --tool NAME [--adjudicator heuristic|disabled]`
 
 Not wired into `run_pipeline()` — it is a separate, optional post-run step.
 
@@ -193,8 +200,7 @@ Not wired into `run_pipeline()` — it is a separate, optional post-run step.
 - Default implementation: `NoOpAdapter` — returns empty enrichments. Always available.
 - Optional implementations: thin wrappers around any LLM API.
 - **Swapping the adapter has zero effect on deterministic outputs.**  Only `labels.json`
-  (Auditor enrichment) and `adjudication_result.json` (Evaluator adjudication, Phase 7B)
-  change.
+  (Auditor enrichment, Phase 7B) changes.
 
 ---
 
@@ -236,11 +242,14 @@ seed.json + source tree
 | Component | Deterministic? | LLM-dependent? | Implemented? | Output artifact |
 |---|---|---|---|---|
 | Seeder | Yes | No | **Yes (Phase 3)** | `patch_plan.json` |
-| Patcher | Yes | No | **Partial (Phase 4a)** | `bad/` `good/` trees |
+| Patcher | Yes | No | **Yes (Phase 4b)** | `bad/` `good/` trees |
 | Validator (rule checks) | Yes | No | **Yes (Phase 5)** | `validation_result.json` |
 | Validator (soft score) | No | Optional | Deferred (Phase 7+) | adds field to `validation_result.json` |
 | Auditor (structural) | Yes | No | **Yes (Phase 6)** | `ground_truth.json` `audit.json` `audit_result.json` |
-| Auditor (label enrich.) | No | Optional | No (Phase 7) | `labels.json` |
+| Auditor (label enrich.) | No | Optional | No (Phase 7B) | `labels.json` |
+| Evaluator | Yes | No | **Yes (Phase 7A)** | `match_result.json` `coverage_result.json` |
+| Adjudicator (heuristic) | Yes | No | **Yes (Phase 7B-prep)** | `adjudication_result.json` + `adjudication_summary` in coverage |
+| Adjudicator (LLM) | No | Yes | Placeholder (Phase 7B) | (same as heuristic) |
 | LLM Adapter | N/A | Yes | Stub (NoOp) | (side-channel only) |
 
 ---
@@ -280,7 +289,14 @@ src/insert_me/
 │   ├── patcher.py       # Patcher, Mutation, PatchResult        [Phase 4b: two strategies]
 │   ├── validator.py     # Validator, ValidationVerdict           [Phase 5: COMPLETE]
 │   ├── auditor.py       # Auditor, GroundTruthRecord, AuditRecord [Phase 6: COMPLETE]
-│   └── evaluator.py     # Evaluator, MatchRecord, EvaluationResult [Phase 7A: COMPLETE]
+│   └── evaluator.py     # shim — re-exports from evaluation/    [backward compat]
+├── evaluation/
+│   ├── __init__.py      # Public API re-exports
+│   ├── evaluator.py     # Evaluator, MatchRecord, EvaluationResult [Phase 7A]
+│   ├── matching.py      # exact/family/semantic match + CWE families + emit_match_result
+│   ├── coverage.py      # emit_coverage_result (with adjudication_summary)
+│   ├── adjudication.py  # AdjudicatorBase, Heuristic/Disabled/LLMAdjudicator [Phase 7B-prep]
+│   └── detector_report.py # load/validate detector report JSON
 └── llm/
     ├── __init__.py      # Adapter registry
     └── adapter.py       # LLMAdapter ABC + NoOpAdapter           [Phase 7B: NoOp only]
@@ -317,7 +333,7 @@ Schema versions are carried in every artifact under `"schema_version"`.
 | `detector_report.schema.json` | Normalized detector report (Evaluator input) |
 | `match_result.schema.json` | Per-mutation match evaluation (Evaluator output) |
 | `coverage_result.schema.json` | Coverage summary statistics (Evaluator output) |
-| `adjudication_result.schema.json` | LLM adjudication results (Phase 7B, optional) |
+| `adjudication_result.schema.json` | Adjudicator verdicts for semantic matches (heuristic or LLM; optional) |
 
 Schema loading, resolution (`.schema.json` vs `.json`), and validation are centralised in
 `src/insert_me/schema.py`. Use the `SCHEMA_*` constants — never hardcode schema names.

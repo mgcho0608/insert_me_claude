@@ -11,14 +11,16 @@ when referencing schemas in code — never hardcode schema names.
 
 ## Current Phase
 
-**Phase 7A — Juliet identity + per-project evaluation foundation (complete).**
+**Phase 7B-prep — deterministic semantic adjudication baseline (complete).**
 
 All four core pipeline stages are real.  In the default (real) mode the pipeline produces
 actual bad/good source trees, validates the mutation with five rule-based checks, and the
 Auditor writes `ground_truth.json`, `audit.json`, and `audit_result.json` from actual pipeline
-state.  The new `evaluate` command compares a normalized detector report against the ground
-truth oracle, producing `match_result.json` and `coverage_result.json`.
-`labels.json` enrichment (Phase 7B — LLM adjudicator) remains deferred.
+state.  The `evaluate` command compares a normalized detector report against the ground
+truth oracle, producing `match_result.json` and `coverage_result.json`.  Semantic matches are
+now adjudicated offline by the built-in `HeuristicAdjudicator` (no LLM required), producing
+`adjudication_result.json` and an `adjudication_summary` in `coverage_result.json`.
+`labels.json` enrichment (Phase 7B — LLM adapter) remains deferred.
 
 | Artifact field | Real mode (default) | Dry-run (`--dry-run`) | Future |
 |---|---|---|---|
@@ -50,7 +52,7 @@ output/<run-id>/
 ├── labels.json               (optional) LLM-enriched semantic labels (§6)
 ├── match_result.json         (optional) Per-mutation match evaluation (§7, evaluate command)
 ├── coverage_result.json      (optional) Coverage statistics (§7, evaluate command)
-└── adjudication_result.json  (optional) LLM adjudication of semantic matches (§7, Phase 7B)
+└── adjudication_result.json  (optional) Adjudicator verdicts for semantic matches (§7.4)
 ```
 
 In real mode (default), `bad/` and `good/` contain the mutated and original source trees.
@@ -396,7 +398,8 @@ Per-mutation match evaluation. One `matches` entry per mutation in `ground_truth
 | `match_level` | string | `exact` / `family` / `semantic` / `no_match` |
 | `matched_finding` | object or null | The finding that matched, or null |
 | `rationale` | string | Human-readable explanation |
-| `adjudication_pending` | boolean | True when semantic match awaits LLM adjudication |
+| `adjudication_pending` | boolean | `true` when semantic match exists but adjudicator was disabled; `false` (field present) when verdict was produced |
+| `adjudication` | object | Present when adjudicator ran; see §7.2.2 |
 
 **Match level semantics:**
 
@@ -406,6 +409,17 @@ Per-mutation match evaluation. One `matches` entry per mutation in `ground_truth
 | `family` | Mutation CWE and finding CWE share a CWE family group |
 | `semantic` | Keyword from mutation's CWE family found in finding message |
 | `no_match` | No finding matched at any level |
+
+#### §7.2.2 adjudication block (semantic matches only)
+
+Present in a match record when the adjudicator produced a verdict.
+
+| Field | Type | Description |
+|---|---|---|
+| `verdict` | string | `match` / `no_match` / `unresolved` |
+| `confidence` | number (0–1) | Normalized score from the adjudicator |
+| `rationale` | string | Signal-level explanation (e.g. matched signals and weights) |
+| `adjudicator` | string | `"heuristic"` · `"llm"` · custom name |
 
 ### §7.3 coverage_result.json
 
@@ -425,23 +439,47 @@ Summary statistics across all mutations.
 | `false_positives` | integer | Findings not linked to any mutation |
 | `coverage_rate` | number (0–1) | `matched / total_mutations` |
 | `by_level` | object | Per-level counts: `exact`, `family`, `semantic`, `no_match` |
+| `adjudication_summary` | object | Present when semantic cases were adjudicated (see below) |
 
-### §7.4 adjudication_result.json (Phase 7B)
+**adjudication_summary** (present only when adjudicator != disabled and semantic matches exist):
+
+| Field | Type | Description |
+|---|---|---|
+| `adjudicator` | string | Adjudicator identifier, e.g. `"heuristic"` |
+| `match` | integer | Semantic cases adjudicated as MATCH |
+| `unresolved` | integer | Semantic cases adjudicated as UNRESOLVED |
+| `no_match` | integer | Semantic cases adjudicated as NO_MATCH |
+
+### §7.4 adjudication_result.json
 
 Schema: `schemas/adjudication_result.schema.json` (version 1.0)
 
-Written only when an LLM adjudicator is invoked for semantic match cases. Absence is never an error.
+Written only when the adjudicator produced verdicts (i.e. adjudicator != disabled and semantic
+matches exist). Absence is never an error. Written by both `HeuristicAdjudicator` (default)
+and any future `LLMAdjudicator`.
 
 | Field | Type | Description |
 |---|---|---|
 | `schema_version` | string | Schema version |
 | `run_id` | string | Links to the evaluated bundle |
 | `tool` | string | Detection tool name |
-| `adjudicator` | string | Adjudicator identifier, e.g. `"llm"`, `"heuristic"` |
+| `adjudicator` | string | Adjudicator identifier: `"heuristic"` · `"llm"` · custom |
 | `cases` | array | Per-case adjudication records |
 
-Each case: `mutation_index`, `finding_id` (string or null), `verdict` (match/no_match/ambiguous),
-optional `confidence` (0–1), optional `rationale`.
+Each case: `mutation_index`, `finding_id` (string or null), `verdict` (`match`/`no_match`/`unresolved`),
+`confidence` (0–1), `rationale`.
+
+**HeuristicAdjudicator scoring signals** (default adjudicator):
+
+| Signal | Weight |
+|---|---|
+| Same file basename (mutation vs finding) | +0.20 |
+| Finding line within ±10 of mutation line | +0.15 |
+| Finding CWE maps to same family as mutation CWE | +0.30 |
+| CWE-family keyword hits in message (`min(hits × 0.10, 0.20)`) | +0.20 max |
+| Strategy-specific keyword in message | +0.15 |
+
+Verdict thresholds: MATCH ≥ 0.65 · UNRESOLVED ≥ 0.30 · NO_MATCH < 0.30
 
 ---
 
@@ -455,23 +493,29 @@ optional `confidence` (0–1), optional `rationale`.
 insert-me evaluate \
   --bundle output/<run-id>/ \
   --tool-report report.json \    ← normalized detector report (detector_report.schema.json)
-  --tool cppcheck
+  --tool cppcheck \
+  [--adjudicator heuristic|disabled]   (default: heuristic)
          │
          ▼
   Evaluator.run()
     For each mutation in ground_truth.mutations:
       Try exact match  → same file basename + same CWE + line ±2
       Try family match → same CWE family group
-      Try semantic match → keyword in finding message (adjudication_pending=True)
+      Try semantic match → keyword in finding message
       Else: no_match
          │
-         ├── match_result.json      ← per-mutation match evaluation
-         └── coverage_result.json   ← summary statistics
+         ▼
+  Adjudicator.adjudicate(pending_cases)     ← HeuristicAdjudicator by default
+    For each semantic match:
+      Score signals → MATCH / UNRESOLVED / NO_MATCH
+         │
+         ├── match_result.json      ← per-mutation detail (adjudication block added)
+         ├── coverage_result.json   ← summary + adjudication_summary
+         └── adjudication_result.json  ← written only when verdicts exist
 ```
 
-LLM adjudication (Phase 7B): when enabled, `adjudication_result.json` resolves
-`adjudication_pending=True` cases. When disabled, semantic matches remain flagged
-but the evaluation completes normally.
+With `--adjudicator disabled`, the adjudication step is skipped: semantic matches are flagged
+as `adjudication_pending=True` in `match_result.json` and `adjudication_result.json` is not written.
 
 ---
 

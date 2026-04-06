@@ -111,11 +111,13 @@ hand-crafted examples that exercise the schema validators.
 
 Normalized detector reports for testing the `insert-me evaluate` command against the CWE-416 demo bundle.
 
-| File | Description | Expected match level |
-|---|---|---|
-| `exact_match_report.json` | Finding in `uaf_demo.c` at correct line with CWE-416 | `exact` |
-| `family_match_report.json` | Finding in `uaf_demo.c` with CWE-415 (double-free, same family) | `family` |
-| `no_match_report.json` | Finding in `other.c` with CWE-122 (different file and CWE) | `no_match` |
+| File | Description | Expected match level | Adjudication verdict |
+|---|---|---|---|
+| `exact_match_report.json` | Finding in `uaf_demo.c` at correct line with CWE-416 | `exact` | N/A |
+| `family_match_report.json` | Finding in `uaf_demo.c` with CWE-415 (double-free, same family) | `family` | N/A |
+| `no_match_report.json` | Finding in `other.c` with CWE-122 (different file and CWE) | `no_match` | N/A |
+| `semantic_match_report.json` | `uaf_demo.c` line 42, message contains "use after free" | `semantic` | `match` (score ≈ 0.70) |
+| `semantic_unresolved_report.json` | `uaf_demo.c` line 100, weak keyword "freed memory issue" | `semantic` | `unresolved` (score ≈ 0.45) |
 
 **To run the evaluation demo:**
 
@@ -149,6 +151,17 @@ insert-me evaluate \
 ```
 Result: `match_level: "family"` — CWE-415 (double-free) and CWE-416 (use-after-free) share the `use-after-free` family.
 
+**Semantic match example (HeuristicAdjudicator):**
+```bash
+insert-me evaluate \
+  --bundle output/<run-id>/ \
+  --tool-report examples/evaluation/semantic_match_report.json \
+  --tool cppcheck-demo
+# --adjudicator heuristic is the default; omitting it is equivalent
+```
+Result: `match_level: "semantic"`, `adjudication.verdict: "match"` in `match_result.json`.
+`adjudication_result.json` and `adjudication_summary` in `coverage_result.json` are written.
+
 ---
 
 ## Planned examples (future phases)
@@ -158,6 +171,5 @@ The following examples will be added as later pipeline stages are implemented:
 | Example | Phase | Description |
 |---|---|---|
 | `basic_cwe122/` | Phase 8 | Additional CWE seeds exercising new strategies |
-| `no_llm/` | Phase 7B | Full run with `--no-llm`, confirming offline operation |
-| `custom_adapter/` | Phase 7B | Custom LLM adapter wiring example |
+| `custom_adapter/` | Phase 7B | Custom LLM adapter wiring example (labels.json enrichment) |
 | `multi_target/` | Phase 4b | Larger source tree, multiple ranked candidates |
