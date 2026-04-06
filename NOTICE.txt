@@ -1,0 +1,39 @@
+NOTICE — insert_me
+==================
+
+Copyright (c) 2024–2026 [Author/Organisation — to be determined]
+
+All rights reserved.
+
+License status: UNDECIDED.
+
+This software and associated documentation files (the "Software") are
+provided for internal and research use only.  Do not redistribute,
+publish, sublicense, or otherwise make the Software available to third
+parties without explicit written permission from the copyright holder.
+
+A formal open-source or commercial license will be chosen before any
+public distribution.  Until that decision is made, treat this Software
+as proprietary and confidential.
+
+-------------------------------------------------------------------------------
+
+Third-party dependencies
+------------------------
+
+The Software depends on the following third-party packages at runtime:
+
+  jsonschema (>=4.17)
+    License: MIT
+    https://github.com/python-jsonschema/jsonschema
+
+  tomli (>=1.2.0) — required only on Python 3.10; not needed on 3.11+
+    License: MIT
+    https://github.com/hukkin/tomli
+
+All other dependencies are from the Python standard library.
+
+Tooling used during development (not included in distributions):
+
+  pytest (>=7.4)      MIT
+  pytest-cov (>=4.1)  MIT

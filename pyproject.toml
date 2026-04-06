@@ -44,6 +44,10 @@ dev = [
 [project.scripts]
 insert-me = "insert_me.cli:main"
 
+[tool.setuptools]
+# Include NOTICE.txt in all distributions so recipients see the license status.
+license-files = ["NOTICE.txt"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

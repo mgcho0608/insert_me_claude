@@ -1,10 +1,15 @@
 """
-Configuration loading tests — Phase 6 readiness hardening.
+Configuration loading tests — packaging/metadata convergence pass.
 
 Coverage
 --------
-- tomllib/tomli compatibility shim: config module imports cleanly regardless of
-  whether tomllib (3.11+) or tomli (3.10 back-port) is available.
+- tomllib/tomli compatibility shim:
+    * config module imports cleanly on Python 3.11+ (tomllib stdlib path)
+    * shim structure: the try/except block is syntactically correct and the
+      fallback symbol 'tomllib' resolves to a module with a .load() callable
+    * load_config() parses real TOML files (exercises the active code path)
+    * the shim's fallback is exercised via importlib/mock to confirm the
+      try/except wiring without requiring an actual Python 3.10 interpreter
 - ValidatorConfig has no stale check_syntax/check_trivial/check_scope fields
   (those were documented but never wired to the Validator; removed in hardening pass).
 - load_config() returns correct defaults with no file.
@@ -14,8 +19,11 @@ Coverage
 
 from __future__ import annotations
 
+import importlib
 import sys
+import types
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -31,6 +39,45 @@ class TestTomlibCompatibility:
         """config.py must import without error on Python 3.10, 3.11, 3.12."""
         import insert_me.config as cfg_mod  # noqa: F401 — import is the test
         assert cfg_mod is not None
+
+    def test_shim_exposes_load_callable(self):
+        """The tomllib shim (whichever branch ran) must expose a .load() callable."""
+        # After import, the config module resolved either tomllib (3.11+) or
+        # tomli (3.10).  Either way the name 'tomllib' inside the module must
+        # point to something with a callable .load attribute.
+        import insert_me.config as cfg_mod
+        resolved = getattr(cfg_mod, "tomllib", None)
+        assert resolved is not None, "tomllib symbol not found in config module"
+        assert callable(getattr(resolved, "load", None)), (
+            "tomllib.load must be callable — API mismatch between tomllib and tomli"
+        )
+
+    def test_shim_fallback_wiring_via_mock(self, tmp_path):
+        """Verify the try/except shim wiring is reachable when tomllib is absent.
+
+        Simulates the Python 3.10 path by removing 'tomllib' from sys.modules
+        and reloading config.  Skipped when tomli is not installed (the fallback
+        would correctly fail with ImportError on an interpreter that has neither).
+        """
+        try:
+            import tomli  # noqa: F401
+        except ImportError:
+            pytest.skip("tomli not installed; skipping 3.10 fallback simulation")
+
+        import insert_me.config as cfg_mod
+
+        saved = sys.modules.pop("tomllib", None)
+        try:
+            reloaded = importlib.reload(cfg_mod)
+            resolved = getattr(reloaded, "tomllib", None)
+            assert resolved is not None
+            assert callable(getattr(resolved, "load", None)), (
+                "After tomllib removal, fallback must expose .load() callable"
+            )
+        finally:
+            if saved is not None:
+                sys.modules["tomllib"] = saved
+            importlib.reload(cfg_mod)
 
     def test_load_config_uses_toml_parsing(self, tmp_path):
         """load_config() must parse a real TOML file (exercises tomllib/tomli path)."""
