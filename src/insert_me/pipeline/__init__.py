@@ -6,13 +6,12 @@ Canonical pipeline stages:
 
 Current implementation status
 ------------------------------
-This module implements a **deterministic dry-run pipeline** that produces
-all expected output artifacts without applying any real source mutations.
-All emitted artifacts are schema-validated before the function returns.
+Phase 3 (Seeder) is now implemented: the pipeline performs real deterministic
+source discovery and candidate target generation. All output artifacts are
+emitted and schema-validated. No source files are modified.
 
-Full AST patching (Seeder, Patcher, Validator, Auditor with real mutations)
-is deferred to Phases 3–6. The dry-run pipeline exercises the complete
-artifact contract so downstream tools can integrate immediately.
+Patcher (Phase 4), Validator (Phase 5), and Auditor with real mutations (Phase 6)
+are deferred. The dry-run pipeline is the only execution mode for now.
 
 Usage
 -----
@@ -46,6 +45,7 @@ from insert_me.artifacts import (
     write_json_artifact,
 )
 from insert_me.config import Config
+from insert_me.pipeline.seeder import PatchTarget, PatchTargetList, Seeder
 from insert_me.schema import (
     SCHEMA_AUDIT_RECORD,
     SCHEMA_AUDIT_RESULT,
@@ -61,10 +61,9 @@ def run_pipeline(config: Config, *, dry_run: bool = False) -> BundlePaths:
     """
     Execute the insert_me pipeline.
 
-    In the current implementation this is always a dry-run: all output
-    artifacts are emitted and schema-validated, but no source tree mutation
-    is applied. Pass ``dry_run=True`` explicitly to document intent;
-    omitting it produces the same behaviour until the Patcher is implemented.
+    The pipeline now includes a real Seeder pass: it discovers C/C++ source
+    files under source_path and extracts deterministic candidate targets using
+    lexical heuristics. No source files are modified.
 
     Parameters
     ----------
@@ -73,6 +72,8 @@ def run_pipeline(config: Config, *, dry_run: bool = False) -> BundlePaths:
         - ``config.pipeline.seed_file`` (canonical path to a seed JSON file)
         - ``config.pipeline.seed`` + ``config.pipeline.spec_path`` (legacy)
         And ``config.pipeline.source_path`` (path to C/C++ source root).
+        If source_path does not exist, the Seeder returns no candidates and
+        patch_plan.json is emitted with status=PENDING and empty targets.
 
     dry_run:
         When True, no source files are modified. Currently always True
@@ -105,61 +106,72 @@ def run_pipeline(config: Config, *, dry_run: bool = False) -> BundlePaths:
         validate_artifact(seed_data, SCHEMA_SEED)
 
     seed_int: int = seed_data["seed"]
+    source_root = config.pipeline.source_path or Path(".")
 
     # ------------------------------------------------------------------
-    # 2. Derive deterministic run_id
+    # 2. Run Seeder — deterministic source discovery + candidate extraction
+    # ------------------------------------------------------------------
+    seeder = Seeder(seed=seed_int, spec=seed_data, source_root=source_root)
+    target_list: PatchTargetList = seeder.run()
+
+    # ------------------------------------------------------------------
+    # 3. Derive deterministic run_id
     # ------------------------------------------------------------------
     if config.pipeline.run_id:
         run_id = config.pipeline.run_id
     elif config.pipeline.seed_file is not None:
         run_id = derive_run_id_from_seed_data(
             seed_data=seed_data,
-            source_path=config.pipeline.source_path or Path("."),
+            source_path=source_root,
             pipeline_version=__version__,
         )
     else:
-        # Legacy path: derive from int seed + spec file content
         run_id = derive_run_id(
             seed=seed_int,
             spec_path=config.pipeline.spec_path or Path(""),
-            source_path=config.pipeline.source_path or Path("."),
+            source_path=source_root,
             pipeline_version=__version__,
         )
 
     # ------------------------------------------------------------------
-    # 3. Create output bundle directories
+    # 4. Create output bundle directories
     # ------------------------------------------------------------------
     bundle = BundlePaths.from_run_id(config.pipeline.output_root, run_id)
     bundle.create_dirs()
 
     # ------------------------------------------------------------------
-    # 4. Shared values
+    # 5. Shared values
     # ------------------------------------------------------------------
     now_utc = datetime.datetime.now(datetime.timezone.utc).strftime(
         "%Y-%m-%dT%H:%M:%SZ"
     )
     plan_id = f"plan-{run_id}"
-    source_root_str = str(config.pipeline.source_path or Path("."))
     spec_hash = _sha256_file(input_path) if input_path and input_path.exists() else "dry-run"
+    n_targets = len(target_list.targets)
 
     # ------------------------------------------------------------------
-    # 5. Emit patch_plan.json
+    # 6. Emit patch_plan.json
     # ------------------------------------------------------------------
+    plan_status = "PLANNED" if n_targets > 0 else "PENDING"
     patch_plan: dict[str, Any] = {
         "schema_version": ARTIFACT_SCHEMA_VERSION,
         "plan_id": plan_id,
         "run_id": run_id,
         "seed_id": seed_data.get("seed_id", ""),
         "seed": seed_int,
-        "status": "PENDING",
+        "status": plan_status,
         "created_at": now_utc,
-        "targets": [],
+        "targets": [
+            _target_to_dict(t, idx) for idx, t in enumerate(target_list.targets)
+        ],
+        "skipped_candidates": target_list.skipped_count,
+        "source_tree_hash": target_list.source_hash,
     }
     write_json_artifact(bundle.patch_plan, patch_plan)
     validate_artifact(patch_plan, SCHEMA_PATCH_PLAN)
 
     # ------------------------------------------------------------------
-    # 6. Emit validation_result.json
+    # 7. Emit validation_result.json
     # ------------------------------------------------------------------
     validation_result: dict[str, Any] = {
         "schema_version": ARTIFACT_SCHEMA_VERSION,
@@ -168,13 +180,28 @@ def run_pipeline(config: Config, *, dry_run: bool = False) -> BundlePaths:
         "plan_id": plan_id,
         "overall": "SKIP",
         "checks": [],
+        "notes": "Validation skipped: Patcher not yet implemented (Phase 4).",
     }
     write_json_artifact(bundle.validation_result, validation_result)
     validate_artifact(validation_result, SCHEMA_VALIDATION_RESULT)
 
     # ------------------------------------------------------------------
-    # 7. Emit audit_result.json
+    # 8. Emit audit_result.json
     # ------------------------------------------------------------------
+    if n_targets > 0:
+        evidence_obs = (
+            f"Seeder identified {n_targets} candidate target(s) "
+            f"(pattern_type={seed_data.get('target_pattern', {}).get('pattern_type', 'unknown')}, "
+            f"skipped={target_list.skipped_count}). "
+            f"No mutations applied — Patcher not yet implemented (Phase 4)."
+        )
+    else:
+        evidence_obs = (
+            "Seeder found no candidate targets matching the pattern "
+            f"(pattern_type={seed_data.get('target_pattern', {}).get('pattern_type', 'unknown')}) "
+            "in the source tree. No mutations applied."
+        )
+
     audit_result: dict[str, Any] = {
         "schema_version": ARTIFACT_SCHEMA_VERSION,
         "audit_id": f"ar-{run_id}",
@@ -184,20 +211,20 @@ def run_pipeline(config: Config, *, dry_run: bool = False) -> BundlePaths:
         "evidence": [
             {
                 "source": "rule_engine",
-                "observation": "Dry-run mode: no mutations applied.",
+                "observation": evidence_obs,
                 "weight": "neutral",
             }
         ],
         "reviewer": {
             "type": "deterministic",
-            "name": "dry_run_v1",
+            "name": "seeder_dry_run_v1",
         },
     }
     write_json_artifact(bundle.audit_result, audit_result)
     validate_artifact(audit_result, SCHEMA_AUDIT_RESULT)
 
     # ------------------------------------------------------------------
-    # 8. Emit ground_truth.json
+    # 9. Emit ground_truth.json
     # ------------------------------------------------------------------
     ground_truth: dict[str, Any] = {
         "schema_version": ARTIFACT_SCHEMA_VERSION,
@@ -212,7 +239,7 @@ def run_pipeline(config: Config, *, dry_run: bool = False) -> BundlePaths:
     validate_artifact(ground_truth, SCHEMA_GROUND_TRUTH)
 
     # ------------------------------------------------------------------
-    # 9. Emit audit.json
+    # 10. Emit audit.json
     # ------------------------------------------------------------------
     audit_record: dict[str, Any] = {
         "schema_version": ARTIFACT_SCHEMA_VERSION,
@@ -220,8 +247,8 @@ def run_pipeline(config: Config, *, dry_run: bool = False) -> BundlePaths:
         "seed": seed_int,
         "spec_path": str(input_path) if input_path else "",
         "spec_hash": spec_hash,
-        "source_root": source_root_str,
-        "source_hash": "dry-run",
+        "source_root": str(source_root),
+        "source_hash": target_list.source_hash,
         "pipeline_version": __version__,
         "timestamp_utc": now_utc,
         "validation_verdict": {
@@ -238,6 +265,19 @@ def run_pipeline(config: Config, *, dry_run: bool = False) -> BundlePaths:
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
+
+
+def _target_to_dict(target: PatchTarget, idx: int) -> dict[str, Any]:
+    """Convert a PatchTarget to a patch_plan target dict (schema-compliant)."""
+    return {
+        "target_id": f"t{idx + 1:04d}",
+        "file": str(target.file),
+        "line": target.line,
+        "mutation_strategy": target.mutation_strategy,
+        "candidate_score": round(target.score, 4),
+        "context": target.context,
+    }
+
 
 def _resolve_seed_input(
     config: Config,
@@ -264,7 +304,6 @@ def _resolve_seed_input(
         return seed_data, seed_file
 
     if config.pipeline.seed is not None:
-        # Legacy: reconstruct minimal seed_data from int seed + spec path
         spec_path = config.pipeline.spec_path
         seed_id = spec_path.stem if spec_path else "legacy"
         seed_data = {

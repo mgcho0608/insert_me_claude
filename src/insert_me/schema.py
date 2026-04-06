@@ -219,23 +219,32 @@ _BUNDLE_OPTIONAL_ARTIFACT_MAP: dict[str, str] = {
 }
 
 
-def validate_bundle(bundle_dir: Path) -> list[str]:
+def validate_bundle(bundle_dir: Path, *, strict: bool = False) -> list[str]:
     """
     Validate all recognised artifacts in an output bundle directory.
 
-    Only validates artifacts that are present. Optional artifacts are
-    validated if present; their absence is not an error.
+    Strict mode
+    -----------
+    If ``strict=True`` OR if ``audit.json`` is present in the bundle
+    (auto-detection: a complete insert_me bundle always has audit.json),
+    all five core artifacts are required to be present. Missing core
+    artifacts are reported as errors.
+
+    Without strict mode (empty or foreign directory), only present artifacts
+    are validated; absent ones are silently skipped.
 
     Parameters
     ----------
     bundle_dir:
-        Path to the output bundle directory (contains ground_truth.json etc.).
+        Path to the output bundle directory (the run-id subdirectory).
+    strict:
+        Force strict mode regardless of bundle contents.
 
     Returns
     -------
     list[str]
-        List of error message strings. An empty list means all present
-        artifacts are valid. Errors are prefixed with the artifact filename.
+        List of error strings. Empty list means all present artifacts
+        are valid (and none are missing, in strict mode).
     """
     errors: list[str] = []
 
@@ -244,15 +253,30 @@ def validate_bundle(bundle_dir: Path) -> list[str]:
     if not bundle_dir.is_dir():
         return [f"Bundle path is not a directory: {bundle_dir}"]
 
-    # Core artifacts — validate if present, skip silently if absent.
-    # A dry-run bundle will have all five; older or partial bundles may have fewer.
+    # Auto-detect: if audit.json is present, treat as a complete insert_me bundle.
+    # Complete bundles must have all five core artifacts.
+    is_insert_me_bundle = (bundle_dir / "audit.json").exists()
+
+    # Strict mode only applies when at least one core artifact is present.
+    # This avoids false errors on empty or foreign directories.
+    any_core_present = any(
+        (bundle_dir / fn).exists() for fn in _BUNDLE_ARTIFACT_MAP
+    )
+    effective_strict = (strict or is_insert_me_bundle) and any_core_present
+
+    # Core artifacts
     for filename, schema_name in _BUNDLE_ARTIFACT_MAP.items():
         artifact_path = bundle_dir / filename
         if not artifact_path.exists():
+            if effective_strict:
+                errors.append(
+                    f"{filename}: missing from bundle "
+                    "(expected in a complete insert_me output bundle)"
+                )
             continue
         _validate_and_collect(artifact_path, schema_name, errors)
 
-    # Optional artifacts
+    # Optional artifacts — validate if present; absence is never an error
     for filename, schema_name in _BUNDLE_OPTIONAL_ARTIFACT_MAP.items():
         artifact_path = bundle_dir / filename
         if artifact_path.exists():

@@ -234,7 +234,10 @@ class TestDryRunBundleCreation:
         assert "run_id" in data
         assert "pipeline_version" in data
         assert "timestamp_utc" in data
-        assert data["source_hash"] == "dry-run"
+        # source_hash is "no-sources" when the source_path contains no C/C++ files
+        assert "source_hash" in data
+        assert isinstance(data["source_hash"], str)
+        assert data["source_hash"]  # non-empty
 
     def test_run_id_consistent_across_artifacts(self, tmp_path):
         cfg = _make_config(tmp_path, SEED_CWE122)
