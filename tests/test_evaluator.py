@@ -3,16 +3,20 @@ Evaluator tests — Phase 7A per-project evaluation against inserted ground trut
 
 Coverage
 --------
-1. TestExactMatch          — exact_match_report.json fixture → match_level == "exact"
-2. TestFamilyMatch         — family_match_report.json fixture → match_level == "family"
-3. TestNoMatch             — no_match_report.json fixture → match_level == "no_match"
-4. TestCoverageResult      — exact match case: coverage_rate==1.0, matched==1, unmatched==0
-5. TestSemanticMatch       — message-keyword finding, no CWE → match_level == "semantic"
-6. TestAdjudicationPendingWhenNoLLM — semantic case: adjudication_result.json NOT written
-7. TestEvaluateCLI         — subprocess call to insert-me evaluate, returncode==0, artifacts exist
-8. TestDetectorReportSchemaValidation — validate fixture against schema
-9. TestMatchResultSchemaValidation    — validate written match_result.json after evaluation
+1.  TestExactMatch          — exact_match_report.json fixture → match_level == "exact"
+2.  TestFamilyMatch         — family_match_report.json fixture → match_level == "family"
+3.  TestNoMatch             — no_match_report.json fixture → match_level == "no_match"
+4.  TestCoverageResult      — exact match case: coverage_rate==1.0, matched==1, unmatched==0
+5.  TestSemanticMatch       — message-keyword finding, no CWE → match_level == "semantic"
+6.  TestAdjudicationPendingWhenNoLLM — semantic case: adjudication_result.json NOT written
+7.  TestEvaluateCLI         — subprocess call to insert-me evaluate, returncode==0, artifacts exist
+8.  TestDetectorReportSchemaValidation — validate fixture against schema
+9.  TestMatchResultSchemaValidation    — validate written match_result.json after evaluation
 10. TestCoverageResultSchemaValidation — validate written coverage_result.json after evaluation
+11. TestEvaluationPackageStructure    — evaluation/ package exports, module separation
+12. TestDetectorReportHelpers         — load_detector_report, validate_detector_report
+13. TestAdjudicationModule            — collect_pending_cases, try_adjudicate with no LLM
+14. TestMatchingModule                — exact/family/semantic match functions directly
 """
 
 from __future__ import annotations
@@ -62,7 +66,7 @@ def _load_fixture(name: str) -> dict:
 
 
 def _run_evaluator(bundle_dir: Path, report: dict, tool_name: str):
-    from insert_me.pipeline.evaluator import Evaluator
+    from insert_me.evaluation import Evaluator
     evaluator = Evaluator(bundle_dir, report, tool_name)
     return evaluator.run()
 
@@ -70,7 +74,7 @@ def _run_evaluator(bundle_dir: Path, report: dict, tool_name: str):
 def _emit_all(result, bundle_dir: Path) -> tuple[dict, dict]:
     """Emit match_result and coverage_result, return both dicts."""
     import datetime
-    from insert_me.pipeline.evaluator import emit_match_result, emit_coverage_result
+    from insert_me.evaluation import emit_match_result, emit_coverage_result
     now_utc = "2026-04-06T10:00:00Z"
     mr = emit_match_result(result, bundle_dir, now_utc)
     cr = emit_coverage_result(result, bundle_dir, now_utc)

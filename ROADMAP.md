@@ -5,8 +5,9 @@
 ## Guiding Principles
 
 - **Deterministic core first.** Never block the core pipeline on an LLM feature.
-- **Narrow scope.** `insert_me` does one thing: insert vulnerabilities. It does not verify,
-  benchmark, or classify.
+- **Focused scope.** `insert_me` = Juliet-derived seeded vulnerability insertion + per-project
+  detector evaluation against inserted ground truth. `bench_me` = cross-tool benchmark harness
+  on standardized datasets. These responsibilities are separate and must not bleed into each other.
 - **Artifact contracts before logic.** Define and freeze output schemas before building the
   generators. Downstream tools depend on stable schemas.
 - **Working beats complete.** A pipeline that produces one correct bad/good pair end-to-end

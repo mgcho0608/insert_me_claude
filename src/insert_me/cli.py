@@ -372,7 +372,7 @@ def _cmd_evaluate(args: argparse.Namespace) -> int:
     import datetime
     import json
 
-    from insert_me.pipeline.evaluator import Evaluator, emit_match_result, emit_coverage_result
+    from insert_me.evaluation import Evaluator, emit_match_result, emit_coverage_result
     from insert_me.schema import validate_artifact, SCHEMA_DETECTOR_REPORT
 
     bundle_dir: Path = args.bundle
