@@ -128,8 +128,16 @@ _MALLOC_ASSIGN_RE: re.Pattern[str] = re.compile(
 # Simple C/C++ function signature pattern.
 # Group 1 captures the function name.
 # Intentionally broad; false-positives are filtered via _C_KEYWORDS.
+#
+# The negative lookahead after ^\s* prevents C control-flow keywords from
+# being matched as the leading "return-type" word.  Without it, the [\w_]+
+# alternative can backtrack to a single character (e.g. 'i' from 'if'),
+# leaving the rest of the keyword (e.g. 'f') to be captured as the
+# "function name", producing spurious one-character names like 'f' or 'y'.
 _FUNC_SIG_RE: re.Pattern[str] = re.compile(
     r"^\s*"
+    r"(?!(?:if|while|for|switch|return|break|continue|do|else|goto"
+    r"|typedef|sizeof|free|memcpy|memmove|memset|strcpy|strcat)\b)"
     r"(?:(?:static|extern|inline|const|volatile|unsigned|signed|long|short)\s+)*"
     r"(?:"
     r"struct\s+\w+|enum\s+\w+|"

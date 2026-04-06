@@ -10,7 +10,7 @@
 
 ---
 
-## Current Status — Phase 7B-prep (deterministic semantic adjudication baseline)
+## Current Status — Phase 8 (reliability, reproducibility, and corpus-quality hardening)
 
 | | |
 |---|---|
@@ -385,6 +385,33 @@ insert-me validate-bundle output/<run-id>/
 # Show audit record
 insert-me audit output/<run-id>/audit.json
 ```
+
+---
+
+## Sandbox Corpus and Quality Gate
+
+A 30-case accepted corpus is included under `examples/seeds/sandbox/` targeting
+the evaluation-only sandbox at `examples/sandbox_eval/src/`.
+
+**Reproduce the full corpus from a fresh clone:**
+```bash
+python scripts/generate_corpus.py \
+  --seeds-dir   examples/seeds/sandbox \
+  --source-root examples/sandbox_eval/src \
+  --output-dir  output/corpus \
+  --manifest    examples/corpus_manifest.json
+```
+
+**Verify reproducibility (all seeds, 2 runs each):**
+```bash
+python scripts/check_reproducibility.py \
+  --seeds-dir   examples/seeds/sandbox \
+  --source-root examples/sandbox_eval/src
+```
+
+See `docs/corpus_quality_gate.md` for the acceptance rubric,
+`docs/repro_runbook.md` for the operator-independent reproduction guide,
+and `docs/issue_fix_log.md` for a record of issues found and fixed during hardening.
 
 ---
 

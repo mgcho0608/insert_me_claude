@@ -13,22 +13,22 @@ regardless of which optional components are active.
 
 ## Current Implementation Status
 
-**Phase 7B-prep — deterministic semantic adjudication baseline: complete.** The pipeline scans a real C/C++ source
-tree, applies one mutation, validates the result with five rule-based checks, and writes a
-complete schema-valid bundle including real `ground_truth.json`, `audit.json`, and a
-verdict-derived `audit_result.json`. The Evaluator compares a normalized detector report
-against the ground truth oracle and produces `match_result.json` and `coverage_result.json`.
-Semantic matches are adjudicated offline by the `HeuristicAdjudicator` (deterministic, no LLM required).
+**Phase 8 — Reliability, Reproducibility, and Corpus-Quality Hardening: complete.**
+Full pipeline operational with a formal quality gate, operator-independent batch generation
+workflow, verified reproducibility, and a 30-case accepted sandbox corpus.
+Seeder quality improved with three additional scoring penalties (loop-body, sub-malloc,
+function-signature extraction fixed). All 30 corpus cases ACCEPT; 30/30 reproducibility PASS.
 
 | Pipeline stage | Status | Notes |
 |---|---|---|
-| Seeder | **Complete** (Phase 3) | Lexical/regex source scan; real targets in `patch_plan.json` |
+| Seeder | **Complete** (Phase 3, hardened Phase 8) | Lexical/regex source scan; loop-body / sub-malloc / conditional-guard penalties; function-name extraction fixed |
 | Patcher | **Phase 4b** | `alloc_size_undercount` (CWE-122) + `insert_premature_free` (CWE-416); one mutation per run |
 | Validator | **Complete** (Phase 5) | Five deterministic checks; no compiler required |
 | Auditor | **Complete** (Phase 6) | Deterministic slice; writes ground_truth, audit, audit_result |
 | Evaluator | **Complete** (Phase 7A) | Optional separate step; compares detector reports against ground truth |
 | Adjudicator | **Phase 7B-prep** | `HeuristicAdjudicator` (offline default) · `DisabledAdjudicator` · `LLMAdjudicator` placeholder |
 | LLM Adapter | Interface only | `NoOpAdapter` always available; LLM enrichment (labels.json) deferred to Phase 7B |
+| Corpus tooling | **Phase 8** | `scripts/generate_corpus.py` (batch gen + quality gate) · `scripts/check_reproducibility.py` · `examples/corpus_manifest.json` |
 
 The pipeline orchestrator (`pipeline/__init__.py`) coordinates all four stages.
 Each stage's `run()` method is implemented and called in sequence.

@@ -1,0 +1,342 @@
+# Reproducibility Runbook — insert_me Corpus Generation
+
+> **Phase:** 8 — Reliability, Reproducibility, and Corpus-Quality Hardening  
+> **Audience:** Engineers reproducing or extending the sandbox corpus without prior
+> familiarity with the insert_me pipeline.
+>
+> This runbook is self-contained. Follow it from a clean clone to produce a verified,
+> quality-gated corpus. No Claude-level judgment is required.
+
+---
+
+## Prerequisites
+
+| Requirement | Version / Notes |
+|---|---|
+| Python | ≥ 3.10 |
+| Git | Any recent version |
+| No LLM / API key | All steps work fully offline |
+| No compiler | insert_me uses lexical/regex analysis only |
+
+---
+
+## 1. Setup from a Fresh Clone
+
+```bash
+git clone <repo_url> insert_me
+cd insert_me
+
+# Install in editable mode (sets up the insert-me CLI)
+pip install -e .
+
+# Verify installation
+insert-me --version
+```
+
+Expected output: `insert-me x.y.z` (version string).
+
+---
+
+## 2. Directory Structure
+
+After cloning, the relevant directories are:
+
+```
+insert_me/
+├── examples/
+│   ├── sandbox_eval/src/       ← evaluation-only C source files (Sandbox Target A)
+│   └── seeds/sandbox/          ← 30 seed files for corpus generation
+├── docs/
+│   ├── corpus_quality_gate.md  ← acceptance rubric
+│   ├── issue_fix_log.md        ← issues found and fixed during hardening
+│   ├── sandbox_target_guide.md ← guide for sandbox targets
+│   └── repro_runbook.md        ← this document
+├── scripts/
+│   ├── generate_corpus.py      ← batch generation + quality gate
+│   └── check_reproducibility.py ← determinism verification
+└── output/                     ← generated bundles (created on first run)
+```
+
+---
+
+## 3. Running a Single Case
+
+To run one seed and inspect the output:
+
+```bash
+insert-me run \
+  --seed-file examples/seeds/sandbox/cwe416_sb_001.json \
+  --source    examples/sandbox_eval/src \
+  --output    output/single_case
+```
+
+This writes a bundle directory under `output/single_case/<run_id>/` containing:
+- `patch_plan.json` — candidate selection
+- `ground_truth.json` — mutation oracle
+- `audit_result.json` — VALID/INVALID/AMBIGUOUS/NOOP classification
+- `validation_result.json` — 5 deterministic checks
+- `bad/` — mutated source tree
+- `good/` — original source tree (byte-identical)
+
+To inspect the diff between bad and good trees:
+
+```bash
+# On Linux/macOS
+diff -r output/single_case/*/good output/single_case/*/bad
+
+# Using Python (cross-platform)
+python - << 'EOF'
+import subprocess, pathlib
+bundles = list(pathlib.Path("output/single_case").iterdir())
+b = bundles[-1]
+print(f"Bundle: {b.name}")
+import json
+gt = json.loads((b / "ground_truth.json").read_text())
+m = gt["mutations"][0]
+print(f"CWE: {gt['cwe_id']}")
+print(f"File: {m['file']}:{m['line']}")
+print(f"Original: {m['original_fragment'].strip()}")
+print(f"Mutated:  {m['mutated_fragment'].strip()}")
+EOF
+```
+
+---
+
+## 4. Running the Full Corpus Batch
+
+### 4.1 Run all 30 seeds with quality gate
+
+```bash
+python scripts/generate_corpus.py \
+  --seeds-dir  examples/seeds/sandbox \
+  --source-root examples/sandbox_eval/src \
+  --output-dir  output/corpus \
+  --manifest    examples/corpus_manifest.json
+```
+
+Expected output:
+- Per-case quality gate classification (ACCEPT / ACCEPT_WITH_NOTES / REVISE / REJECT)
+- Batch summaries
+- Final corpus health metrics
+- `examples/corpus_manifest.json` written
+
+**Exit codes:**
+- `0` — all cases ACCEPT or ACCEPT_WITH_NOTES
+- `1` — one or more cases REVISE or REJECT (fix the issue, re-run)
+- `2` — configuration error (wrong path, etc.)
+
+### 4.2 Run in controlled batches (recommended for new targets)
+
+```bash
+python scripts/generate_corpus.py \
+  --seeds-dir   examples/seeds/sandbox \
+  --source-root examples/sandbox_eval/src \
+  --output-dir  output/corpus \
+  --manifest    examples/corpus_manifest.json \
+  --batch-sizes 2,5,10,20,30
+```
+
+This pauses after each cumulative checkpoint (2, then 5, then 10, etc.) and prints
+a quality gate summary. Inspect each batch before proceeding.
+
+### 4.3 Dry run (plan only, no pipeline execution)
+
+```bash
+python scripts/generate_corpus.py \
+  --seeds-dir examples/seeds/sandbox \
+  --source-root examples/sandbox_eval/src \
+  --dry-run
+```
+
+---
+
+## 5. Running the Reproducibility Check
+
+```bash
+python scripts/check_reproducibility.py \
+  --seeds-dir   examples/seeds/sandbox \
+  --source-root examples/sandbox_eval/src \
+  --runs        2
+```
+
+This runs each seed twice and compares the deterministic artifact fields across runs.
+
+**Expected output:** `RESULT: All seeds reproduce identically.`  
+**Exit code:** `0` on success, `1` on any divergence.
+
+To keep the run directories for debugging:
+```bash
+python scripts/check_reproducibility.py \
+  --seeds-dir   examples/seeds/sandbox \
+  --source-root examples/sandbox_eval/src \
+  --keep-outputs \
+  --verbose
+```
+
+---
+
+## 6. Evaluating a Case Against a Detector Report
+
+If you have a detector tool report (in the insert_me detector report schema), evaluate
+one bundle:
+
+```bash
+insert-me evaluate \
+  --bundle      output/corpus/<run_id> \
+  --tool-report my_tool_report.json \
+  --tool        my_tool_name \
+  --adjudicator heuristic
+```
+
+This writes:
+- `output/corpus/<run_id>/match_result.json`
+- `output/corpus/<run_id>/coverage_result.json`
+- `output/corpus/<run_id>/adjudication_result.json` (if semantic matches found)
+
+The `--adjudicator heuristic` flag uses the deterministic offline heuristic adjudicator.
+No LLM or API key is required.
+
+See `docs/artifact_contracts.md §7` for the evaluation artifact schema details.
+
+---
+
+## 7. Reading the Corpus Manifest
+
+After running `generate_corpus.py`, inspect the manifest:
+
+```bash
+python -c "
+import json
+m = json.load(open('examples/corpus_manifest.json'))
+print(f'Total cases: {m[\"total_cases\"]}')
+print(f'Accepted: {m[\"accepted\"]}')
+print(f'Accepted with notes: {m[\"accepted_with_notes\"]}')
+print(f'Revised: {m[\"revised\"]}')
+print(f'Rejected: {m[\"rejected\"]}')
+print()
+for c in m['cases']:
+    print(f\"  {c['classification']:<20} {c['cwe_id']:<8} {c['target_file']}:{c['target_line']}\")
+"
+```
+
+---
+
+## 8. Interpreting Quality Gate Results
+
+See `docs/corpus_quality_gate.md` for the full rubric. Quick guide:
+
+| Result | Meaning | What to do |
+|---|---|---|
+| `ACCEPT` | All automated criteria pass | Case is accepted in corpus |
+| `ACCEPT_WITH_NOTES` | Minor concern noted | Accepted; review the note; may improve with target diversity |
+| `REVISE` | Fixable issue (audit AMBIGUOUS, validation fail) | Read the reason; fix seed or seeder; re-run |
+| `REJECT` | Unfixable (INVALID audit, duplicate, no mutation) | Exclude from corpus; document in issue_fix_log.md |
+
+---
+
+## 9. What to Do If a Case REVISEs or REJECTs
+
+1. **Read the reason** printed by `generate_corpus.py --verbose`
+2. **Identify the root cause:**
+   - `NOOP` audit → no mutation was applied (patcher found no compatible target)
+   - `INVALID` audit → mutation site does not match expected pattern
+   - Validation fail → bad/good trees don't meet discipline checks
+   - Duplicate target → change the seed integer in the seed file
+3. **Fix the seed file** (change the `seed` integer to select a different candidate)
+4. **Re-run** the single seed to verify: `insert-me run --seed-file ...`
+5. **Re-run** the full batch to confirm no regression
+6. **Document** the issue and fix in `docs/issue_fix_log.md` (follow the IFL-NNN format)
+
+---
+
+## 10. Adding New Cases to the Corpus
+
+1. Choose an unused seed integer that produces a unique target:
+   ```bash
+   # Check what targets are already taken
+   python -c "
+   import json, pathlib
+   m = json.load(open('examples/corpus_manifest.json'))
+   for c in m['cases']:
+       print(f\"{c['target_file']}:{c['target_line']}\")
+   "
+   ```
+
+2. Find a new target with a different seed integer:
+   ```bash
+   python - << 'EOF'
+   from insert_me.pipeline.seeder import Seeder
+   import json, pathlib
+   spec = json.loads(pathlib.Path("examples/seeds/sandbox/cwe416_sb_001.json").read_text())
+   for try_seed in range(50, 200):
+       spec["seed"] = try_seed
+       ptl = Seeder(try_seed, spec, pathlib.Path("examples/sandbox_eval/src")).run()
+       if ptl.targets:
+           t = ptl.targets[0]
+           print(f"seed={try_seed}: {t.file}:{t.line}  {t.context.get('expression','')[:50]}")
+           break
+   EOF
+   ```
+
+3. Create a new seed file: copy an existing one, update `seed_id`, `seed`, and `notes`.
+
+4. Run and classify the new case:
+   ```bash
+   insert-me run \
+     --seed-file examples/seeds/sandbox/cwe416_sb_020.json \
+     --source    examples/sandbox_eval/src \
+     --output    output/corpus
+   ```
+
+5. Re-run `generate_corpus.py` to update the manifest.
+
+---
+
+## 11. Running the Test Suite
+
+```bash
+python -m pytest tests/ -q
+```
+
+Expected: all tests pass (no failures). The test suite does not require a real LLM.
+
+---
+
+## 12. Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `No module named insert_me` | Package not installed | Run `pip install -e .` from repo root |
+| `bundle written to: <empty>` | Pipeline error (wrong path, bad seed) | Check `--source` path exists; validate seed with `insert-me validate-bundle` |
+| `NOOP` audit result | No compatible mutation target found | Change the `seed` integer in the seed file |
+| Reproducibility FAIL | Non-determinism introduced | Run with `--verbose` to see which field differs; check for timestamp injection in pipeline |
+| Duplicate target in corpus | Two seeds produce same file:line | Change one seed's integer; re-run |
+| All scores 0.0 | Source tree empty or no pattern matches | Verify `--source` points at a directory with .c files |
+
+---
+
+## 13. Clean Re-run from Scratch
+
+To reproduce the exact accepted corpus from scratch:
+
+```bash
+# 1. Start from a clean output directory
+rm -rf output/corpus output/repro_check
+
+# 2. Run the full corpus batch
+python scripts/generate_corpus.py \
+  --seeds-dir   examples/seeds/sandbox \
+  --source-root examples/sandbox_eval/src \
+  --output-dir  output/corpus \
+  --manifest    examples/corpus_manifest.json
+
+# 3. Verify reproducibility
+python scripts/check_reproducibility.py \
+  --seeds-dir   examples/seeds/sandbox \
+  --source-root examples/sandbox_eval/src
+
+# 4. Run tests to confirm nothing regressed
+python -m pytest tests/ -q
+```
+
+All three commands should succeed with exit code 0.
