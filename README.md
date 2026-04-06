@@ -63,6 +63,33 @@ real CVEs.
 
 ---
 
+## Internal Reuse — Quick Reference
+
+For engineers picking this up for the first time inside an organisation:
+
+| | |
+|---|---|
+| **What it is** | A Python CLI that inserts one known vulnerability into a C/C++ source tree and produces a fully annotated, schema-validated output bundle. |
+| **Current maturity** | Phase 6 / MVP — all four core pipeline stages implemented and tested (280 tests). Not production-hardened; alpha-quality. |
+| **Python versions** | 3.10, 3.11, 3.12 (statically verified; no compiler invocation required). |
+| **Dependencies** | `jsonschema>=4.17` + `tomli>=1.2.0` on Python 3.10 only. No other mandatory dependencies. |
+| **Network access** | None required for core operation. All schema validation ships with the package. |
+| **License** | **Undecided.** Internal/research use only. Do not redistribute without explicit permission. |
+| **First command** | `pip install -e . && insert-me run --seed-file examples/seeds/cwe122_heap_overflow.json --source examples/demo/src` |
+
+**What to expect from a run today:**
+- One mutation applied to the source tree (`alloc_size_undercount` strategy only)
+- Five deterministic rule-based plausibility checks
+- Five JSON artifacts: `patch_plan.json`, `validation_result.json`, `audit_result.json`, `ground_truth.json`, `audit.json`
+
+**What is NOT available yet:**
+- Additional mutation strategies (CWE-416, CWE-190) — Phase 4b
+- AST-based or compiler-backed patching/validation — future phases
+- LLM-enriched semantic labels (`labels.json`) — Phase 7
+- Batch corpus generation — Phase 9
+
+---
+
 ## Core Goals
 
 1. **Reproducibility** — The same seed file + source tree always produces the same output, byte-for-byte.
@@ -341,7 +368,8 @@ insert-me audit output/<run-id>/audit.json
 
 - **No mandatory cloud calls.** All LLM calls are behind an optional adapter interface.
 - **No mandatory internet access.** All schema validation and rule sets ship with the package.
-- **Minimal dependencies.** Core pipeline uses Python stdlib + `jsonschema`. See `pyproject.toml`.
+- **Minimal dependencies.** Core pipeline uses Python stdlib + `jsonschema` (+ `tomli` on Python 3.10). See `pyproject.toml`.
+- **Python 3.10–3.12.** No Python 3.11-specific features beyond `tomllib`, which is shimmed automatically.
 - **Configurable via files.** All behaviour is driven by `config/` TOML files.
 - **Self-contained output.** Output bundles carry everything needed for downstream tools.
 
@@ -352,4 +380,6 @@ No registration, no keys, no outbound calls required for core operation.
 
 ## License
 
-TBD — intended for internal/research use pending license decision.
+**Undecided.** Intended for internal/research use only. Do not redistribute without explicit written permission.
+
+A formal license has not yet been chosen. The `pyproject.toml` reflects this as `"Proprietary — license TBD. Internal/research use only."` until a decision is made.

@@ -191,7 +191,7 @@ from actual pipeline state.
 - [x] Schema-validate all three artifacts before writing
 - [x] Honest dry-run: empty mutations, `validation_passed=false`, `NOOP` classification
 - [x] `labels.json` deferred to Phase 7 (LLM adapter not invoked; clearly documented)
-- [x] 32 Auditor tests passing; 15 hardening tests (cross-artifact coherence, INVALID path, validate-bundle failure); CLI smoke test proves complete demo bundle (280 total)
+- [x] 32 Auditor tests passing; 15 hardening tests (cross-artifact coherence, INVALID path, validate-bundle failure); 14 config tests (compatibility shim, dead-field removal); CLI smoke test proves complete demo bundle (294 total)
 
 **Note:** Run ID derivation using full source tree hash was already implemented in
 Phase 3 (Seeder computes `source_hash`; orchestrator derives `run_id` from seed JSON +

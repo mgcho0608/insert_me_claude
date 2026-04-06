@@ -28,18 +28,29 @@ Config sections
     timeout_seconds int     — request timeout
 
 [validator]
-    check_syntax    bool    — enable syntactic well-formedness check
-    check_trivial   bool    — reject trivially broken mutations
-    check_scope     bool    — enable file-scope sanity check
+    (no configurable fields in Phase 5 — Validator always runs all five
+    deterministic checks unconditionally. Configuration knobs are
+    reserved for a future phase when per-check enabling is implemented.)
 
 [auditor]
     write_labels    bool    — write labels.json (requires LLM enabled)
     output_format   str     — "json" (only supported value for now)
+
+Python compatibility
+--------------------
+``tomllib`` is used for TOML parsing.  It is part of the standard library in
+Python 3.11+.  On Python 3.10, the ``tomli`` package is required as a
+drop-in back-port (same API, ``import tomli as tomllib``).  This is listed
+as a conditional dependency in ``pyproject.toml``.
 """
 
 from __future__ import annotations
 
-import tomllib
+try:
+    import tomllib  # Python 3.11+
+except ImportError:  # Python 3.10
+    import tomli as tomllib  # type: ignore[no-reuse-modules]
+
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -70,9 +81,12 @@ class LLMConfig:
 
 @dataclass
 class ValidatorConfig:
-    check_syntax: bool = True
-    check_trivial: bool = True
-    check_scope: bool = True
+    """Validator configuration.
+
+    Phase 5: The Validator always runs all five deterministic checks
+    unconditionally.  No per-check configuration is implemented yet.
+    Fields are reserved for a future configurable-check phase.
+    """
 
 
 @dataclass
@@ -151,15 +165,6 @@ def load_config(config_path: Optional[Path] = None) -> Config:
             cfg.llm.model = str(l["model"])
         if "timeout_seconds" in l:
             cfg.llm.timeout_seconds = int(l["timeout_seconds"])
-
-    if "validator" in raw:
-        v = raw["validator"]
-        if "check_syntax" in v:
-            cfg.validator.check_syntax = bool(v["check_syntax"])
-        if "check_trivial" in v:
-            cfg.validator.check_trivial = bool(v["check_trivial"])
-        if "check_scope" in v:
-            cfg.validator.check_scope = bool(v["check_scope"])
 
     if "auditor" in raw:
         a = raw["auditor"]

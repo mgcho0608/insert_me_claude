@@ -7,11 +7,25 @@ name = "insert_me"
 version = "0.1.0.dev0"
 description = "Deterministic seeded vulnerability generation for C/C++ source trees"
 readme = "README.md"
-requires-python = ">=3.11"
-license = { text = "TBD" }
+requires-python = ">=3.10"
+# License has not been formally decided. Internal/research use only.
+# Do not redistribute without explicit written permission.
+license = { text = "Proprietary — license TBD. Internal/research use only." }
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Software Development :: Testing",
+]
 
 dependencies = [
-    # Config parsing — tomllib is stdlib in Python 3.11+
+    # Config parsing: tomllib is stdlib in Python 3.11+;
+    # tomli is the identical back-port required on Python 3.10.
+    "tomli>=1.2.0; python_version < '3.11'",
     # Schema validation
     "jsonschema>=4.17",
 ]
