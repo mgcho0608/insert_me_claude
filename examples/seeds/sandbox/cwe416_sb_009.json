@@ -1,0 +1,45 @@
+{
+  "schema_version": "1.0",
+  "seed_id": "cwe416-sandbox-010",
+  "seed": 10,
+  "cwe_id": "CWE-416",
+  "vulnerability_class": "Use After Free",
+  "description": "Insert a use-after-free by introducing a free() call on a pointer before its last dereference within the same function scope. The mutation inserts the free() immediately before a dereference site, leaving the subsequent access as a use of freed memory.",
+  "mutation_strategy": "insert_premature_free",
+  "target_pattern": {
+    "pattern_type": "pointer_deref",
+    "require_function_scope": true,
+    "min_candidate_score": 0.6,
+    "constraints": {
+      "require_prior_malloc_in_scope": true,
+      "min_deref_distance_from_alloc": 3,
+      "require_no_existing_free_between": true
+    }
+  },
+  "source_constraints": {
+    "file_patterns": [
+      "*.c",
+      "*.cpp"
+    ],
+    "exclude_patterns": [
+      "*test*",
+      "*_test.*",
+      "*mock*",
+      "*stub*"
+    ],
+    "max_targets": 1
+  },
+  "metadata": {
+    "tags": [
+      "heap",
+      "memory-corruption",
+      "use-after-free",
+      "temporal"
+    ],
+    "difficulty": "medium",
+    "references": [
+      "https://cwe.mitre.org/data/definitions/416.html"
+    ],
+    "notes": "list.c:227 list_split_at - tail_list->head = pos"
+  }
+}

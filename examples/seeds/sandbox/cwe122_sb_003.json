@@ -1,0 +1,44 @@
+{
+  "schema_version": "1.0",
+  "seed_id": "cwe122-sandbox-003",
+  "seed": 3,
+  "cwe_id": "CWE-122",
+  "vulnerability_class": "Heap-based Buffer Overflow",
+  "description": "Insert a heap-based buffer overflow by reducing the allocation size by one, causing a write beyond the end of the allocated buffer. Targets malloc() calls where the size argument is an expression involving a variable, making the mutation non-trivially detectable.",
+  "mutation_strategy": "alloc_size_undercount",
+  "target_pattern": {
+    "pattern_type": "malloc_call",
+    "require_function_scope": true,
+    "min_candidate_score": 0.5,
+    "constraints": {
+      "size_expr_min_complexity": 1,
+      "require_post_write_access": true,
+      "exclude_size_of_only": true
+    }
+  },
+  "source_constraints": {
+    "file_patterns": [
+      "*.c",
+      "*.cpp"
+    ],
+    "exclude_patterns": [
+      "*test*",
+      "*_test.*",
+      "*mock*"
+    ],
+    "max_targets": 1
+  },
+  "metadata": {
+    "tags": [
+      "heap",
+      "memory-corruption",
+      "overflow",
+      "off-by-one"
+    ],
+    "difficulty": "easy",
+    "references": [
+      "https://cwe.mitre.org/data/definitions/122.html"
+    ],
+    "notes": "strbuf.c:73 strbuf_clone - dst->data = malloc(new_cap)"
+  }
+}

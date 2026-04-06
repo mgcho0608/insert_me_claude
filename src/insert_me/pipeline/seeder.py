@@ -401,6 +401,30 @@ class Seeder:
                         ):
                             candidate.score = max(candidate.score - 0.20, 0.0)
 
+                # Penalise pointer dereferences that appear inside a conditional
+                # expression (if/while/for guard).  Inserting free() before a
+                # null-check creates a double-free risk and violates the
+                # single-primary-flaw principle.
+                if re.match(r"\s*(?:if|while|for)\s*\(", line):
+                    candidate.score = max(candidate.score - 0.30, 0.0)
+
+                # Penalise dereferences that are inside a loop body.  Inserting
+                # free(ptr) before a line inside while(cur){...} causes the free
+                # to execute on *every* iteration, which is a severe secondary
+                # flaw beyond the intended single UAF.
+                if ptr_name and _is_inside_loop_body(lines, lineno - 1):
+                    candidate.score = max(candidate.score - 0.40, 0.0)
+
+                # Penalise sub-allocation lines: ptr->field = malloc(...).
+                # Inserting free(ptr) just before such a line is problematic
+                # because the subsequent null-check error handler typically
+                # contains free(ptr) — creating a double-free on the error path.
+                if re.search(
+                    r"\b\w+\s*->\s*\w+\s*=\s*(?:malloc|calloc|realloc)\s*\(",
+                    line,
+                ):
+                    candidate.score = max(candidate.score - 0.35, 0.0)
+
             candidates.append(candidate)
 
         return candidates
@@ -464,6 +488,15 @@ class Seeder:
                    _score_line, in _extract_candidates)
             -0.20  free() on same pointer exists between malloc and deref
                    (existing free reduces plausibility as UAF insertion site)
+            -0.30  dereference is inside a conditional expression (if/while/for)
+                   — inserting free() before a null-check risks double-free and
+                   violates single-primary-flaw discipline
+            -0.40  dereference is inside a loop body (while/for)
+                   — inserting free() causes the free to execute on every
+                   iteration, violating the single-primary-flaw principle
+            -0.35  line is a sub-allocation: ptr->field = malloc(...)
+                   — the subsequent null-check error handler typically frees
+                   the parent pointer, creating a double-free on the error path
 
         custom / fallback:
             +0.55  gets()
@@ -631,10 +664,14 @@ def _has_prior_malloc_in_scope(
 ) -> bool:
     """
     Return True if ``ptr_name = malloc(...)`` (or calloc/realloc) appears in
-    the 100 lines immediately before *from_idx* (0-based).
+    the same function scope before *from_idx* (0-based).
 
-    Best-effort lexical heuristic; may produce false positives when the same
-    variable name is reused across scopes.
+    Scope boundary detection: scanning stops when a bare ``}`` at column 0 is
+    encountered (standard C function-closing-brace), preventing false matches
+    from the same variable name in a preceding function.
+
+    Best-effort lexical heuristic; may still produce false positives for
+    deeply-nested code or non-standard formatting.
     """
     pattern = re.compile(
         rf"\b{re.escape(ptr_name)}\s*=\s*"
@@ -642,7 +679,11 @@ def _has_prior_malloc_in_scope(
     )
     search_start = max(0, from_idx - 100)
     for i in range(from_idx - 1, search_start - 1, -1):
-        if pattern.search(lines[i]):
+        raw = lines[i]
+        # Stop at a bare closing brace at column 0 — function boundary
+        if raw.startswith("}") and raw.rstrip() in ("}", "};"):
+            break
+        if pattern.search(raw):
             return True
     return False
 
@@ -653,6 +694,8 @@ def _find_malloc_line(
     """
     Return the 0-based index of the most recent malloc/calloc/realloc
     assignment to *ptr_name* before *from_idx*.  Returns None if not found.
+
+    Uses the same function-boundary detection as _has_prior_malloc_in_scope.
     """
     pattern = re.compile(
         rf"\b{re.escape(ptr_name)}\s*=\s*"
@@ -660,7 +703,10 @@ def _find_malloc_line(
     )
     search_start = max(0, from_idx - 100)
     for i in range(from_idx - 1, search_start - 1, -1):
-        if pattern.search(lines[i]):
+        raw = lines[i]
+        if raw.startswith("}") and raw.rstrip() in ("}", "};"):
+            break
+        if pattern.search(raw):
             return i
     return None
 
@@ -677,6 +723,49 @@ def _has_free_between(
     for i in range(malloc_idx + 1, deref_idx):
         if pattern.search(lines[i]):
             return True
+    return False
+
+
+def _is_inside_loop_body(lines: list[str], from_idx: int) -> bool:
+    """
+    Return True if the line at *from_idx* (0-based) is directly inside a
+    ``while`` or ``for`` loop body.
+
+    Algorithm: scan backward counting net brace depth (closing braces go up,
+    opening braces go down).  When the depth first goes negative we have found
+    the ``{`` that opens the block enclosing *from_idx*.  If that opener appears
+    on a line that contains ``while (`` or ``for (``, we are inside a loop.
+    A multi-line loop header (header line before the ``{`` line) is also
+    checked by looking up to 3 lines above the opener.
+
+    Stops at a bare ``}`` at column 0 (function boundary).
+    """
+    brace_depth = 0
+    search_start = max(0, from_idx - 100)
+    for i in range(from_idx - 1, search_start - 1, -1):
+        raw = lines[i]
+        # Stop at function boundary
+        if raw.startswith("}") and raw.rstrip() in ("}", "};"):
+            break
+        opens = raw.count("{")
+        closes = raw.count("}")
+        # Scanning backward: each } encountered is an outer-scope close (+1
+        # depth away from from_idx), each { brings us shallower (-1).
+        brace_depth += closes - opens
+        if brace_depth < 0:
+            # raw contains the { that opens the immediate enclosing block
+            if re.search(r"\b(?:while|for)\s*\(", raw):
+                return True
+            # Multi-line header: check lines just above for while/for condition
+            for j in range(i - 1, max(i - 4, -1), -1):
+                stripped = lines[j].strip()
+                if not stripped or stripped.startswith("//"):
+                    continue
+                if re.search(r"\b(?:while|for)\s*\(", lines[j]):
+                    return True
+                # Hit something else (if/else/function body): stop
+                break
+            return False
     return False
 
 

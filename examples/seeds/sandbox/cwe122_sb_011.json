@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "seed_id": "cwe122-sandbox-018",
+  "seed": 18,
+  "cwe_id": "CWE-122",
+  "vulnerability_class": "Heap-based Buffer Overflow",
+  "description": "Insert a heap buffer overflow by reducing the malloc allocation size by 1 (off-by-one), causing subsequent writes to overflow the allocated region.",
+  "mutation_strategy": "alloc_size_undercount",
+  "target_pattern": {
+    "pattern_type": "malloc_call",
+    "require_function_scope": true,
+    "min_candidate_score": 0.5,
+    "constraints": {
+      "size_expr_min_complexity": 1,
+      "require_post_write_access": true,
+      "exclude_size_of_only": true
+    }
+  },
+  "source_constraints": {
+    "file_patterns": ["*.c", "*.cpp"],
+    "exclude_patterns": ["*test*", "*_test.*", "*mock*", "*stub*"],
+    "max_targets": 1
+  },
+  "metadata": {
+    "tags": ["heap", "overflow", "off-by-one", "sandbox-eval"],
+    "difficulty": "easy",
+    "references": ["https://cwe.mitre.org/data/definitions/122.html"],
+    "notes": "cache.c:55 entry_create - e->key = malloc(key_len * sizeof(char))"
+  }
+}
