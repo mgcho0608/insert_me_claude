@@ -6,9 +6,10 @@ Canonical pipeline stages:
 
 Current implementation status
 ------------------------------
-Phase 3 (Seeder), Phase 4a (Patcher — alloc_size_undercount strategy),
-Phase 5 (Validator — five deterministic checks), and Phase 6 (Auditor —
-ground truth + provenance + audit result) are implemented.
+Phase 3 (Seeder), Phase 4b (Patcher — alloc_size_undercount and
+insert_premature_free strategies), Phase 5 (Validator — five deterministic
+checks), and Phase 6 (Auditor — ground truth + provenance + audit result)
+are implemented.
 
 The pipeline produces real bad/good source trees, validates the mutation,
 and writes a complete, schema-valid output bundle in real mode.

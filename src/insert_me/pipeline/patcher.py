@@ -7,19 +7,28 @@ line-level mutations to a copy of the source tree, producing the bad
 
 Phase 4 implementation scope
 -----------------------------
-One mutation strategy is currently implemented:
+Two mutation strategies are currently implemented:
 
-    alloc_size_undercount
+    alloc_size_undercount  (CWE-122)
         Transforms ``malloc(<expr>)`` → ``malloc((<expr>) - 1)``.
         Introduces a heap buffer overflow by allocating one byte fewer than
-        required.  Applied only to the first compatible target from the
-        PatchTargetList (one mutation per run in this phase).
+        required.
+
+    insert_premature_free  (CWE-416)
+        Inserts ``free(<ptr>);`` immediately before a pointer dereference,
+        producing a use-after-free.  The pointer name is extracted from the
+        arrow operator (``ptr->field``) or explicit dereference (``*ptr``)
+        on the target line.
+
+Applied only to the first compatible target from the PatchTargetList
+(one mutation per run in this phase).
 
 Strategy extensibility
 -----------------------
 Additional strategies are registered in ``_STRATEGY_HANDLERS``.  Each
 handler is a callable that receives a raw source line and returns either:
     (mutated_line, original_fragment, mutated_fragment)
+    (mutated_line, original_fragment, mutated_fragment, extra_dict)
 or None if the strategy cannot be safely applied to that line.
 
 Design constraints
@@ -87,8 +96,9 @@ class PatchResult:
 # Strategy registry
 # ---------------------------------------------------------------------------
 
-# Signature: (source_line: str) -> (mutated_line, original_fragment, mutated_fragment) | None
-_StrategyResult = tuple[str, str, str]
+# Handler signature: (source_line: str) → 3-tuple or 4-tuple (with optional
+# extra metadata dict) or None when the strategy cannot be applied.
+_StrategyResult = tuple[str, str, str] | tuple[str, str, str, dict[str, Any]]
 _StrategyHandler = Callable[[str], _StrategyResult | None]
 
 _STRATEGY_HANDLERS: dict[str, _StrategyHandler] = {}
@@ -108,6 +118,18 @@ def _register(name: str) -> Callable[[_StrategyHandler], _StrategyHandler]:
 
 #: Matches the start of a malloc() call: word-boundary + optional whitespace + '('
 _MALLOC_RE: re.Pattern[str] = re.compile(r"\bmalloc\s*\(")
+
+#: Arrow dereference — captures the pointer variable: ptr->field → group(1)='ptr'
+_ARROW_DEREF_RE: re.Pattern[str] = re.compile(r"\b(\w+)\s*->")
+
+#: Explicit star dereference (*ptr) — negative lookbehind avoids double-stars.
+_STAR_DEREF_RE: re.Pattern[str] = re.compile(r"(?<![*\w])\*\s*(\w+)")
+
+#: C type keywords and common non-pointer identifiers to reject when extracting
+#: a pointer name from a star dereference.
+_C_TYPE_WORDS: frozenset[str] = frozenset(
+    {"void", "int", "char", "float", "double", "NULL", "nullptr", "true", "false"}
+)
 
 
 # ---------------------------------------------------------------------------
@@ -142,8 +164,65 @@ def _mutate_alloc_size_undercount(line: str) -> _StrategyResult | None:
 
 
 # ---------------------------------------------------------------------------
+# Strategy: insert_premature_free
+# ---------------------------------------------------------------------------
+
+@_register("insert_premature_free")
+def _mutate_insert_premature_free(line: str) -> _StrategyResult | None:
+    """
+    Insert ``free(<ptr>);`` immediately before a pointer dereference.
+
+    The returned ``mutated_line`` prepends the free() call (at the same
+    indentation as the target line) to the original dereference line.
+    After ``lines[line_idx] = mutated_line`` in ``_apply_mutation``, the
+    file grows by one line: the inserted free() at the original line
+    number, and the original dereference pushed one line down.
+
+    Returns (mutated_line, original_fragment, mutated_fragment, extra), or
+    None when:
+    - No arrow or star dereference is found on the line.
+    - The pointer name cannot be extracted (keyword, ambiguous pattern).
+    """
+    ptr = _patcher_extract_pointer_name(line)
+    if ptr is None:
+        return None
+
+    # Preserve the target line's leading whitespace exactly.
+    stripped = line.lstrip()
+    indent = line[: len(line) - len(stripped)]
+
+    free_line = f"{indent}free({ptr});\n"
+    mutated_line = free_line + line          # prepend free; keep original deref
+
+    original_fragment = line.rstrip("\n").rstrip("\r")
+    mutated_fragment = f"free({ptr});"
+    extra: dict[str, Any] = {"freed_pointer": ptr}
+
+    return (mutated_line, original_fragment, mutated_fragment, extra)
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _patcher_extract_pointer_name(line: str) -> str | None:
+    """
+    Extract the pointer variable name from an arrow or star dereference.
+
+    Returns the variable name from ``ptr->field`` (arrow) or ``*ptr``
+    (explicit deref), or None when the name is a C type keyword or the
+    line contains no recognisable dereference pattern.
+    """
+    m = _ARROW_DEREF_RE.search(line)
+    if m:
+        return m.group(1)
+    m = _STAR_DEREF_RE.search(line)
+    if m:
+        name = m.group(1)
+        if name not in _C_TYPE_WORDS:
+            return name
+    return None
+
 
 def _find_malloc_call(line: str) -> tuple[int, int, str] | None:
     """
@@ -308,7 +387,14 @@ class Patcher:
         if handler_result is None:
             return None  # strategy cannot be applied to this line
 
-        mutated_line, original_fragment, mutated_fragment = handler_result
+        # Handlers may return a 3-tuple or a 4-tuple (with optional extra dict).
+        extra: dict[str, Any] = {}
+        if len(handler_result) == 4:
+            mutated_line, original_fragment, mutated_fragment, extra = (  # type: ignore[misc]
+                handler_result
+            )
+        else:
+            mutated_line, original_fragment, mutated_fragment = handler_result  # type: ignore[misc]
 
         lines[line_idx] = mutated_line
         try:
@@ -321,4 +407,5 @@ class Patcher:
             mutation_type=strategy,
             original_fragment=original_fragment,
             mutated_fragment=mutated_fragment,
+            extra=extra,
         )

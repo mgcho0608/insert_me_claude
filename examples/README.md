@@ -2,7 +2,7 @@
 
 ---
 
-## Current phase (Phase 6 — Auditor complete, MVP reached)
+## Current phase (Phase 4b — two mutation strategies)
 
 All four core pipeline stages are implemented.  You can run the pipeline today and get
 **a complete output bundle**: real bad/good source trees, `validation_result.json` from
@@ -53,13 +53,45 @@ Dry-run: `status: "PLANNED"`, no source copies, `ground_truth.json` `mutations: 
 
 ---
 
+## CWE-416 Use After Free demo
+
+**Source file:** `demo/src/uaf_demo.c`
+A minimal C file with a `process_record()` function that allocates a `Record` struct
+and writes to it via arrow dereferences — candidates for `insert_premature_free`.
+
+**To run (real mode):**
+
+```bash
+insert-me run \
+  --seed-file examples/seeds/cwe416_use_after_free.json \
+  --source examples/demo/src
+
+insert-me validate-bundle output/<run-id>/
+```
+
+**Expected result:**
+- `patch_plan.json` — `status: "APPLIED"`, one target in `uaf_demo.c`
+- `bad/uaf_demo.c` — `free(rec);` inserted before `rec->id = id;` (or `rec->value`)
+- `good/uaf_demo.c` — byte-identical copy of original
+- `ground_truth.json` — `mutation_type: "insert_premature_free"`, `extra.freed_pointer: "rec"`
+- `audit_result.json` — `classification: "VALID"`
+
+**What changed (bad/ vs good/):**
+```diff
++     free(rec);
+      rec->id    = id;
+```
+One extra line in `bad/`; all other content identical.
+
+---
+
 ## `seeds/` — canonical seed files
 
-| File | CWE | Pattern type | Difficulty |
-|---|---|---|---|
-| `cwe122_heap_overflow.json` | CWE-122 Heap Buffer Overflow | `malloc_call` | easy |
-| `cwe416_use_after_free.json` | CWE-416 Use After Free | `free_call` | medium |
-| `cwe190_integer_overflow.json` | CWE-190 Integer Overflow | `integer_arithmetic` | hard |
+| File | CWE | Pattern type | Strategy | Status |
+|---|---|---|---|---|
+| `cwe122_heap_overflow.json` | CWE-122 Heap Buffer Overflow | `malloc_call` | `alloc_size_undercount` | implemented |
+| `cwe416_use_after_free.json` | CWE-416 Use After Free | `pointer_deref` | `insert_premature_free` | implemented |
+| `cwe190_integer_overflow.json` | CWE-190 Integer Overflow | `integer_arithmetic` | `integer_size_overflow` | not yet implemented |
 
 These seed files are valid inputs to `insert-me run --seed-file`.
 

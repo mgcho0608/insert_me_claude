@@ -21,7 +21,7 @@ verdict-derived `audit_result.json`.
 | Pipeline stage | Status | Notes |
 |---|---|---|
 | Seeder | **Complete** (Phase 3) | Lexical/regex source scan; real targets in `patch_plan.json` |
-| Patcher | **Partial** (Phase 4a) | `alloc_size_undercount` strategy only; one mutation per run |
+| Patcher | **Phase 4b** | `alloc_size_undercount` (CWE-122) + `insert_premature_free` (CWE-416); one mutation per run |
 | Validator | **Complete** (Phase 5) | Five deterministic checks; no compiler required |
 | Auditor | **Complete** (Phase 6) | Deterministic slice; writes ground_truth, audit, audit_result |
 | LLM Adapter | Interface only | `NoOpAdapter` always available; `labels.json` deferred to Phase 7 |
@@ -47,7 +47,7 @@ Each stage's `run()` method is implemented and called in sequence.
 │        |  [patch_plan.json]  <- schema: patch_plan.schema.json       │
 │        v                                                              │
 │  ┌───────────┐   PatchPlan -> bad/good source trees                  │
-│  │  Patcher  │   DETERMINISTIC  [⚡ Phase 4a — alloc_size_undercount]│
+│  │  Patcher  │   DETERMINISTIC  [✓ Phase 4b — two strategies]          │
 │  └─────┬─────┘                                                        │
 │        |                                                              │
 │        v                                                              │
@@ -95,7 +95,7 @@ Each stage's `run()` method is implemented and called in sequence.
 
 No LLM calls.  No file writes.  `Seeder.run()` is fully implemented.
 
-### Patcher (`pipeline/patcher.py`) — Phase 4a PARTIAL
+### Patcher (`pipeline/patcher.py`) — Phase 4b
 
 **Deterministic.**
 
@@ -103,20 +103,21 @@ No LLM calls.  No file writes.  `Seeder.run()` is fully implemented.
 - Copies source_root to `bad/` and applies one line-level mutation to the first compatible target.
 - Output: `PatchResult` — paths to bad/good trees, list of `Mutation` records (0 or 1).
 
-**Currently implemented strategy:**
+**Implemented strategies:**
 
-| Strategy | Rule |
-|---|---|
-| `alloc_size_undercount` | `malloc(<expr>)` → `malloc((<expr>) - 1)` |
+| Strategy | CWE | Rule |
+|---|---|---|
+| `alloc_size_undercount` | CWE-122 | `malloc(<expr>)` → `malloc((<expr>) - 1)` |
+| `insert_premature_free` | CWE-416 | Insert `free(ptr);` immediately before a pointer dereference |
 
 **Phase 4 scope limits:**
 - One mutation per run (first compatible target only).
 - No AST parser — regex + paren-counting only.
-- If the target line has no malloc call, or the strategy is unrecognised, the target
-  is added to `skipped_targets` and `bad/` remains identical to `good/`.
+- If the target line has no applicable dereference/malloc call, or the strategy is unrecognised,
+  the target is added to `skipped_targets` and `bad/` remains identical to `good/`.
 
-Future strategies (`insert_premature_free`, integer overflow variants, etc.) are
-registered in `_STRATEGY_HANDLERS` when implemented.
+Additional strategies (integer overflow variants, etc.) are registered in `_STRATEGY_HANDLERS`
+when implemented.
 
 ### Validator (`pipeline/validator.py`) — Phase 5 COMPLETE
 
@@ -253,7 +254,7 @@ src/insert_me/
 ├── pipeline/
 │   ├── __init__.py      # Orchestrator — run_pipeline() [Phases 3–5 wired]
 │   ├── seeder.py        # Seeder, PatchTarget, PatchTargetList  [Phase 3: COMPLETE]
-│   ├── patcher.py       # Patcher, Mutation, PatchResult        [Phase 4a: PARTIAL]
+│   ├── patcher.py       # Patcher, Mutation, PatchResult        [Phase 4b: two strategies]
 │   ├── validator.py     # Validator, ValidationVerdict           [Phase 5: COMPLETE]
 │   └── auditor.py       # Auditor, GroundTruthRecord, AuditRecord [Phase 6: COMPLETE]
 └── llm/

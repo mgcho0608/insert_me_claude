@@ -22,7 +22,7 @@
 | **`ground_truth.json` mutations** | Real record when mutation applied; `[]` in dry-run |
 | **`ground_truth.json` validation_passed** | `true` when Validator passes; `false` in dry-run |
 | **`bad/` `good/` source trees** | Written in real mode; empty dirs in dry-run |
-| **Mutation strategy** | `alloc_size_undercount` only — `malloc(<expr>)` → `malloc((<expr>) - 1)` |
+| **Mutation strategies** | `alloc_size_undercount` — `malloc(<expr>)` → `malloc((<expr>) - 1)` (CWE-122) · `insert_premature_free` — inserts `free(ptr);` before a pointer dereference (CWE-416) |
 | **`validation_result.json`** | Real check results (5 checks) in real mode; `overall: SKIP` in dry-run |
 | **`audit_result.json`** | `VALID` (validator pass) · `INVALID` (fail) · `AMBIGUOUS` (skip+mutations) · `NOOP` (no mutations) |
 
@@ -70,7 +70,7 @@ For engineers picking this up for the first time inside an organisation:
 | | |
 |---|---|
 | **What it is** | A Python CLI that inserts one known vulnerability into a C/C++ source tree and produces a fully annotated, schema-validated output bundle. |
-| **Current maturity** | Phase 6 / MVP — all four core pipeline stages implemented and tested (294 tests). Not production-hardened; alpha-quality. |
+| **Current maturity** | Phase 4b / MVP — all four core pipeline stages implemented and tested (335 tests). Not production-hardened; alpha-quality. |
 | **Install path** | `pip install -e .` from source. No PyPI release exists yet. |
 | **Python versions** | 3.11, 3.12 — **CI-tested**. 3.10 — **statically reviewed only** (single shim: `tomllib` → `tomli`). No other version-specific features used. |
 | **Dependencies** | `jsonschema>=4.17` + `tomli>=1.2.0` on Python 3.10 only. No other mandatory runtime dependencies. |
@@ -79,12 +79,12 @@ For engineers picking this up for the first time inside an organisation:
 | **First command** | `pip install -e . && insert-me run --seed-file examples/seeds/cwe122_heap_overflow.json --source examples/demo/src` |
 
 **What to expect from a run today:**
-- One mutation applied to the source tree (`alloc_size_undercount` strategy only)
+- One mutation applied to the source tree (`alloc_size_undercount` for CWE-122, `insert_premature_free` for CWE-416)
 - Five deterministic rule-based plausibility checks
 - Five JSON artifacts: `patch_plan.json`, `validation_result.json`, `audit_result.json`, `ground_truth.json`, `audit.json`
 
 **What is NOT available yet:**
-- Additional mutation strategies (CWE-416, CWE-190) — Phase 4b
+- Additional mutation strategies (CWE-190) — Phase 4c
 - AST-based or compiler-backed patching/validation — future phases
 - LLM-enriched semantic labels (`labels.json`) — Phase 7
 - Batch corpus generation — Phase 9
@@ -161,7 +161,7 @@ Example seed files are in `examples/seeds/`:
          │  patch_plan.json  ← patch_plan.schema.json
          ▼
   ┌─────────────┐
-  │   Patcher   │  ⚡ Phase 4a — alloc_size_undercount strategy only
+  │   Patcher   │  ✓ Phase 4b — alloc_size_undercount (CWE-122) · insert_premature_free (CWE-416)
   └──────┬──────┘
          │  bad/  good/  source trees
          ▼

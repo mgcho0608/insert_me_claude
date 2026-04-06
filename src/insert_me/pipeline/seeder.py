@@ -107,6 +107,24 @@ PATTERN_REGEXES: dict[str, re.Pattern[str]] = {
     ),
 }
 
+# ---------------------------------------------------------------------------
+# Pointer-deref helpers (used for pointer_deref scoring enrichment)
+# ---------------------------------------------------------------------------
+
+#: Matches an arrow dereference and captures the pointer variable: ptr->field
+_PTR_ARROW_RE: re.Pattern[str] = re.compile(r"\b(\w+)\s*->")
+
+#: Matches an explicit star dereference (*ptr) — negative lookbehind prevents
+#: matching double stars (**ptr) or pointer-type annotations (int *p).
+_PTR_STAR_RE: re.Pattern[str] = re.compile(r"(?<![*\w])\*\s*(\w+)")
+
+#: Matches a heap allocation assigned to a named pointer variable:
+#:   ptr = malloc(...)  or  ptr = (SomeType *) malloc(...)
+_MALLOC_ASSIGN_RE: re.Pattern[str] = re.compile(
+    r"\b(\w+)\s*=\s*(?:\(\s*[\w\s*]+\*?\s*\)\s*)?(?:malloc|calloc|realloc)\s*\("
+)
+
+
 # Simple C/C++ function signature pattern.
 # Group 1 captures the function name.
 # Intentionally broad; false-positives are filtered via _C_KEYWORDS.
@@ -358,15 +376,32 @@ class Seeder:
             score = self._score_line(line)
             context = self._extract_context(lines, lineno - 1, line)
 
-            candidates.append(
-                PatchTarget(
-                    file=rel_path,
-                    line=lineno,
-                    mutation_strategy=self._mutation_strategy,
-                    context=context,
-                    score=score,
-                )
+            candidate = PatchTarget(
+                file=rel_path,
+                line=lineno,
+                mutation_strategy=self._mutation_strategy,
+                context=context,
+                score=score,
             )
+
+            # For pointer_deref: extract pointer name and apply multi-line
+            # scoring signals that require looking at surrounding lines.
+            if self._pattern_type == "pointer_deref":
+                ptr_name = _extract_pointer_name(line)
+                if ptr_name:
+                    candidate.context["pointer_name"] = ptr_name
+                    from_idx = lineno - 1  # 0-based index of this line
+                    if _has_prior_malloc_in_scope(lines, from_idx, ptr_name):
+                        candidate.score = min(candidate.score + 0.25, 1.0)
+                        # Penalise if an existing free() sits between malloc and
+                        # this dereference — that pointer is already freed.
+                        malloc_idx = _find_malloc_line(lines, from_idx, ptr_name)
+                        if malloc_idx is not None and _has_free_between(
+                            lines, malloc_idx, from_idx, ptr_name
+                        ):
+                            candidate.score = max(candidate.score - 0.20, 0.0)
+
+            candidates.append(candidate)
 
         return candidates
 
@@ -425,6 +460,10 @@ class Seeder:
         pointer_deref:
             +0.20  arrow operator (struct member via pointer)
             +0.10  explicit dereference
+            +0.25  prior malloc of same pointer visible in scope (applied after
+                   _score_line, in _extract_candidates)
+            -0.20  free() on same pointer exists between malloc and deref
+                   (existing free reduces plausibility as UAF insertion site)
 
         custom / fallback:
             +0.55  gets()
@@ -566,6 +605,79 @@ class Seeder:
 # ---------------------------------------------------------------------------
 # Module-level helpers
 # ---------------------------------------------------------------------------
+
+
+def _extract_pointer_name(line: str) -> str | None:
+    """
+    Extract the pointer variable name from a dereference expression.
+
+    Tries arrow operator first (``ptr->field``), then explicit star
+    dereference (``*ptr``).  Returns None when the name is a C keyword or
+    cannot be identified from the line.
+    """
+    m = _PTR_ARROW_RE.search(line)
+    if m:
+        return m.group(1)
+    m = _PTR_STAR_RE.search(line)
+    if m:
+        name = m.group(1)
+        if name not in _C_KEYWORDS:
+            return name
+    return None
+
+
+def _has_prior_malloc_in_scope(
+    lines: list[str], from_idx: int, ptr_name: str
+) -> bool:
+    """
+    Return True if ``ptr_name = malloc(...)`` (or calloc/realloc) appears in
+    the 100 lines immediately before *from_idx* (0-based).
+
+    Best-effort lexical heuristic; may produce false positives when the same
+    variable name is reused across scopes.
+    """
+    pattern = re.compile(
+        rf"\b{re.escape(ptr_name)}\s*=\s*"
+        rf"(?:\(\s*[\w\s*]+\*?\s*\)\s*)?(?:malloc|calloc|realloc)\s*\("
+    )
+    search_start = max(0, from_idx - 100)
+    for i in range(from_idx - 1, search_start - 1, -1):
+        if pattern.search(lines[i]):
+            return True
+    return False
+
+
+def _find_malloc_line(
+    lines: list[str], from_idx: int, ptr_name: str
+) -> int | None:
+    """
+    Return the 0-based index of the most recent malloc/calloc/realloc
+    assignment to *ptr_name* before *from_idx*.  Returns None if not found.
+    """
+    pattern = re.compile(
+        rf"\b{re.escape(ptr_name)}\s*=\s*"
+        rf"(?:\(\s*[\w\s*]+\*?\s*\)\s*)?(?:malloc|calloc|realloc)\s*\("
+    )
+    search_start = max(0, from_idx - 100)
+    for i in range(from_idx - 1, search_start - 1, -1):
+        if pattern.search(lines[i]):
+            return i
+    return None
+
+
+def _has_free_between(
+    lines: list[str], malloc_idx: int, deref_idx: int, ptr_name: str
+) -> bool:
+    """
+    Return True if ``free(ptr_name)`` appears between *malloc_idx* and
+    *deref_idx* (exclusive, 0-based indices).  Used to detect existing frees
+    that would make the candidate a less useful UAF insertion site.
+    """
+    pattern = re.compile(rf"\bfree\s*\(\s*{re.escape(ptr_name)}\s*\)")
+    for i in range(malloc_idx + 1, deref_idx):
+        if pattern.search(lines[i]):
+            return True
+    return False
 
 
 def _find_enclosing_function(lines: list[str], from_idx: int) -> str:

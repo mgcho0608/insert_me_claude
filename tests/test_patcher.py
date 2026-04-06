@@ -297,7 +297,7 @@ class TestSkippedTargets:
         src.mkdir()
         _write_c(src / "unk.c", "char *p = malloc(n);\n")
 
-        target = _make_target("unk.c", 1, strategy="insert_premature_free")
+        target = _make_target("unk.c", 1, strategy="nonexistent_strategy_xyz")
         tlist = _make_target_list(src, [target])
         patcher = Patcher(targets=tlist, bad_root=tmp_path / "bad", good_root=tmp_path / "good")
         result = patcher.run()

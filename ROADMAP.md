@@ -127,7 +127,7 @@ across repeated runs for the same seed + source tree. `patch_plan.json` carries 
 
 ---
 
-## Phase 4 — Patcher (Deterministic) ⚡ PARTIALLY COMPLETE (Phase 4a)
+## Phase 4 — Patcher (Deterministic) ✓ COMPLETE (Phase 4b)
 
 **Goal:** Apply mutations from a `PatchTargetList` to produce bad/good source trees.
 
@@ -142,10 +142,20 @@ across repeated runs for the same seed + source tree. `patch_plan.json` carries 
 - [x] Strategy registry (`_STRATEGY_HANDLERS`) in place for future strategies
 - [x] 32 Patcher tests passing; demo fixture produces real bad/good trees
 
-### Phase 4b — remaining
+### Phase 4b — complete
 
-- [ ] Implement additional mutation strategies for Phase 1 CWE set:
-      `insert_premature_free` (CWE-416), `integer_size_overflow` (CWE-190)
+- [x] Implement `insert_premature_free` strategy (CWE-416): insert `free(ptr);` before pointer dereference
+  - Arrow-operator (`ptr->field`) and star-deref (`*ptr`) pointer name extraction
+  - 4-tuple handler result API (adds optional `extra` dict; backward-compatible with 3-tuple)
+  - Seeder `pointer_deref` pattern enrichment: +0.25 score for prior malloc in scope, −0.20 if
+    intervening free detected
+  - Demo fixture: `examples/demo/src/uaf_demo.c`
+  - 40 focused tests in `tests/test_patcher_cwe416.py`
+- [x] `extra` dict in `Mutation` and `ground_truth.json` (e.g. `freed_pointer`)
+
+### Phase 4c — remaining
+
+- [ ] Implement `integer_size_overflow` strategy (CWE-190)
 - [ ] Handle multi-file source trees with multiple targets across files
 - [ ] Confirm determinism: same seed + spec → same diff across runs
 - [ ] Benchmark copy performance on mid-size source trees (~100k LOC)
@@ -153,8 +163,8 @@ across repeated runs for the same seed + source tree. `patch_plan.json` carries 
 Note: `source_hash` is already computed by the Seeder and written to
 `patch_plan.json` and `audit.json`. No placeholder removal needed.
 
-**Phase 4a exit criterion met:** `Patcher.run()` produces a real `PatchResult`
-for `alloc_size_undercount` targets; good/bad trees are written; 265 tests pass.
+**Phase 4b exit criterion met:** two strategies implemented (`alloc_size_undercount`,
+`insert_premature_free`); good/bad trees are written; 335 tests pass.
 
 ---
 
@@ -191,7 +201,7 @@ from actual pipeline state.
 - [x] Schema-validate all three artifacts before writing
 - [x] Honest dry-run: empty mutations, `validation_passed=false`, `NOOP` classification
 - [x] `labels.json` deferred to Phase 7 (LLM adapter not invoked; clearly documented)
-- [x] 32 Auditor tests passing; 15 hardening tests (cross-artifact coherence, INVALID path, validate-bundle failure); 14 config tests (compatibility shim, dead-field removal); CLI smoke test proves complete demo bundle (294 total)
+- [x] 32 Auditor tests passing; 15 hardening tests (cross-artifact coherence, INVALID path, validate-bundle failure); 14 config tests (compatibility shim, dead-field removal); CLI smoke test proves complete demo bundle; 40 CWE-416 tests (335 total)
 
 **Note:** Run ID derivation using full source tree hash was already implemented in
 Phase 3 (Seeder computes `source_hash`; orchestrator derives `run_id` from seed JSON +
