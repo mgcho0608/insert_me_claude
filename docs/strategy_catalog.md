@@ -1,9 +1,25 @@
 # insert_me Strategy Catalog
 
-> **Phase 9 + Phase 4c partial** — 5 strategies implemented; 4 corpus-admitted  
-> **Machine-readable form:** `config/strategy_catalog.json`
+> **Phase 9 — planning layer complete**  
+> **Machine-readable form:** `config/strategy_catalog.json` (schema: `schemas/strategy_catalog.schema.json`)
 
-This document lists all mutation strategies that insert_me knows about, with their current implementation maturity, corpus admission status, and Juliet test suite coverage anchors.
+This document lists all mutation strategies that insert_me knows about, with their
+current implementation maturity, corpus admission status, and Juliet test suite
+coverage anchors.
+
+**Total entries: 15**
+
+| Maturity | Count | Strategy IDs |
+|---|---|---|
+| IMPLEMENTED_AND_CORPUS_ADMITTED | 4 | alloc_size_undercount, insert_premature_free, insert_double_free, remove_free_call |
+| IMPLEMENTED_EXPERIMENTAL | 1 | remove_null_guard |
+| PLANNED | 2 | CWE-190, CWE-787 |
+| CANDIDATE | 8 | CWE-125, CWE-134, CWE-121, CWE-369, CWE-680, CWE-131, CWE-252, CWE-120 |
+
+The **planning layer** (`insert-me plan-corpus`, `insert-me generate-corpus`) uses only
+`IMPLEMENTED_AND_CORPUS_ADMITTED` strategies by default. `IMPLEMENTED_EXPERIMENTAL`
+strategies are available via `--allow-strategies remove_null_guard` but with reduced
+confidence. All other entries are planning-layer BLOCKED.
 
 ---
 
@@ -13,147 +29,214 @@ This document lists all mutation strategies that insert_me knows about, with the
 |---|---|
 | `IMPLEMENTED_AND_CORPUS_ADMITTED` | In `patcher.py`, has tests, quality gate pass rate >= 80%, reproducibility 100%, sandbox seeds accepted |
 | `IMPLEMENTED_EXPERIMENTAL` | In `patcher.py`, has unit tests, but **not yet corpus-admitted**: insufficient sandbox coverage, missing seeds, or quality gate not yet run |
-| `PLANNED` | Design is documented; implementation is next-priority but not started |
-| `PARTIAL` | Prototype exists but quality gate pass rate < 80% |
-| `CANDIDATE` | Feasibility assessed; no design yet; deferred |
+| `PLANNED` | Design is documented; multi-line handler infrastructure available; implementation is next-priority |
+| `CANDIDATE` | Feasibility assessed; no design or implementation yet |
 | `DISABLED` | Was implemented; disabled due to quality issues |
 
 ---
 
 ## Corpus-Admitted Strategies
 
-### CWE-122 — Heap-based Buffer Overflow  
+### CWE-122 — Heap-based Buffer Overflow
 **Strategy:** `alloc_size_undercount`  
 **Pattern type:** `malloc_call`  
 **Maturity:** IMPLEMENTED_AND_CORPUS_ADMITTED  
+**Suitable for planning:** YES  
 **Juliet anchor:** `CWE122_Heap_Based_Buffer_Overflow__c_CWE129_*`
 
-Transforms `malloc(<expr>)` → `malloc((<expr>) - 1)`. Introduces a one-byte undercount in a heap allocation. When the caller writes the expected number of bytes the write overflows the allocated region.
+Transforms `malloc(<expr>)` → `malloc((<expr>) - 1)`. Introduces a one-byte undercount
+in a heap allocation. When the caller writes the expected number of bytes the write
+overflows the allocated region.
 
-Quality gate pass rate: **100%** (30/30 across sandbox_eval, 4/4 across target_b)
+Quality gate pass rate: **100%** (30/30 sandbox_eval, 4/4 target_b)  
+Corpus cases: **34**
+
+Common failure modes:
+- `malloc(sizeof(T))` without arithmetic — mutation is syntactically valid but semantically trivial
+- `malloc` result unused — NOOP audit if pointer not written through
 
 ---
 
-### CWE-416 — Use After Free  
+### CWE-416 — Use After Free
 **Strategy:** `insert_premature_free`  
 **Pattern type:** `pointer_deref`  
 **Maturity:** IMPLEMENTED_AND_CORPUS_ADMITTED  
+**Suitable for planning:** YES  
 **Juliet anchor:** `CWE416_Use_After_Free__*`
 
-Inserts `free(<ptr>);` immediately before a pointer dereference (`ptr->field` or `*ptr`). The freed pointer is then used on the very next source line, producing a use-after-free.
+Inserts `free(<ptr>);` immediately before a pointer dereference (`ptr->field` or `*ptr`).
+The freed pointer is then used on the very next source line, producing a use-after-free.
 
-Multi-signal scoring in seeder: prior-malloc-in-scope boost (+0.25), loop-body penalty (-0.40), conditional-guard penalty (-0.30), sub-malloc penalty (-0.35).
+Multi-signal scoring: prior-malloc-in-scope boost (+0.25), loop-body penalty (-0.40),
+conditional-guard penalty (-0.30), sub-malloc penalty (-0.35).
 
-Quality gate pass rate: **100%** (19/19 sandbox_eval seeds; 5/5 target_b seeds)
+Quality gate pass rate: **100%** (19/19 sandbox_eval, 5/5 target_b)  
+Corpus cases: **24**
+
+Common failure modes:
+- Loop-body dereference: free inside a loop causes repeated free on second iteration
+- Sub-malloc: free before `malloc(ptr->field)` creates a secondary flaw
 
 ---
 
-### CWE-415 — Double Free  
+### CWE-415 — Double Free
 **Strategy:** `insert_double_free`  
 **Pattern type:** `free_call`  
 **Maturity:** IMPLEMENTED_AND_CORPUS_ADMITTED  
+**Suitable for planning:** YES  
 **Juliet anchor:** `CWE415_Double_Free__*`
 
-Inserts a duplicate `free(<ptr>);` immediately before an existing `free()` call. Works on both `free(ptr)` (simple identifier) and `free(ptr->field)` (single arrow dereference). The heap allocator receives two calls to release the same pointer, which is undefined behaviour.
+Inserts a duplicate `free(<ptr>);` immediately before an existing `free()` call.
+Works on both `free(ptr)` and `free(ptr->field)`.
 
-Seeder penalties: loop-body (-0.30), conditional-guard (-0.20), complex-expression args (-0.50).
+Seeder penalties: loop-body (-0.30), conditional-guard (-0.20), complex-expression (-0.50).
 
-Quality gate pass rate: **~90%** (9/10 sandbox_eval seeds; 3/3 target_b seeds ACCEPT_WITH_NOTES)
+Quality gate pass rate: **~90%** (9/10 sandbox_eval, 3/3 target_b)  
+Corpus cases: **13** (10 ACCEPT, 3 ACCEPT_WITH_NOTES)
 
 ---
 
-### CWE-401 — Missing Release of Memory after Effective Lifetime  
+### CWE-401 — Missing Release of Memory after Effective Lifetime
 **Strategy:** `remove_free_call`  
 **Pattern type:** `free_call`  
 **Maturity:** IMPLEMENTED_AND_CORPUS_ADMITTED  
+**Suitable for planning:** YES  
 **Juliet anchor:** `CWE401_Memory_Leak__*`
 
-Replaces a `free(<ptr>);` call with a comment `/* CWE-401: free(ptr) removed - memory leak */`. The heap-allocated object is never released, causing a memory leak.
+Replaces `free(<ptr>);` with a comment `/* CWE-401: free(ptr) removed - memory leak */`.
+The heap-allocated object is never released, causing a memory leak.
 
 Same seeder penalties as `insert_double_free`.
 
-Quality gate pass rate: **~90%** (9/10 sandbox_eval seeds; 3/3 target_b seeds ACCEPT_WITH_NOTES)
+Quality gate pass rate: **~90%** (9/10 sandbox_eval, 3/3 target_b)  
+Corpus cases: **13** (10 ACCEPT, 3 ACCEPT_WITH_NOTES)
 
 ---
 
-### CWE-476 — NULL Pointer Dereference  
+## Experimental Strategies (Not Corpus-Admitted)
+
+### CWE-476 — NULL Pointer Dereference
 **Strategy:** `remove_null_guard`  
-**Pattern type:** `null_guard` (or `pointer_deref` with multi-line handler)  
-**Maturity:** IMPLEMENTED_EXPERIMENTAL
+**Pattern type:** `null_guard`  
+**Maturity:** IMPLEMENTED_EXPERIMENTAL  
+**Suitable for planning:** NO (explicit blockers below)  
+**Juliet anchor:** `CWE476_NULL_Pointer_Dereference__*`
 
-Replaces a null-check guard (`if (!ptr) return;` / `if (ptr == NULL) return;`) with a comment, leaving a NULL dereference reachable at the subsequent `ptr->field` line. Uses the multi-line handler API (`_MULTILINE_STRATEGY_HANDLERS`) since the guard and dereference are on different lines.
+Replaces a null-check guard (`if (!ptr) return;`) with a comment, leaving a NULL
+dereference reachable at the subsequent `ptr->field` line. Uses the multi-line handler
+API (`_MULTILINE_STRATEGY_HANDLERS`).
 
-Guard forms matched: `!ptr`, `ptr == NULL`, `ptr == nullptr`, `ptr == 0`, and reversed (`NULL == ptr`).
+Guard forms matched: `!ptr`, `ptr == NULL`, `ptr == nullptr`, `ptr == 0`, reversed (`NULL == ptr`).
 
 **Corpus admission: NOT ADMITTED — explicit blockers:**
 
-1. **Handler only matches single-line inline guards.** The backward scan in `_mutate_remove_null_guard` looks for a guard line of the form `if (!ptr) return;` (guard body on the same line). If the guard body is on the next line (`if (!ptr)\n    return NULL;`) the scan hits `return NULL;` first (a non-blank, non-comment, non-matching line) and aborts before reaching the `if` line.
+1. **Handler only matches single-line inline guards.** The backward scan looks for
+   `if (!ptr) return;` (guard body on the same line). If the body is on the next line
+   (`if (!ptr)\n    return NULL;`) the scan fails.
 
-2. **Only 1 viable target found across all 9 sandbox source files.** Simulation of the handler's matching logic against `sandbox_eval/src/` (6 files) and `sandbox_targets/target_b/src/` (3 files) found exactly one viable site: `graph.c` lines 264–265 (`if (!g) return;` + loop). All other null-check guards in the sandbox use multi-line body style.
+2. **Only 1 viable target across all 9 sandbox source files.** All other null-check
+   guards in the sandbox use multi-line body style.
 
-3. **Corpus admission requires ≥5 viable targets per sandbox (quality gate C1).** With only 1 viable target there is no path to a 5-seed minimum-viable quality gate run.
+3. **Quality gate requires >= 5 viable targets per sandbox.** 1 viable site is
+   insufficient.
 
-**To unblock:** Extend `_mutate_remove_null_guard` to handle multi-line guard bodies (guard head on one line, `return`/`return NULL;` on the next). After that enhancement, re-scan sandbox files to locate seeds, write seed files under `examples/seeds/sandbox/` and `examples/seeds/target_b/`, and run the full quality gate.
+**To unblock:** Extend `_mutate_remove_null_guard` to handle multi-line guard bodies.
+Re-scan sandbox → write seeds → run full quality gate.
+
+Corpus cases: **0**
 
 ---
 
 ## Planned Strategies
 
-### CWE-190 — Integer Overflow or Wraparound  
+### CWE-190 — Integer Overflow or Wraparound
 **Strategy:** *(not yet named)*  
-**Pattern type:** `malloc_call` (or a new `overflow_guard` type)  
-**Maturity:** PLANNED
+**Pattern type:** `malloc_call`  
+**Maturity:** PLANNED  
+**Juliet anchor:** `CWE190_Integer_Overflow__*`
 
-Remove the overflow check (e.g., `if (n > MAX) return;`) that precedes a multiplication-based `malloc(n * sizeof(T))`. The resulting allocation is undersized when `n` overflows.
+Remove the overflow check (e.g., `if (n > MAX) return;`) that precedes a
+multiplication-based `malloc(n * sizeof(T))`. The resulting allocation is undersized
+when `n` overflows.
 
-**Blocker resolved:** Multi-line mutation infrastructure now in place (`MultilineMutationResult`, `_MULTILINE_STRATEGY_HANDLERS`). Implementation can proceed following the CWE-476 pattern.
+**Infrastructure ready:** Multi-line handler infrastructure (`MultilineMutationResult`,
+`_MULTILINE_STRATEGY_HANDLERS`) is in place. Implementation follows the CWE-476 pattern.
 
 ---
 
-### CWE-787 — Out-of-bounds Write  
+### CWE-787 — Out-of-bounds Write
 **Strategy:** *(not yet named)*  
 **Pattern type:** `malloc_call`  
-**Maturity:** PLANNED
+**Maturity:** PLANNED  
+**Juliet anchor:** `CWE787_Write_What_Where_Condition__*`
 
-Target `memcpy`/`strcpy` calls whose destination is a heap allocation; mutate the allocation to be smaller than the write size.
+Reduce the size of a heap allocation feeding a `memcpy`/`strcpy` so the write exceeds
+the allocated region.
 
-**Blocker:** Requires detecting the allocation that corresponds to the destination pointer. Backward-scan heuristic feasible but not yet designed.
+**Blocker:** Requires detecting the allocation that corresponds to the destination
+pointer of the subsequent write.
 
 ---
 
 ## Candidate Strategies (Design Deferred)
 
-| CWE | Name | Key Blocker |
-|---|---|---|
-| CWE-125 | Out-of-bounds Read | Simple single-line feasible; low priority |
-| CWE-134 | Format String Injection | `string_operation` pattern exists; needs format-string detection |
-| CWE-121 | Stack Buffer Overflow | Buffer size detection requires declaration scan |
-| CWE-369 | Divide By Zero | Zero-guard removal; low security evaluation value |
-| CWE-680 | Integer Overflow to Buffer Overflow | Two-stage mutation needed |
+These strategies are in the catalog for planning-space coverage; none are implemented.
+
+| CWE | Name | Pattern Type | Key Blocker / Note |
+|---|---|---|---|
+| CWE-125 | Out-of-bounds Read | `array_index` | Simple single-line feasible; low priority |
+| CWE-134 | Format String Injection | `format_string` | `string_operation` pattern exists; needs format-string detection |
+| CWE-121 | Stack-based Buffer Overflow | `string_operation` | Buffer size detection requires declaration scan |
+| CWE-369 | Divide By Zero | `custom` | Zero-guard removal; low security evaluation value |
+| CWE-680 | Integer Overflow to Buffer Overflow | `malloc_call` | Two-stage mutation; deferred until CWE-190 is done |
+| CWE-131 | Incorrect Calculation of Buffer Size | `malloc_call` | Replace `sizeof(T)` with `sizeof(T*)`; requires struct type detection |
+| CWE-252 | Unchecked Return Value | `malloc_call` | Remove null-check after malloc; multi-line blocker |
+| CWE-120 | Buffer Copy Without Checking Size | `string_operation` | Replace `strncpy(buf, src, n)` with `strcpy(buf, src)`; simple |
 
 ---
 
 ## Strategy–CWE Coverage Matrix
 
-| Strategy | CWE | Maturity | Corpus Proven |
-|---|---|---|---|
-| `alloc_size_undercount` | CWE-122 | IMPLEMENTED | 34 cases (30 + 4 target_b) |
-| `insert_premature_free` | CWE-416 | IMPLEMENTED | 24 cases (19 + 5 target_b) |
-| `insert_double_free` | CWE-415 | IMPLEMENTED | 13 cases (10 + 3 target_b) |
-| `remove_free_call` | CWE-401 | IMPLEMENTED | 13 cases (10 + 3 target_b) |
-| `remove_null_guard` | CWE-476 | IMPLEMENTED_EXPERIMENTAL | 0 — not admitted; handler only matches inline single-line guards; only 1 viable target in sandbox |
-| *(planned)* | CWE-190, CWE-787 | PLANNED | 0 |
-| *(candidate)* | CWE-125, CWE-134, CWE-121, CWE-369, CWE-680 | CANDIDATE | 0 |
+| Strategy | CWE | Maturity | Planning | Corpus Cases |
+|---|---|---|---|---|
+| `alloc_size_undercount` | CWE-122 | IMPLEMENTED_AND_CORPUS_ADMITTED | VIABLE | 34 (30 + 4 target_b) |
+| `insert_premature_free` | CWE-416 | IMPLEMENTED_AND_CORPUS_ADMITTED | VIABLE | 24 (19 + 5 target_b) |
+| `insert_double_free` | CWE-415 | IMPLEMENTED_AND_CORPUS_ADMITTED | VIABLE | 13 (10 + 3 target_b) |
+| `remove_free_call` | CWE-401 | IMPLEMENTED_AND_CORPUS_ADMITTED | VIABLE | 13 (10 + 3 target_b) |
+| `remove_null_guard` | CWE-476 | IMPLEMENTED_EXPERIMENTAL | BLOCKED | 0 — handler only matches inline single-line guards |
+| *(planned)* | CWE-190 | PLANNED | BLOCKED | 0 |
+| *(planned)* | CWE-787 | PLANNED | BLOCKED | 0 |
+| *(candidate x 8)* | CWE-125/134/121/369/680/131/252/120 | CANDIDATE | BLOCKED | 0 |
 
 ---
 
 ## Honest Assessment: Sustainable Case Count
 
-With 4 implemented strategies across 2 sandbox targets:
+With 4 implemented corpus-admitted strategies across 2 sandbox targets:
 
 - **sandbox_eval** (6 C files, ~750 LOC): 40 high-quality cases, **100% ACCEPT**
-- **target_b** (3 C files, ~600 LOC): 15 high-quality cases, **100% ACCEPT** (13 ACCEPT + 2 ACCEPT_WITH_NOTES → 86.7% strict ACCEPT rate)
+- **target_b** (3 C files, ~600 LOC): 15 high-quality cases, **100% ACCEPT** (2 ACCEPT_WITH_NOTES)
 
-**Sustainable corpus size at current quality:** ~50-55 cases.
+**Sustainable corpus size at current quality:** ~50–55 cases.
 
-Adding further targets (target_c, target_d, ...) would scale linearly; each new 3-file sandbox contributes ~15 cases. Quality gate strictly enforces no duplicate file:line targets.
+Each new well-structured 3–6 file C target contributes ~10–20 cases via the planning layer.
+The planning layer (`plan-corpus`) computes this honestly: if only K < N accepted
+cases are achievable it says so explicitly rather than generating low-quality cases
+to pad the count.
+
+---
+
+## Planning Layer Suitability vs. Implementation Maturity
+
+These are orthogonal concepts:
+
+| | Planning-VIABLE | Planning-LIMITED | Planning-BLOCKED |
+|---|---|---|---|
+| What it means | >= 10 candidates across >= 3 files for this strategy in the target | 1–9 candidates or < 3 files | 0 candidates OR strategy not corpus-admitted |
+| Set by | TargetInspector per target | TargetInspector per target | TargetInspector per target |
+| Depends on | Target source code richness | Target source code richness | Target code OR strategy maturity |
+
+A strategy can be IMPLEMENTED_AND_CORPUS_ADMITTED but still be Planning-BLOCKED on a
+specific target if that target has no patterns that match the strategy's `pattern_type`.
+Conversely, a richer target can make a strategy Planning-VIABLE that was Planning-LIMITED
+on a smaller target.

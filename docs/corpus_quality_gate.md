@@ -1,8 +1,8 @@
 # Corpus Quality Gate — insert_me
 
-> **Version:** 1.1  
-> **Phase:** 9 + Phase 4c partial  
-> **Applies to:** Seeded cases generated from evaluation-only sandbox targets
+> **Version:** 1.2  
+> **Phase:** 9 — planning layer complete  
+> **Applies to:** Seeded cases generated from evaluation-only targets (sandbox and local)
 
 This document defines the formal acceptance rubric for every case in the insert_me corpus.  
 It governs whether a generated case is **ACCEPT**, **ACCEPT_WITH_NOTES**, **REVISE**, or **REJECT**.
@@ -280,3 +280,74 @@ The following targets apply to the accepted sandbox corpus:
 
 If targets are not met, expand the sandbox source suite before generating more cases.
 Do not lower quality thresholds to hit case count targets.
+
+---
+
+## 7. Planning Layer and the Quality Gate
+
+The planning layer (`insert-me plan-corpus`, `insert-me generate-corpus`) is designed
+to feed into — not bypass — the quality gate.
+
+### How plan-corpus relates to the quality gate
+
+`plan-corpus` does NOT accept cases; it synthesises candidate seed files.
+Planned cases are **NOT** accepted corpus cases until they pass the quality gate.
+
+The planning layer is honest about this:
+- `corpus_plan.json` tracks `planned_count` and `projected_accepted_count` (estimated
+  from historical strategy pass rates)
+- `acceptance_summary.json` (from `generate-corpus`) tracks the actual
+  `attempted_count`, `accepted_count`, `rejected_count`, and `error_count`
+- The planning layer will not inflate the planned count to hit `requested_count`
+
+### Acceptance summary format
+
+`generate-corpus` writes `acceptance_summary.json` with these fields:
+
+```json
+{
+  "schema_version": "1.0",
+  "source_root": "/path/to/source",
+  "requested_count": 30,
+  "planned_count": 28,
+  "projected_accepted_count": 25,
+  "attempted_count": 28,
+  "accepted_count": 24,
+  "rejected_count": 4,
+  "error_count": 0,
+  "unresolved_count": 0,
+  "honest": true,
+  "shortfall_message": "Only 28 cases planned (requested 30)...",
+  "strategy_allocation": { "alloc_size_undercount": 14, "insert_premature_free": 8, ... },
+  "plan_path": "corpus_out/_plan/corpus_plan.json"
+}
+```
+
+The `honest` field is `true` when `planned_count < requested_count` — i.e., the system
+acknowledged it could not honestly reach the requested count.
+
+### Quality gate integration for planned cases
+
+Each case synthesised by `plan-corpus` has its own seed file under `_plan/seeds/`.
+When `generate-corpus` executes, each case goes through:
+
+1. **Seeder** — selects the same target (deterministic seed integer)
+2. **Patcher** — applies the mutation
+3. **Validator** — five rule-based plausibility checks
+4. **Auditor** — classifies as VALID / NOOP / AMBIGUOUS / INVALID
+5. **Quality gate** — ACCEPT / ACCEPT_WITH_NOTES / REVISE / REJECT
+
+Cases classified NOOP or INVALID are counted as `rejected_count`.
+The quality gate criteria in sections 2–4 apply without exception.
+
+### What the planning layer cannot guarantee
+
+The planning layer uses historical pass-rate priors (`_STRATEGY_PASS_RATE`) to project
+accepted counts. These priors are based on the bundled sandbox targets. For a novel
+local target, actual accepted counts may differ. Always review `acceptance_summary.json`
+after `generate-corpus` to confirm actual yield.
+
+If `accepted_count` is significantly below `projected_accepted_count`, investigate:
+- Concentration: are cases clustering in one file or function?
+- Pattern quality: are the selected sites in low-scoring regions?
+- Run `insert-me inspect-target` and review `concentration_risk` signals

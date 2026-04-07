@@ -1,0 +1,139 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "strategy_catalog.schema.json",
+  "title": "Strategycatalog",
+  "description": "insert_me mutation strategy catalog. Each entry describes one CWE family, its implementation maturity, planning suitability, and Juliet-derived rationale.",
+  "type": "object",
+  "required": ["schema_version", "catalog_version", "description", "maturity_levels", "strategies"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": ["2.0"],
+      "description": "Schema version for this artifact."
+    },
+    "catalog_version": {
+      "type": "string",
+      "description": "Catalog version tag, updated on each catalog revision."
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of this catalog."
+    },
+    "maturity_levels": {
+      "type": "object",
+      "description": "Definitions of each maturity level string.",
+      "additionalProperties": { "type": "string" }
+    },
+    "strategies": {
+      "type": "array",
+      "description": "One entry per CWE family / mutation strategy.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "cwe_id",
+          "cwe_name",
+          "vulnerability_class",
+          "maturity",
+          "pattern_type",
+          "suitable_for_planning",
+          "description",
+          "juliet_rationale",
+          "source_pattern",
+          "sink_pattern",
+          "deterministic",
+          "corpus_cases"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "strategy_id": {
+            "type": ["string", "null"],
+            "description": "Unique strategy name used in code and seed files. Null for CANDIDATE/PLANNED entries without implementations."
+          },
+          "cwe_id": {
+            "type": "string",
+            "pattern": "^CWE-[0-9]+$",
+            "description": "CWE identifier (e.g., 'CWE-122')."
+          },
+          "cwe_name": {
+            "type": "string",
+            "description": "Short human-readable CWE name."
+          },
+          "vulnerability_class": {
+            "type": "string",
+            "description": "Broad class such as 'Memory Safety -- Spatial' or 'Injection -- Format String'."
+          },
+          "maturity": {
+            "type": "string",
+            "enum": [
+              "IMPLEMENTED_AND_CORPUS_ADMITTED",
+              "IMPLEMENTED_EXPERIMENTAL",
+              "PARTIAL",
+              "PLANNED",
+              "CANDIDATE",
+              "DISABLED"
+            ],
+            "description": "Current implementation maturity."
+          },
+          "pattern_type": {
+            "type": "string",
+            "description": "Seeder pattern type used to locate insertion sites (e.g., 'malloc_call', 'pointer_deref', 'free_call', 'null_guard', 'string_operation', 'array_index', 'format_string', 'custom')."
+          },
+          "suitable_for_planning": {
+            "type": "boolean",
+            "description": "Whether the planning layer (CorpusPlanner) should include this strategy in corpus synthesis."
+          },
+          "description": {
+            "type": "string",
+            "description": "What the mutation does and why it creates the vulnerability."
+          },
+          "juliet_rationale": {
+            "type": "string",
+            "description": "How this strategy maps to Juliet test suite patterns."
+          },
+          "source_pattern": {
+            "type": "string",
+            "description": "Description of the code pattern that the strategy targets as its insertion site."
+          },
+          "sink_pattern": {
+            "type": "string",
+            "description": "Description of the code that becomes reachable / exploitable after mutation."
+          },
+          "juliet_coverage": {
+            "type": "string",
+            "description": "Glob-style pattern matching Juliet test case file names for this CWE."
+          },
+          "deterministic": {
+            "type": "boolean",
+            "description": "Whether the mutation is fully deterministic (same input always produces same output)."
+          },
+          "quality_gate_pass_rate": {
+            "type": ["number", "null"],
+            "minimum": 0.0,
+            "maximum": 1.0,
+            "description": "Empirical fraction of generated cases that pass the quality gate. Null if not yet measured."
+          },
+          "corpus_cases": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Total number of accepted corpus cases generated so far."
+          },
+          "corpus_admission_blocker": {
+            "type": "string",
+            "description": "Explanation of why corpus admission is blocked (for non-admitted strategies)."
+          },
+          "common_failure_modes": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Known patterns that cause quality gate failure or NOOP/INVALID outcomes."
+          },
+          "notes": {
+            "type": "string",
+            "description": "Additional implementation or design notes."
+          }
+        }
+      }
+    }
+  }
+}

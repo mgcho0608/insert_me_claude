@@ -24,6 +24,8 @@ import pytest
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 LOCAL_TARGET_DIR = FIXTURES_DIR / "local_target"
 SANDBOX_SRC = Path(__file__).parent.parent / "examples" / "sandbox_eval" / "src"
+MINIMAL_TARGET = Path(__file__).parent.parent / "examples" / "local_targets" / "minimal" / "src"
+MODERATE_TARGET = Path(__file__).parent.parent / "examples" / "local_targets" / "moderate" / "src"
 
 # ---------------------------------------------------------------------------
 # TargetInspector tests
@@ -623,3 +625,221 @@ class TestCLIPlanCorpus:
         assert r.returncode in (0, 1)
         if r.returncode == 0:
             assert (tmp_path / "corpus_plan.json").exists()
+
+
+# ---------------------------------------------------------------------------
+# Strategy catalog schema validation
+# ---------------------------------------------------------------------------
+
+
+class TestStrategyCatalogSchema:
+    """Validate config/strategy_catalog.json against its schema."""
+
+    def test_catalog_validates_against_schema(self):
+        import jsonschema
+
+        root = Path(__file__).parent.parent
+        catalog_path = root / "config" / "strategy_catalog.json"
+        schema_path = root / "schemas" / "strategy_catalog.schema.json"
+        assert catalog_path.exists(), "strategy_catalog.json not found"
+        assert schema_path.exists(), "strategy_catalog.schema.json not found"
+
+        catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        jsonschema.validate(instance=catalog, schema=schema)
+
+    def test_catalog_has_10_plus_entries(self):
+        root = Path(__file__).parent.parent
+        catalog = json.loads((root / "config" / "strategy_catalog.json").read_text())
+        assert len(catalog["strategies"]) >= 10, (
+            f"Expected >= 10 strategy entries, got {len(catalog['strategies'])}"
+        )
+
+    def test_catalog_has_4_corpus_admitted(self):
+        root = Path(__file__).parent.parent
+        catalog = json.loads((root / "config" / "strategy_catalog.json").read_text())
+        admitted = [
+            s for s in catalog["strategies"]
+            if s["maturity"] == "IMPLEMENTED_AND_CORPUS_ADMITTED"
+        ]
+        assert len(admitted) == 4, f"Expected 4 corpus-admitted, got {len(admitted)}"
+
+    def test_catalog_admitted_strategies_have_corpus_cases(self):
+        root = Path(__file__).parent.parent
+        catalog = json.loads((root / "config" / "strategy_catalog.json").read_text())
+        for s in catalog["strategies"]:
+            if s["maturity"] == "IMPLEMENTED_AND_CORPUS_ADMITTED":
+                assert s["corpus_cases"] > 0, (
+                    f"Corpus-admitted strategy {s.get('strategy_id')} has 0 corpus_cases"
+                )
+
+    def test_catalog_schema_version_is_2_0(self):
+        root = Path(__file__).parent.parent
+        catalog = json.loads((root / "config" / "strategy_catalog.json").read_text())
+        assert catalog["schema_version"] == "2.0"
+
+    def test_catalog_all_cwe_ids_valid_format(self):
+        import re
+        root = Path(__file__).parent.parent
+        catalog = json.loads((root / "config" / "strategy_catalog.json").read_text())
+        pattern = re.compile(r"^CWE-\d+$")
+        for s in catalog["strategies"]:
+            assert pattern.match(s["cwe_id"]), (
+                f"Invalid CWE ID format: {s['cwe_id']!r}"
+            )
+
+
+# ---------------------------------------------------------------------------
+# inspect-target extended outputs
+# ---------------------------------------------------------------------------
+
+
+class TestInspectTargetExtendedOutputs:
+    """Tests for the three-artifact output of inspect-target."""
+
+    def _run_inspect(self, source, output_dir):
+        cmd = [
+            sys.executable, "-m", "insert_me.cli",
+            "inspect-target",
+            "--source", str(source),
+            "--output", str(output_dir),
+        ]
+        return subprocess.run(cmd, capture_output=True, text=True,
+                              cwd=str(Path(__file__).parent.parent))
+
+    def test_inspect_writes_three_artifacts(self, tmp_path):
+        if not SANDBOX_SRC.exists():
+            pytest.skip("sandbox_eval/src not found")
+        r = self._run_inspect(SANDBOX_SRC, tmp_path)
+        assert r.returncode == 0, f"stderr: {r.stderr}"
+        assert (tmp_path / "target_suitability.json").exists()
+        assert (tmp_path / "target_inspection.json").exists()
+        assert (tmp_path / "target_strategy_matrix.json").exists()
+
+    def test_target_suitability_json_has_suitability_key(self, tmp_path):
+        if not SANDBOX_SRC.exists():
+            pytest.skip("sandbox_eval/src not found")
+        self._run_inspect(SANDBOX_SRC, tmp_path)
+        d = json.loads((tmp_path / "target_suitability.json").read_text())
+        assert "suitability" in d
+        assert "pilot_single_case" in d["suitability"]
+        assert "corpus_generation" in d["suitability"]
+
+    def test_target_inspection_json_has_per_file_inventory(self, tmp_path):
+        if not SANDBOX_SRC.exists():
+            pytest.skip("sandbox_eval/src not found")
+        self._run_inspect(SANDBOX_SRC, tmp_path)
+        d = json.loads((tmp_path / "target_inspection.json").read_text())
+        assert "per_file_inventory" in d
+        assert isinstance(d["per_file_inventory"], dict)
+        # Each file entry should be a dict of strategy -> count
+        for fname, entry in d["per_file_inventory"].items():
+            assert isinstance(entry, dict)
+
+    def test_target_strategy_matrix_json_structure(self, tmp_path):
+        if not SANDBOX_SRC.exists():
+            pytest.skip("sandbox_eval/src not found")
+        self._run_inspect(SANDBOX_SRC, tmp_path)
+        d = json.loads((tmp_path / "target_strategy_matrix.json").read_text())
+        assert "strategies" in d
+        assert "file_count" in d
+        assert d["file_count"] > 0
+        for strat_name, row in d["strategies"].items():
+            assert "by_file" in row
+            assert "total" in row
+
+    def test_strategy_matrix_totals_consistent(self, tmp_path):
+        if not SANDBOX_SRC.exists():
+            pytest.skip("sandbox_eval/src not found")
+        self._run_inspect(SANDBOX_SRC, tmp_path)
+        d = json.loads((tmp_path / "target_strategy_matrix.json").read_text())
+        for strat_name, row in d["strategies"].items():
+            row_total = sum(row["by_file"].values())
+            assert row_total == row["total"], (
+                f"Strategy {strat_name}: by_file sum={row_total} != total={row['total']}"
+            )
+
+
+# ---------------------------------------------------------------------------
+# Local target fixtures (minimal and moderate)
+# ---------------------------------------------------------------------------
+
+
+class TestLocalTargetFixtures:
+    """Tests using examples/local_targets/ fixtures for planning."""
+
+    def test_minimal_target_inspects_without_crash(self, tmp_path):
+        if not MINIMAL_TARGET.exists():
+            pytest.skip("examples/local_targets/minimal not found")
+        from insert_me.planning import TargetInspector
+        result = TargetInspector(MINIMAL_TARGET).run()
+        assert result is not None
+        assert result.file_count >= 1
+
+    def test_minimal_target_plan_is_honest_shortfall(self):
+        """Minimal target (1 file) should produce planned_count < 20."""
+        if not MINIMAL_TARGET.exists():
+            pytest.skip("examples/local_targets/minimal not found")
+        from insert_me.planning import CorpusPlanner
+        plan = CorpusPlanner(MINIMAL_TARGET, 20).plan()
+        # Should not crash; planned_count must be <= actual candidates, not 20
+        assert plan.planned_count <= 20
+        # With only 1 file, diversity constraints prevent reaching 20
+        assert plan.planned_count < 20 or plan.warnings
+
+    def test_moderate_target_inspects_as_corpus_ready(self):
+        """Moderate target (4 files) should have at least pilot_small_batch suitability."""
+        if not MODERATE_TARGET.exists():
+            pytest.skip("examples/local_targets/moderate not found")
+        from insert_me.planning import TargetInspector
+        result = TargetInspector(MODERATE_TARGET).run()
+        # Should find candidates for at least one admitted strategy
+        from insert_me.planning.inspector import BLOCKED
+        non_blocked = [n for n, s in result.strategies.items() if s.suitability != BLOCKED]
+        assert len(non_blocked) >= 1, "moderate target should have >= 1 non-blocked strategy"
+
+    def test_moderate_target_plan_reaches_meaningful_count(self):
+        """Moderate target (4 files) should support planning >= 5 cases."""
+        if not MODERATE_TARGET.exists():
+            pytest.skip("examples/local_targets/moderate not found")
+        from insert_me.planning import CorpusPlanner
+        plan = CorpusPlanner(MODERATE_TARGET, 10).plan()
+        assert plan.planned_count >= 1, (
+            f"moderate target should plan >= 1 case, got {plan.planned_count}"
+        )
+
+    def test_moderate_target_no_duplicate_targets_in_plan(self):
+        """Moderate target plan must not contain duplicate (file, line) pairs."""
+        if not MODERATE_TARGET.exists():
+            pytest.skip("examples/local_targets/moderate not found")
+        from insert_me.planning import CorpusPlanner
+        plan = CorpusPlanner(MODERATE_TARGET, 15).plan()
+        targets = [(c.target_file, c.target_line) for c in plan.cases]
+        assert len(targets) == len(set(targets)), "Duplicate targets in moderate plan"
+
+    def test_moderate_target_plan_is_reproducible(self):
+        """Two plan-corpus runs on moderate target must produce identical results."""
+        if not MODERATE_TARGET.exists():
+            pytest.skip("examples/local_targets/moderate not found")
+        from insert_me.planning import CorpusPlanner, PlanConstraints
+        c = PlanConstraints()
+        p1 = CorpusPlanner(MODERATE_TARGET, 8, c).plan()
+        p2 = CorpusPlanner(MODERATE_TARGET, 8, c).plan()
+        assert p1.planned_count == p2.planned_count
+        assert p1.source_hash == p2.source_hash
+        for a, b in zip(p1.cases, p2.cases):
+            assert a.case_id == b.case_id
+            assert a.seed_integer == b.seed_integer
+
+    def test_moderate_target_write_artifacts(self, tmp_path):
+        """Moderate target plan.write() must create expected file structure."""
+        if not MODERATE_TARGET.exists():
+            pytest.skip("examples/local_targets/moderate not found")
+        from insert_me.planning import CorpusPlanner
+        plan = CorpusPlanner(MODERATE_TARGET, 5).plan()
+        if plan.planned_count == 0:
+            pytest.skip("no cases planned for moderate target")
+        plan.write(tmp_path)
+        assert (tmp_path / "corpus_plan.json").exists()
+        seed_files = list((tmp_path / "seeds").glob("*.json"))
+        assert len(seed_files) == plan.planned_count

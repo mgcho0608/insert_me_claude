@@ -237,7 +237,10 @@ def _build_parser() -> argparse.ArgumentParser:
             "  - File concentration risk\n"
             "  - Suitability tier: pilot-single / pilot-small-batch / corpus-generation\n"
             "  - Blockers and warnings\n\n"
-            "Optionally writes a machine-readable target_suitability.json.\n\n"
+            "Optionally writes three machine-readable JSON artifacts to --output:\n"
+            "  target_suitability.json    -- overall suitability report\n"
+            "  target_inspection.json     -- full per-file candidate inventory\n"
+            "  target_strategy_matrix.json -- strategy x file candidate matrix\n\n"
             "Example:\n"
             "  insert-me inspect-target --source /path/to/local/toy_project\n"
             "  insert-me inspect-target --source /path/to/project --output inspect_out/"
@@ -988,12 +991,38 @@ def _inspect_source_tree(source_root: Path) -> dict:
             "across >= 3 files. Consider adding more source files or choosing a richer target."
         )
 
+    # Build per-file inventory: {rel_file: {strategy: count, ...}}
+    per_file_inventory: dict[str, dict[str, int]] = {}
+    for fpath in all_paths:
+        rel = str(fpath.relative_to(source_root))
+        per_file_inventory[rel] = {}
+        for strategy_name, _cwe, pattern_type, _exp in _INSPECT_STRATEGIES:
+            per_file_inventory[rel][strategy_name] = counts[pattern_type].get(rel, 0)
+
+    # Per-function analysis via planning layer (best-effort)
+    function_candidates: dict[str, list[dict]] = {}
+    try:
+        from insert_me.planning import TargetInspector
+        _ti_result = TargetInspector(source_root).run()
+        for strategy_name, s_stats in _ti_result.strategies.items():
+            entries = []
+            for func_key, count in s_stats.by_function.items():
+                if count > 0:
+                    entries.append({"function": func_key, "count": count})
+            if entries:
+                entries.sort(key=lambda x: x["count"], reverse=True)
+                function_candidates[strategy_name] = entries
+    except Exception:
+        pass  # function analysis is best-effort
+
     return {
         "schema_version": "1.0",
         "source_root": str(source_root.resolve()),
         "file_count": file_count,
         "files": rel_files,
         "candidates_by_strategy": strategies,
+        "per_file_inventory": per_file_inventory,
+        "function_candidates": function_candidates,
         "concentration_risk": concentration,
         "suitability": {
             "pilot_single_case": pilot_single,
@@ -1064,6 +1093,56 @@ def _format_inspection_report(report: dict) -> str:
     return "\n".join(out)
 
 
+def _build_target_strategy_matrix(report: dict) -> dict:
+    """
+    Build a target_strategy_matrix.json artifact from an inspection report.
+
+    The matrix rows are strategy names; columns are relative file paths.
+    Each cell is the candidate count (0 if none).
+    """
+    strategies = list(report["candidates_by_strategy"].keys())
+    files = report["files"]
+
+    rows: dict[str, dict] = {}
+    for strat in strategies:
+        info = report["candidates_by_strategy"][strat]
+        row: dict[str, int] = {}
+        for f in files:
+            row[f] = info["by_file"].get(f, 0)
+        rows[strat] = {
+            "cwe": info["cwe"],
+            "pattern_type": info["pattern_type"],
+            "total": info["total"],
+            "suitable_for_planning": not ("note" in info),
+            "by_file": row,
+        }
+
+    return {
+        "schema_version": "1.0",
+        "source_root": report["source_root"],
+        "file_count": report["file_count"],
+        "strategy_count": len(strategies),
+        "strategies": rows,
+    }
+
+
+def _build_target_inspection(report: dict) -> dict:
+    """
+    Build a target_inspection.json artifact from an inspection report.
+
+    Contains the full per-file candidate inventory and function-level signals.
+    """
+    return {
+        "schema_version": "1.0",
+        "source_root": report["source_root"],
+        "file_count": report["file_count"],
+        "files": report["files"],
+        "per_file_inventory": report.get("per_file_inventory", {}),
+        "function_candidates": report.get("function_candidates", {}),
+        "concentration_risk": report["concentration_risk"],
+    }
+
+
 def _cmd_inspect_target(args: argparse.Namespace) -> int:
     import json
 
@@ -1082,9 +1161,34 @@ def _cmd_inspect_target(args: argparse.Namespace) -> int:
 
     if output_dir is not None:
         output_dir.mkdir(parents=True, exist_ok=True)
-        out_path = output_dir / "target_suitability.json"
-        out_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
-        print(f"\n[insert-me] suitability report written to: {out_path}")
+
+        # target_suitability.json — overall suitability report
+        suitability_artifact = {
+            "schema_version": "1.0",
+            "source_root": report["source_root"],
+            "file_count": report["file_count"],
+            "files": report["files"],
+            "candidates_by_strategy": report["candidates_by_strategy"],
+            "concentration_risk": report["concentration_risk"],
+            "suitability": report["suitability"],
+        }
+        suitability_path = output_dir / "target_suitability.json"
+        suitability_path.write_text(json.dumps(suitability_artifact, indent=2), encoding="utf-8")
+
+        # target_inspection.json — full per-file inventory + function signals
+        inspection_artifact = _build_target_inspection(report)
+        inspection_path = output_dir / "target_inspection.json"
+        inspection_path.write_text(json.dumps(inspection_artifact, indent=2), encoding="utf-8")
+
+        # target_strategy_matrix.json — strategy x file candidate matrix
+        matrix_artifact = _build_target_strategy_matrix(report)
+        matrix_path = output_dir / "target_strategy_matrix.json"
+        matrix_path.write_text(json.dumps(matrix_artifact, indent=2), encoding="utf-8")
+
+        print(f"\n[insert-me] artifacts written to: {output_dir}/")
+        print(f"  target_suitability.json     -- overall suitability")
+        print(f"  target_inspection.json      -- per-file inventory + function signals")
+        print(f"  target_strategy_matrix.json -- strategy x file candidate matrix")
 
     return 1 if report["suitability"]["blockers"] else 0
 
@@ -1260,6 +1364,31 @@ def _cmd_generate_corpus(args: argparse.Namespace) -> int:
     if errors:
         print(f"  errors     : {errors}")
     print(f"\n[insert-me] corpus written to: {output_root}")
+
+    # Write acceptance_summary.json
+    import json as _json2
+    summary = {
+        "schema_version": "1.0",
+        "source_root": str(source.resolve()),
+        "requested_count": plan.requested_count,
+        "planned_count": plan.planned_count,
+        "projected_accepted_count": plan.projected_accepted_count,
+        "attempted_count": total,
+        "accepted_count": accepted,
+        "rejected_count": rejected,
+        "error_count": errors,
+        "unresolved_count": 0,
+        "honest": plan.planned_count < plan.requested_count,
+        "shortfall_message": (
+            next((w for w in plan.warnings if "Only" in w and "cases planned" in w), None)
+        ),
+        "strategy_allocation": plan.strategy_allocation,
+        "plan_path": str(plan_dir / "corpus_plan.json"),
+    }
+    summary_path = output_root / "acceptance_summary.json"
+    output_root.mkdir(parents=True, exist_ok=True)
+    summary_path.write_text(_json2.dumps(summary, indent=2), encoding="utf-8")
+    print(f"  acceptance_summary.json: {summary_path}")
 
     return 0 if errors == 0 else 1
 

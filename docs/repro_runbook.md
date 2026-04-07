@@ -1,8 +1,8 @@
 # Reproducibility Runbook — insert_me Corpus Generation
 
-> **Phase:** 9 + Phase 4c partial  
-> **Audience:** Engineers reproducing or extending the sandbox corpus without prior
-> familiarity with the insert_me pipeline.
+> **Phase:** 9 — planning layer complete  
+> **Audience:** Engineers reproducing or extending the sandbox corpus, or using the
+> planning layer on a local evaluation-only target project.
 >
 > This runbook is self-contained. Follow it from a clean clone to produce a verified,
 > quality-gated corpus. No Claude-level judgment is required.
@@ -366,3 +366,63 @@ python -m pytest tests/ -q
 
 All commands should succeed with exit code 0. Combined accepted corpus: 55 cases
 (40 Target A + 15 Target B), 100% ACCEPT or ACCEPT_WITH_NOTES, 55/55 reproducibility PASS.
+
+---
+
+## 14. Planning Layer Reproducibility
+
+The planning layer (`plan-corpus`, `generate-corpus`) is also deterministic.
+
+### Guarantee
+
+Given the same inputs:
+- same source tree (files + content)
+- same `--count` N
+- same `PlanConstraints` (max-per-file, max-per-function, allow-strategies, etc.)
+
+insert_me will always produce:
+- the same `source_hash` in `corpus_plan.json`
+- the same set of planned cases (same `case_id`, `seed_integer`, `target_file`, `target_line`)
+- the same `seeds/*.json` files (byte-for-byte identical)
+
+This follows from: TargetInspector uses `seed=1` (fixed) for enumeration;
+SeedSynthesizer sweeps seed integers 1, 2, 3, ... in fixed order; allocation
+uses `int()` floor + sorted leftover top-up (deterministic given candidate counts).
+
+### Verification
+
+```bash
+# Run plan-corpus twice on the same source; compare corpus_plan.json
+insert-me plan-corpus --source examples/sandbox_eval/src --count 20 --output-dir /tmp/plan_run1/
+insert-me plan-corpus --source examples/sandbox_eval/src --count 20 --output-dir /tmp/plan_run2/
+
+# Both corpus_plan.json files must be byte-identical
+python -c "
+a = open('/tmp/plan_run1/corpus_plan.json').read()
+b = open('/tmp/plan_run2/corpus_plan.json').read()
+assert a == b, 'FAIL: plans differ'
+print('PASS: plans are identical')
+"
+```
+
+### What can break reproducibility
+
+| Change | Effect |
+|---|---|
+| Source file added, removed, or modified | `source_hash` changes; plan changes |
+| `--count` changed | Allocation changes |
+| Any `PlanConstraints` argument changed | Plan changes |
+| Different Python version | Unlikely; no floating-point or hash randomness used |
+| `PYTHONHASHSEED` | Not used by the planning layer |
+
+The planning layer does NOT use Python's `random`, `uuid`, or time-dependent functions.
+All randomness is seeded through the explicit `seed_integer` parameter passed to the Seeder.
+
+### Planning reproducibility vs. generation reproducibility
+
+| Layer | Guaranteed reproducible? | Artifact |
+|---|---|---|
+| Planning (`plan-corpus`) | YES — byte-identical on identical inputs | `corpus_plan.json`, `seeds/*.json` |
+| Generation (`generate-corpus` pipeline) | YES — given same seed JSON + same source tree | `bad/`, `good/`, all 5 pipeline artifacts |
+| Quality gate classification | YES — HeuristicAdjudicator is fully offline and deterministic | `audit_result.json` ACCEPT/REJECT |
+| LLM adjudication | NO — disabled by default; use `--adjudicator heuristic` | N/A |

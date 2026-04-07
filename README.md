@@ -1,6 +1,6 @@
 # insert_me
 
-**Deterministic, project-scale seeded vulnerability generation for C/C++.**
+**Target-aware, count-driven seeded vulnerability corpus generation for C/C++.**
 
 > **Repository:** `insert_me_claude` is the public incubation repository for the `insert_me`
 > package. The package name, CLI command (`insert-me`), and all artifact identities are
@@ -10,7 +10,7 @@
 
 ---
 
-## Current Status — Phase 9 (corpus generation tooling, local-target pilot, multi-sandbox expansion)
+## Current Status — Phase 9 (target-aware planning layer, count-driven corpus synthesis)
 
 | | |
 |---|---|
@@ -32,23 +32,40 @@
 
 ## What it is
 
-insert_me is a deterministic, Juliet-derived seeded vulnerability insertion and per-project evaluation framework for C/C++ codebases. It inserts auditable bad/good variants into arbitrary target projects and evaluates how well a detector report matches the inserted ground truth. Semantic matches are adjudicated offline by the built-in heuristic adjudicator (no LLM required); a plug-in point for a future internal LLM adjudicator is available but not yet wired.
+insert_me is a deterministic, Juliet-derived seeded vulnerability insertion and
+per-project evaluation framework for C/C++ codebases.
 
-Given a seed definition and a C/C++ source tree, it produces:
+**What insert_me actually does:**
 
-- **Bad/good source pairs** — the original (good) and the mutated (bad) version side-by-side.
-- **Patch plan** — the planned transformations before any source files are modified.
-- **Validation artifacts** — evidence that the inserted vulnerability is syntactically and
-  semantically plausible.
-- **Audit result** — classification of the run (VALID / NOOP / AMBIGUOUS / INVALID).
-- **Ground-truth records** — machine-readable annotations of exactly what was inserted, where,
-  and why.
-- **Audit outputs** — a full provenance log linking every output back to its seed, spec, and
-  pipeline version.
+Given a local evaluation-only C/C++ target project and a requested count (e.g. 30):
+
+1. **Inspects the target** — enumerates candidate sites for each supported vulnerability
+   strategy (CWE family); classifies each strategy as VIABLE / LIMITED / BLOCKED for that
+   specific target; reports concentration risk and projected yield.
+
+2. **Plans a corpus** — deterministically allocates the requested count across strategies
+   and files, respecting diversity constraints; synthesises concrete seed files; honestly
+   reports when the requested count is not achievable.
+
+3. **Generates and evaluates cases** — runs each planned case through the full pipeline
+   (Seeder → Patcher → Validator → Auditor → quality gate); produces accepted/rejected
+   summaries.
+
+Each executed case produces:
+
+- **Bad/good source pairs** — the original (good) and the mutated (bad) version.
+- **Patch plan** — planned transformations before source files are modified.
+- **Validation artifacts** — five rule-based plausibility checks.
+- **Audit result** — VALID / NOOP / AMBIGUOUS / INVALID classification.
+- **Ground-truth records** — machine-readable annotations of what was inserted and where.
 
 The primary use case is generating labelled corpora for vulnerability research, detector
-benchmarking, and security tooling evaluation — without relying on manual annotation or scraping
-real CVEs.
+benchmarking, and security tooling evaluation — without relying on manual seed authoring,
+LLMs, compilers, or real CVEs.
+
+**The seed-file / seed-dir workflow still exists and is fully supported.** insert_me is
+moving toward target-aware corpus planning but does not remove the seed-file interface.
+The general workflow is: `inspect target → plan corpus → generate/evaluate corpus`.
 
 ---
 
@@ -72,7 +89,7 @@ For engineers picking this up for the first time inside an organisation:
 | | |
 |---|---|
 | **What it is** | A Python CLI that inserts one known vulnerability into a C/C++ source tree and produces a fully annotated, schema-validated output bundle. |
-| **Current maturity** | Phase 9 + Phase 4c partial — all four core pipeline stages + evaluator + deterministic heuristic adjudicator + 5 mutation strategies (4 corpus-admitted: CWE-122/416/415/401; 1 experimental: CWE-476) + multi-line patcher + `insert-me batch` CLI + `insert-me inspect-target` preflight + `insert-me plan-corpus` target-aware planning + 2 sandbox targets + local-target pilot workflow + corpus generation tooling implemented and tested (540 tests). Not production-hardened; alpha-quality. |
+| **Current maturity** | Phase 9 — target-aware planning layer complete. Full pipeline: 5 mutation strategies (4 corpus-admitted: CWE-122/416/415/401; 1 experimental: CWE-476), planning layer (TargetInspector/SeedSynthesizer/CorpusPlanner), `plan-corpus` + `generate-corpus` CLI, 15-entry strategy catalog (4 admitted / 1 experimental / 2 planned / 8 candidate), 2 sandbox targets + local-target fixtures, 558 tests. Not production-hardened; alpha-quality. |
 | **Install path** | `pip install -e .` from source. No PyPI release exists yet. |
 | **Python versions** | 3.11, 3.12 — **CI-tested**. 3.10 — **statically reviewed only** (single shim: `tomllib` → `tomli`). No other version-specific features used. |
 | **Dependencies** | `jsonschema>=4.17` + `tomli>=1.2.0` on Python 3.10 only. No other mandatory runtime dependencies. |
