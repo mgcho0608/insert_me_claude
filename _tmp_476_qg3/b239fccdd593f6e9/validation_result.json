@@ -1,0 +1,34 @@
+{
+  "schema_version": "1.0",
+  "result_id": "vr-b239fccdd593f6e9",
+  "run_id": "b239fccdd593f6e9",
+  "plan_id": "plan-b239fccdd593f6e9",
+  "overall": "PASS",
+  "checks": [
+    {
+      "name": "mutation_applied",
+      "status": "pass",
+      "reason": "1 mutation(s) applied."
+    },
+    {
+      "name": "good_tree_integrity",
+      "status": "pass",
+      "reason": "good/htable.c is byte-identical to the original source."
+    },
+    {
+      "name": "bad_tree_changed",
+      "status": "pass",
+      "reason": "bad/htable.c contains the expected mutation and differs from good/."
+    },
+    {
+      "name": "mutation_scope",
+      "status": "pass",
+      "reason": "Exactly 1 file changed: htable.c"
+    },
+    {
+      "name": "simple_syntax_sanity",
+      "status": "pass",
+      "reason": "Mutated line 46 has balanced parentheses."
+    }
+  ]
+}

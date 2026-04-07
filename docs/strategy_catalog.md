@@ -11,15 +11,12 @@ coverage anchors.
 
 | Maturity | Count | Strategy IDs |
 |---|---|---|
-| IMPLEMENTED_AND_CORPUS_ADMITTED | 4 | alloc_size_undercount, insert_premature_free, insert_double_free, remove_free_call |
-| IMPLEMENTED_EXPERIMENTAL | 1 | remove_null_guard |
+| IMPLEMENTED_AND_CORPUS_ADMITTED | 5 | alloc_size_undercount, insert_premature_free, insert_double_free, remove_free_call, remove_null_guard |
 | PLANNED | 2 | CWE-190, CWE-787 |
 | CANDIDATE | 8 | CWE-125, CWE-134, CWE-121, CWE-369, CWE-680, CWE-131, CWE-252, CWE-120 |
 
 The **planning layer** (`insert-me plan-corpus`, `insert-me generate-corpus`) uses only
-`IMPLEMENTED_AND_CORPUS_ADMITTED` strategies by default. `IMPLEMENTED_EXPERIMENTAL`
-strategies are available via `--allow-strategies remove_null_guard` but with reduced
-confidence. All other entries are planning-layer BLOCKED.
+`IMPLEMENTED_AND_CORPUS_ADMITTED` strategies by default. All other entries are planning-layer BLOCKED.
 
 ---
 
@@ -113,37 +110,27 @@ Corpus cases: **13** (10 ACCEPT, 3 ACCEPT_WITH_NOTES)
 
 ---
 
-## Experimental Strategies (Not Corpus-Admitted)
-
 ### CWE-476 — NULL Pointer Dereference
 **Strategy:** `remove_null_guard`  
 **Pattern type:** `null_guard`  
-**Maturity:** IMPLEMENTED_EXPERIMENTAL  
-**Suitable for planning:** NO (explicit blockers below)  
+**Maturity:** IMPLEMENTED_AND_CORPUS_ADMITTED  
+**Suitable for planning:** YES  
 **Juliet anchor:** `CWE476_NULL_Pointer_Dereference__*`
 
-Replaces a null-check guard (`if (!ptr) return;`) with a comment, leaving a NULL
-dereference reachable at the subsequent `ptr->field` line. Uses the multi-line handler
-API (`_MULTILINE_STRATEGY_HANDLERS`).
+Replaces a null-check guard with a comment, leaving a NULL dereference reachable at the
+subsequent `ptr->field` line. Uses the multi-line handler API (`_MULTILINE_STRATEGY_HANDLERS`).
 
-Guard forms matched: `!ptr`, `ptr == NULL`, `ptr == nullptr`, `ptr == 0`, reversed (`NULL == ptr`).
+**Dual-mode handler (Phase 10):**
+- *Primary mode:* target line is the guard head (Seeder `null_guard` pattern). Forward scans
+  for the deref within 4 lines. Guard body lines (`return`/`break`/`continue` on the next line)
+  are detected and blanked out so they don't leave unreachable code.
+- *Backward-compat mode:* target line is the dereference; backward scan finds the guard.
 
-**Corpus admission: NOT ADMITTED — explicit blockers:**
+Guard forms matched: `!ptr`, `ptr == NULL`, `ptr == nullptr`, `ptr == 0`, reversed (`NULL == ptr`).  
+Supported multiline form: `if (!ptr)\n    return NULL;` (body on separate line blanked in output).
 
-1. **Handler only matches single-line inline guards.** The backward scan looks for
-   `if (!ptr) return;` (guard body on the same line). If the body is on the next line
-   (`if (!ptr)\n    return NULL;`) the scan fails.
-
-2. **Only 1 viable target across all 9 sandbox source files.** All other null-check
-   guards in the sandbox use multi-line body style.
-
-3. **Quality gate requires >= 5 viable targets per sandbox.** 1 viable site is
-   insufficient.
-
-**To unblock:** Extend `_mutate_remove_null_guard` to handle multi-line guard bodies.
-Re-scan sandbox → write seeds → run full quality gate.
-
-Corpus cases: **0**
+Quality gate pass rate: **100%** (8/8 sandbox seeds VALID)  
+Corpus cases: **8**
 
 ---
 
@@ -203,7 +190,7 @@ These strategies are in the catalog for planning-space coverage; none are implem
 | `insert_premature_free` | CWE-416 | IMPLEMENTED_AND_CORPUS_ADMITTED | VIABLE | 24 (19 + 5 target_b) |
 | `insert_double_free` | CWE-415 | IMPLEMENTED_AND_CORPUS_ADMITTED | VIABLE | 13 (10 + 3 target_b) |
 | `remove_free_call` | CWE-401 | IMPLEMENTED_AND_CORPUS_ADMITTED | VIABLE | 13 (10 + 3 target_b) |
-| `remove_null_guard` | CWE-476 | IMPLEMENTED_EXPERIMENTAL | BLOCKED | 0 — handler only matches inline single-line guards |
+| `remove_null_guard` | CWE-476 | IMPLEMENTED_AND_CORPUS_ADMITTED | VIABLE | 8 (sandbox_eval only) |
 | *(planned)* | CWE-190 | PLANNED | BLOCKED | 0 |
 | *(planned)* | CWE-787 | PLANNED | BLOCKED | 0 |
 | *(candidate x 8)* | CWE-125/134/121/369/680/131/252/120 | CANDIDATE | BLOCKED | 0 |
@@ -212,7 +199,7 @@ These strategies are in the catalog for planning-space coverage; none are implem
 
 ## Honest Assessment: Sustainable Case Count
 
-With 4 implemented corpus-admitted strategies across 2 sandbox targets:
+With 5 implemented corpus-admitted strategies across 2 sandbox targets:
 
 - **sandbox_eval** (6 C files, ~750 LOC): 40 high-quality cases, **100% ACCEPT**
 - **target_b** (3 C files, ~600 LOC): 15 high-quality cases, **100% ACCEPT** (2 ACCEPT_WITH_NOTES)

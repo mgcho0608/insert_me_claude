@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "seed_id": "cwe476-sandbox-cache-init-006",
+  "seed": 6,
+  "cwe_id": "CWE-476",
+  "vulnerability_class": "NULL Pointer Dereference",
+  "description": "Remove the null guard in a cache init function: the guard 'if (!c)' with a return body protects c->buckets from NULL dereference. Removing it exposes a NULL pointer dereference for invalid cache handles.",
+  "mutation_strategy": "remove_null_guard",
+  "target_pattern": {
+    "pattern_type": "null_guard",
+    "require_function_scope": true,
+    "min_candidate_score": 0.7
+  },
+  "source_constraints": {
+    "file_patterns": ["*.c", "*.cpp"],
+    "exclude_patterns": ["*test*", "*_test.*", "*mock*", "*stub*"],
+    "max_targets": 1
+  },
+  "metadata": {
+    "tags": ["null-deref", "guard-removal", "multiline-guard", "sandbox-eval"],
+    "difficulty": "easy",
+    "notes": "Targets cache.c — multiline guard 'if (!c)\\n    return;' protecting c->buckets dereference.",
+    "references": ["https://cwe.mitre.org/data/definitions/476.html"]
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0",
+  "run_id": "ee6147505d8fb369",
+  "cwe_id": "CWE-476",
+  "spec_id": "cwe476-sandbox-list-init-003",
+  "seed": 3,
+  "mutations": [
+    {
+      "file": "graph.c",
+      "line": 264,
+      "mutation_type": "remove_null_guard",
+      "original_fragment": "    if (!g) return;",
+      "mutated_fragment": "/* CWE-476: null guard removed */",
+      "extra": {
+        "guard_line": 264,
+        "deref_line": -1,
+        "guarded_pointer": "g",
+        "multiline": false,
+        "body_lines": []
+      }
+    }
+  ],
+  "validation_passed": true
+}

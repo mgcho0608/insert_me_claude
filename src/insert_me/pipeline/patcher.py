@@ -367,69 +367,195 @@ def _extract_guarded_ptr(m: re.Match[str]) -> str:
     return m.group(1) or m.group(2) or m.group(3) or ""
 
 
+def _is_null_guard_body_line(stripped: str) -> bool:
+    """
+    Return True if *stripped* is a guard body statement (return/break/continue).
+
+    Conservative: only single-statement forms ending in ';'.
+    Used to skip body lines when scanning past a multiline guard.
+    """
+    if stripped.endswith(";") and re.match(r"^return\b", stripped):
+        return True
+    if stripped in ("break;", "continue;"):
+        return True
+    return False
+
+
+#: How many lines forward from a guard to look for the protected dereference.
+_NULL_GUARD_LOOKFORWARD: int = 4
+
+
 @_register_multiline("remove_null_guard")
 def _mutate_remove_null_guard(
     lines: list[str], line_idx: int
 ) -> MultilineMutationResult | None:
     """
-    Replace a null-check guard that precedes a pointer dereference with a comment.
+    Replace a null-check guard with a comment, leaving the pointer dereference
+    reachable with a potentially-NULL pointer (CWE-476).
 
-    Target line: a pointer dereference (``ptr->field`` or ``*ptr``).
-    Mutation: the guard line immediately above (within ``_NULL_GUARD_LOOKBACK``
-    lines) is replaced with ``/* CWE-476: null guard removed */``, leaving the
-    null pointer reachable at the dereference site.
+    **Target line** (as provided by the Seeder's ``null_guard`` pattern):
+    the ``if (!ptr)`` guard line itself.
+
+    Supported guard forms::
+
+        if (!ptr) return;          ← inline guard (body on same line)
+        if (!ptr)                  ← multiline guard head
+            return;                ← body on next line (also blanked out)
+        if (ptr == NULL) return;   ← equality form
+        if (NULL == ptr) return;   ← reversed equality form
+
+    **Backward-compatibility mode**: if ``lines[line_idx]`` is a pointer
+    dereference rather than a guard (e.g. seed files that target the deref
+    line directly), the handler falls back to scanning backward for the guard
+    as in the original single-mode design.
 
     Returns None when:
-    - No null-guard pattern is found in the preceding lines.
-    - The guard's pointer name does not match a pointer on the target line.
+    - Target is neither a guard line nor a deref line.
+    - No deref of the same pointer follows the guard (forward mode).
+    - No guard precedes the deref (backward mode).
+    - Pointer names do not match across guard and deref.
     """
     target_line = lines[line_idx]
+
+    # -----------------------------------------------------------------------
+    # Primary mode: target line IS the guard line (Seeder null_guard pattern)
+    # -----------------------------------------------------------------------
+    m = _NULL_GUARD_RE.match(target_line)
+    if m is not None:
+        return _mutate_from_guard_line(lines, line_idx, m)
+
+    # -----------------------------------------------------------------------
+    # Backward-compat mode: target line is a dereference
+    # -----------------------------------------------------------------------
     target_ptr = _patcher_extract_pointer_name(target_line)
-    if target_ptr is None:
+    if target_ptr is not None:
+        return _mutate_from_deref_line(lines, line_idx, target_ptr)
+
+    return None
+
+
+def _mutate_from_guard_line(
+    lines: list[str],
+    guard_line_idx: int,
+    guard_match: re.Match[str],
+) -> MultilineMutationResult | None:
+    """
+    Mutation when the Seeder has targeted the guard line itself.
+
+    Scans forward to verify a pointer dereference follows, then replaces the
+    guard (and its body, for multiline forms) with a comment.
+    """
+    guard_ptr = _extract_guarded_ptr(guard_match)
+
+    # Determine if the body is inline (same line after the closing paren)
+    after_paren = lines[guard_line_idx][guard_match.end():].strip()
+    inline_body = bool(after_paren)
+
+    # Scan forward past any body lines to find the dereference
+    deref_found = False
+    body_indices: list[int] = []
+    scan_limit = min(len(lines), guard_line_idx + _NULL_GUARD_LOOKFORWARD + 2)
+
+    for i in range(guard_line_idx + 1, scan_limit):
+        stripped = lines[i].strip()
+        if not stripped or stripped.startswith("//") or stripped.startswith("/*"):
+            continue
+        if _is_null_guard_body_line(stripped):
+            if not inline_body:
+                body_indices.append(i)
+            continue
+        # First non-blank, non-comment, non-body line must be the dereference
+        dm = _patcher_extract_pointer_name(lines[i])
+        if dm and (not guard_ptr or dm == guard_ptr):
+            deref_found = True
+        break
+
+    if not deref_found:
         return None
 
-    search_start = max(0, line_idx - _NULL_GUARD_LOOKBACK)
+    guard_line = lines[guard_line_idx]
+    stripped_guard = guard_line.lstrip()
+    indent = guard_line[: len(guard_line) - len(stripped_guard)]
+    original_fragment = guard_line.rstrip("\n").rstrip("\r")
+    mutated_fragment = "/* CWE-476: null guard removed */"
+    replacement = f"{indent}{mutated_fragment}\n"
+
+    line_replacements: dict[int, str] = {guard_line_idx: replacement}
+    for bi in body_indices:
+        line_replacements[bi] = "\n"
+
+    return MultilineMutationResult(
+        original_fragment=original_fragment,
+        mutated_fragment=mutated_fragment,
+        line_replacements=line_replacements,
+        extra={
+            "guard_line": guard_line_idx + 1,
+            "deref_line": -1,            # not precisely known (forward scan)
+            "guarded_pointer": guard_ptr,
+            "multiline": not inline_body,
+            "body_lines": [bi + 1 for bi in body_indices],
+        },
+    )
+
+
+def _mutate_from_deref_line(
+    lines: list[str],
+    deref_line_idx: int,
+    target_ptr: str,
+) -> MultilineMutationResult | None:
+    """
+    Backward-compat mutation when the seed file targets the dereference line.
+
+    Scans backward to find the guard above the dereference, skipping guard
+    body lines (return/break/continue) to support multiline guards.
+    """
+    search_start = max(0, deref_line_idx - _NULL_GUARD_LOOKBACK)
     guard_idx: int | None = None
     guard_ptr: str = ""
+    body_indices: list[int] = []
 
-    for i in range(line_idx - 1, search_start - 1, -1):
+    for i in range(deref_line_idx - 1, search_start - 1, -1):
         candidate = lines[i]
-        # Skip blank lines and pure comments when scanning back
         stripped = candidate.strip()
         if not stripped or stripped.startswith("//") or stripped.startswith("/*"):
+            continue
+        if _is_null_guard_body_line(stripped):
+            body_indices.append(i)
             continue
         m = _NULL_GUARD_RE.match(candidate)
         if m:
             guard_ptr = _extract_guarded_ptr(m)
             guard_idx = i
             break
-        # Stop if we hit a non-guard, non-blank code line above the deref
-        # (we only want a guard that immediately precedes the dereference).
         break
 
     if guard_idx is None:
         return None
 
-    # Verify the guard is protecting the same pointer as the dereference.
     if guard_ptr and target_ptr and guard_ptr != target_ptr:
         return None
 
     guard_line = lines[guard_idx]
     stripped_guard = guard_line.lstrip()
     indent = guard_line[: len(guard_line) - len(stripped_guard)]
-
     original_fragment = guard_line.rstrip("\n").rstrip("\r")
-    mutated_fragment = f"/* CWE-476: null guard removed */"
+    mutated_fragment = "/* CWE-476: null guard removed */"
     replacement = f"{indent}{mutated_fragment}\n"
+
+    line_replacements: dict[int, str] = {guard_idx: replacement}
+    for bi in body_indices:
+        line_replacements[bi] = "\n"
 
     return MultilineMutationResult(
         original_fragment=original_fragment,
         mutated_fragment=mutated_fragment,
-        line_replacements={guard_idx: replacement},
+        line_replacements=line_replacements,
         extra={
-            "guard_line": guard_idx + 1,          # 1-based for readability
-            "deref_line": line_idx + 1,            # 1-based
+            "guard_line": guard_idx + 1,
+            "deref_line": deref_line_idx + 1,
             "guarded_pointer": guard_ptr or target_ptr,
+            "multiline": len(body_indices) > 0,
+            "body_lines": [bi + 1 for bi in body_indices],
         },
     )
 

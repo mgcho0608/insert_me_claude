@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "seed_id": "cwe476-sandbox-list-init-003",
+  "seed": 3,
+  "cwe_id": "CWE-476",
+  "vulnerability_class": "NULL Pointer Dereference",
+  "description": "Remove the null guard in list_init() (or equivalent list function): the guard 'if (!lst)' with a return body protects lst->head from NULL dereference. Removing it allows callers passing NULL to crash.",
+  "mutation_strategy": "remove_null_guard",
+  "target_pattern": {
+    "pattern_type": "null_guard",
+    "require_function_scope": true,
+    "min_candidate_score": 0.7
+  },
+  "source_constraints": {
+    "file_patterns": ["*.c", "*.cpp"],
+    "exclude_patterns": ["*test*", "*_test.*", "*mock*", "*stub*"],
+    "max_targets": 1
+  },
+  "metadata": {
+    "tags": ["null-deref", "guard-removal", "multiline-guard", "sandbox-eval"],
+    "difficulty": "easy",
+    "notes": "Targets list.c — multiline guard 'if (!lst)\\n    return;' protecting lst->head dereference.",
+    "references": ["https://cwe.mitre.org/data/definitions/476.html"]
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "run_id": "915a0627c44c2066",
+  "seed": 7,
+  "spec_path": "examples\\seeds\\sandbox\\cwe476_sb_007.json",
+  "spec_hash": "78e4375afc1447ef220efd4da7e10f3a87aa992a446ea07bcdf0d11400050a83",
+  "source_root": "examples\\sandbox_eval\\src",
+  "source_hash": "b1dc7a8c914dc0b7",
+  "pipeline_version": "0.1.0.dev0",
+  "timestamp_utc": "2026-04-07T01:52:11Z",
+  "validation_verdict": {
+    "passed": false,
+    "checks": [
+      {
+        "name": "mutation_applied",
+        "status": "fail",
+        "reason": "Patcher ran but applied 0 mutations (1 target(s) skipped — incompatible line or unknown strategy)."
+      }
+    ]
+  }
+}

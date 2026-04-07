@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "run_id": "b239fccdd593f6e9",
+  "cwe_id": "CWE-476",
+  "spec_id": "cwe476-sandbox-htable-init-007",
+  "seed": 16,
+  "mutations": [
+    {
+      "file": "htable.c",
+      "line": 46,
+      "mutation_type": "remove_null_guard",
+      "original_fragment": "    if (!t)",
+      "mutated_fragment": "/* CWE-476: null guard removed */",
+      "extra": {
+        "guard_line": 46,
+        "deref_line": -1,
+        "guarded_pointer": "t",
+        "multiline": true,
+        "body_lines": [
+          47
+        ]
+      }
+    }
+  ],
+  "validation_passed": true
+}

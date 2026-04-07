@@ -445,3 +445,196 @@ class TestSeederNullGuard:
         scores = {t.line: t.score for t in result.targets}
         # Line 2 (return guard) should score >= line 5 (block guard)
         assert scores.get(2, 0) >= scores.get(5, 0)
+
+
+# ---------------------------------------------------------------------------
+# Primary mode: guard line as target (Seeder-provided null_guard lines)
+# ---------------------------------------------------------------------------
+
+class TestRemoveNullGuardGuardLineMode:
+    """Tests for _mutate_from_guard_line — the primary path where line_idx
+    points at the null-guard head, not the dereference."""
+
+    def _call_guard(self, src: str, guard_line_1based: int):
+        """Call handler with the guard line as target (Seeder primary mode)."""
+        lines = src.splitlines(keepends=True)
+        return _mutate_remove_null_guard(lines, guard_line_1based - 1)
+
+    # --- Inline guard (single line: if (!ptr) return;) ---
+
+    def test_inline_guard_returns_result(self):
+        src = textwrap.dedent("""\
+            void f(Node *ptr) {
+                if (!ptr) return;
+                ptr->value = 1;
+            }
+        """)
+        r = self._call_guard(src, 2)  # guard is line 2
+        assert r is not None
+        assert "/* CWE-476: null guard removed */" in r.mutated_fragment
+
+    def test_inline_guard_extra_fields(self):
+        src = textwrap.dedent("""\
+            void f(Node *ptr) {
+                if (!ptr) return;
+                ptr->value = 1;
+            }
+        """)
+        r = self._call_guard(src, 2)
+        assert r is not None
+        assert r.extra["guard_line"] == 2
+        assert r.extra["guarded_pointer"] == "ptr"
+        assert r.extra["multiline"] is False
+
+    def test_inline_guard_only_guard_replaced(self):
+        src = textwrap.dedent("""\
+            void f(Node *ptr) {
+                if (!ptr) return;
+                ptr->value = 1;
+            }
+        """)
+        r = self._call_guard(src, 2)
+        assert r is not None
+        # Guard at 0-based index 1 replaced; deref line untouched
+        assert 1 in r.line_replacements
+        assert 2 not in r.line_replacements
+
+    def test_inline_guard_null_eq_ptr_form(self):
+        src = textwrap.dedent("""\
+            void g(Node *p) {
+                if (NULL == p) return;
+                p->next = NULL;
+            }
+        """)
+        r = self._call_guard(src, 2)
+        assert r is not None
+        assert r.extra["guarded_pointer"] == "p"
+
+    def test_inline_guard_ptr_eq_null_form(self):
+        src = textwrap.dedent("""\
+            void g(Node *p) {
+                if (p == NULL) return;
+                p->next = NULL;
+            }
+        """)
+        r = self._call_guard(src, 2)
+        assert r is not None
+
+    # --- Multiline guard: body on next line ---
+
+    def test_multiline_guard_return_null_form(self):
+        src = textwrap.dedent("""\
+            Node *f(Node *ptr) {
+                if (!ptr)
+                    return NULL;
+                ptr->value = 1;
+                return ptr;
+            }
+        """)
+        r = self._call_guard(src, 2)  # guard head at line 2
+        assert r is not None
+        assert "/* CWE-476: null guard removed */" in r.mutated_fragment
+
+    def test_multiline_guard_body_lines_blanked(self):
+        src = textwrap.dedent("""\
+            Node *f(Node *ptr) {
+                if (!ptr)
+                    return NULL;
+                ptr->value = 1;
+                return ptr;
+            }
+        """)
+        r = self._call_guard(src, 2)
+        assert r is not None
+        # Guard head at 0-based 1, body at 0-based 2 → both in replacements
+        assert 1 in r.line_replacements
+        assert 2 in r.line_replacements
+        assert r.line_replacements[2] == "\n"  # body blanked to empty line
+
+    def test_multiline_guard_extra_multiline_true(self):
+        src = textwrap.dedent("""\
+            Node *f(Node *ptr) {
+                if (!ptr)
+                    return NULL;
+                ptr->value = 1;
+                return ptr;
+            }
+        """)
+        r = self._call_guard(src, 2)
+        assert r is not None
+        assert r.extra["multiline"] is True
+        assert 3 in r.extra["body_lines"]  # body is at 1-based line 3
+
+    def test_multiline_guard_break_form(self):
+        src = textwrap.dedent("""\
+            void f(Node *ptr) {
+                if (!ptr)
+                    break;
+                ptr->value = 0;
+            }
+        """)
+        r = self._call_guard(src, 2)
+        assert r is not None
+        assert r.extra["multiline"] is True
+
+    # --- No-deref-following → should return None ---
+
+    def test_guard_with_no_deref_following_returns_none(self):
+        src = textwrap.dedent("""\
+            void f(Node *ptr) {
+                if (!ptr) return;
+                int x = 5;
+            }
+        """)
+        r = self._call_guard(src, 2)
+        assert r is None
+
+    def test_guard_with_intervening_code_returns_none(self):
+        src = textwrap.dedent("""\
+            void f(Node *ptr) {
+                if (!ptr) return;
+                log("msg");
+                ptr->value = 1;
+            }
+        """)
+        r = self._call_guard(src, 2)
+        assert r is None
+
+    # --- Patcher integration: guard line used as PatchTarget ---
+
+    def test_patcher_with_guard_line_target(self, tmp_path):
+        c_src = textwrap.dedent("""\
+            #include <stdlib.h>
+            typedef struct { int val; } Node;
+            Node *process(Node *ptr) {
+                if (!ptr)
+                    return NULL;
+                ptr->val = 42;
+                return ptr;
+            }
+        """)
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        (src_dir / "node.c").write_text(c_src, encoding="utf-8")
+        bad = tmp_path / "bad"
+        good = tmp_path / "good"
+
+        from insert_me.pipeline.seeder import PatchTarget, PatchTargetList
+
+        # Guard head is at line 4 (1-based): "    if (!ptr)"
+        target = PatchTarget(
+            file=Path("node.c"),
+            line=4,
+            mutation_strategy="remove_null_guard",
+            score=0.7,
+        )
+        ptl = PatchTargetList(targets=[target], source_root=src_dir)
+        patcher = Patcher(ptl, bad, good)
+        result = patcher.run()
+
+        assert len(result.mutations) == 1
+        bad_text = (bad / "node.c").read_text(encoding="utf-8")
+        assert "/* CWE-476: null guard removed */" in bad_text
+        assert "if (!ptr)" not in bad_text
+        # Body line (return NULL;) should be gone
+        assert "return NULL;" not in bad_text

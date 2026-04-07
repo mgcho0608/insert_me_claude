@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0",
+  "result_id": "vr-4d83204e4de18ecd",
+  "run_id": "4d83204e4de18ecd",
+  "plan_id": "plan-4d83204e4de18ecd",
+  "overall": "FAIL",
+  "checks": [
+    {
+      "name": "mutation_applied",
+      "status": "fail",
+      "reason": "Patcher ran but applied 0 mutations (1 target(s) skipped — incompatible line or unknown strategy)."
+    }
+  ]
+}

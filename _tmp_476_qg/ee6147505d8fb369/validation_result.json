@@ -1,0 +1,34 @@
+{
+  "schema_version": "1.0",
+  "result_id": "vr-ee6147505d8fb369",
+  "run_id": "ee6147505d8fb369",
+  "plan_id": "plan-ee6147505d8fb369",
+  "overall": "PASS",
+  "checks": [
+    {
+      "name": "mutation_applied",
+      "status": "pass",
+      "reason": "1 mutation(s) applied."
+    },
+    {
+      "name": "good_tree_integrity",
+      "status": "pass",
+      "reason": "good/graph.c is byte-identical to the original source."
+    },
+    {
+      "name": "bad_tree_changed",
+      "status": "pass",
+      "reason": "bad/graph.c contains the expected mutation and differs from good/."
+    },
+    {
+      "name": "mutation_scope",
+      "status": "pass",
+      "reason": "Exactly 1 file changed: graph.c"
+    },
+    {
+      "name": "simple_syntax_sanity",
+      "status": "pass",
+      "reason": "Mutated line 264 has balanced parentheses."
+    }
+  ]
+}

@@ -306,9 +306,45 @@ cwe416_tb_005 so the seeder searches only dynarray.c and strmap.c for those seed
 
 ---
 
+## IFL-009 — CWE-476 handler/Seeder direction mismatch (100% NOOP)
+
+**Observed:** All CWE-476 seeds produced NOOP audit results. The SeedSynthesizer found 2 cases (graph.c:264, graph.c:255) but the pipeline returned NOOP for both.
+
+**Evidence:** Seeder `null_guard` pattern targets the guard head line (`if (!ptr) return;`). But `_mutate_remove_null_guard` called `_patcher_extract_pointer_name(target_line)` expecting a dereference line (`ptr->field`). A guard line contains no `->` or `*ptr` form, so extraction always returned None, triggering an early return.
+
+**Root cause:** Handler and Seeder disagreed on what the `line_idx` points to. Handler assumed dereference line (backward scan mode); Seeder provided guard line.
+
+**Fix:** Redesigned `_mutate_remove_null_guard` as a dual-mode dispatcher:
+- Primary mode (`_mutate_from_guard_line`): `line_idx` is guard head → forward scans for deref.
+- Backward-compat mode (`_mutate_from_deref_line`): `line_idx` is dereference → backward scan for guard (original behavior preserved for existing tests).
+
+Added `_is_null_guard_body_line()` to classify `return`/`break`/`continue` body lines. Body lines on a separate line are blanked out in `line_replacements` to avoid leaving unreachable code.
+
+**Verification:** 42 tests in `test_patcher_cwe476.py` pass (30 original backward-compat + 12 new guard-line-mode tests). 8/8 sandbox CWE-476 seeds VALID.
+
+**Status:** FIXED (Phase 10)
+
+---
+
+## IFL-010 — `generate-corpus` broken `run_pipeline` call signature
+
+**Observed:** `generate-corpus` never actually executed any pipeline case. All cases counted as errors.
+
+**Evidence:** `_cmd_generate_corpus` called `run_pipeline(seed_spec=..., source_root=..., output_dir=..., config=...)` — this is not the actual `run_pipeline` signature.
+
+**Root cause:** `run_pipeline` signature is `run_pipeline(config: Config, *, dry_run: bool = False) -> BundlePaths`. The function call used keyword arguments that don't exist, causing a `TypeError` on every invocation.
+
+**Fix:** Rewrote `_cmd_generate_corpus` execution loop to use `load_config()` + `apply_cli_overrides()` + `run_pipeline(cfg, dry_run=False)`. Classification read from `bundle.audit_result` JSON file as in `_cmd_batch`.
+
+**Verification:** generate-corpus now produces `acceptance_summary.json` and `generation_diagnostics.json` with correct classification counts. E2E test validates these artifacts.
+
+**Status:** FIXED (Phase 10)
+
+---
+
 ## Open Issues
 
-No open issues at time of Phase 9 initial pass.
+No open issues at time of Phase 10 pass.
 
 ### Issue Template
 

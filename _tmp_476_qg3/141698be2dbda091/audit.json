@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "run_id": "141698be2dbda091",
+  "seed": 5,
+  "spec_path": "examples\\seeds\\sandbox\\cwe476_sb_005.json",
+  "spec_hash": "d006f5e2b2c60a21b91cd2031da64d65bc510b2115ebe497745a39ca05d5c04d",
+  "source_root": "examples\\sandbox_eval\\src",
+  "source_hash": "429c7630adfae14c",
+  "pipeline_version": "0.1.0.dev0",
+  "timestamp_utc": "2026-04-07T01:54:16Z",
+  "validation_verdict": {
+    "passed": true,
+    "checks": [
+      {
+        "name": "mutation_applied",
+        "status": "pass",
+        "reason": "1 mutation(s) applied."
+      },
+      {
+        "name": "good_tree_integrity",
+        "status": "pass",
+        "reason": "good/queue.c is byte-identical to the original source."
+      },
+      {
+        "name": "bad_tree_changed",
+        "status": "pass",
+        "reason": "bad/queue.c contains the expected mutation and differs from good/."
+      },
+      {
+        "name": "mutation_scope",
+        "status": "pass",
+        "reason": "Exactly 1 file changed: queue.c"
+      },
+      {
+        "name": "simple_syntax_sanity",
+        "status": "pass",
+        "reason": "Mutated line 196 has balanced parentheses."
+      }
+    ]
+  }
+}

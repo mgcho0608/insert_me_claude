@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "audit_id": "ar-915a0627c44c2066",
+  "run_id": "915a0627c44c2066",
+  "classification": "NOOP",
+  "confidence": "low",
+  "evidence": [
+    {
+      "source": "seeder",
+      "observation": "No mutations were applied: run is in dry-run mode, no compatible target was found for the mutation strategy, or the source tree contains no C/C++ files.",
+      "weight": "neutral"
+    }
+  ],
+  "reviewer": {
+    "type": "deterministic",
+    "name": "auditor_phase6_v1"
+  },
+  "audited_at": "2026-04-07T01:52:11Z"
+}

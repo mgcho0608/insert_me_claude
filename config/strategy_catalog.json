@@ -103,23 +103,22 @@
       "cwe_id": "CWE-476",
       "cwe_name": "NULL Pointer Dereference",
       "vulnerability_class": "Memory Safety -- Null Dereference",
-      "maturity": "IMPLEMENTED_EXPERIMENTAL",
+      "maturity": "IMPLEMENTED_AND_CORPUS_ADMITTED",
       "pattern_type": "null_guard",
-      "suitable_for_planning": false,
-      "description": "Replaces a null-check guard (if (!ptr) return;) with a comment, leaving a NULL dereference reachable at the subsequent ptr->field line. Uses the multi-line handler API.",
+      "suitable_for_planning": true,
+      "description": "Replaces a null-check guard (if (!ptr) return; or multiline form) with a comment, leaving a NULL dereference reachable at the subsequent ptr->field line. Dual-mode handler supports both inline and multiline guard forms.",
       "juliet_rationale": "Mirrors Juliet CWE476 patterns: null pointer dereference after a guard that protects a subsequent pointer use.",
-      "source_pattern": "if (!ptr) return; or if (ptr == NULL) return; immediately before a ptr->field dereference",
-      "sink_pattern": "ptr->field or *ptr on the line following the removed guard",
+      "source_pattern": "if (!ptr) return; (inline) or if (!ptr)\\n    return NULL; (multiline) immediately before a ptr->field dereference",
+      "sink_pattern": "ptr->field or *ptr on the line following the removed guard (guard head and body lines both blanked for multiline form)",
       "juliet_coverage": "CWE476_NULL_Pointer_Dereference__*",
       "deterministic": true,
-      "quality_gate_pass_rate": null,
-      "corpus_cases": 0,
-      "corpus_admission_blocker": "Handler only matches single-line inline guards. Sandbox files predominantly use multi-line guard style. Only 1 viable target found across 9 sandbox files.",
+      "quality_gate_pass_rate": 1.0,
+      "corpus_cases": 8,
       "common_failure_modes": [
-        "Multi-line guard style (if (!ptr) followed by return NULL; on next line) -- handler misses these",
-        "Guard followed by abort() rather than return -- no deref after the guard"
+        "Guard followed by function call rather than pointer dereference -- patcher correctly returns NOOP",
+        "Guard followed by abort() rather than return -- body not classified as return/break/continue, scan fails"
       ],
-      "notes": "Implemented and unit-tested. NOT corpus-admitted. Requires handler enhancement for multi-line guard bodies."
+      "notes": "Corpus-admitted in Phase 10. Dual-mode handler: primary mode targets guard lines (Seeder null_guard pattern); backward-compat mode targets deref lines. 8 sandbox seeds, 8/8 VALID quality gate."
     },
     {
       "strategy_id": null,

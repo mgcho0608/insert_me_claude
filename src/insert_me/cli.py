@@ -1265,6 +1265,7 @@ def _cmd_plan_corpus(args: argparse.Namespace) -> int:
 
 def _cmd_generate_corpus(args: argparse.Namespace) -> int:
     """Plan + execute: synthesise a corpus plan then run the batch pipeline."""
+    import json as _json
     from insert_me.planning import CorpusPlanner, PlanConstraints
     from insert_me.config import load_config, apply_cli_overrides
     from insert_me.pipeline import run_pipeline
@@ -1322,40 +1323,67 @@ def _cmd_generate_corpus(args: argparse.Namespace) -> int:
 
     if dry_run:
         print("[insert-me] --dry-run: skipping batch execution.")
+        # Still write acceptance_summary for dry-run
+        _write_acceptance_summary(
+            output_root, plan, attempted=0, case_outcomes={},
+            shortfall_categories=_compute_plan_shortfall(plan),
+        )
         return 0
 
     # --- Phase 2: Execute ---
     print(f"\n[insert-me] [2/2] executing {plan.planned_count} cases ...")
-    accepted = 0
-    rejected = 0
-    errors = 0
 
-    cfg = load_config()
-    for case in plan.cases:
+    # Per-case outcome tracking for diagnostics
+    case_outcomes: dict[str, dict] = {}  # case_id -> {classification, strategy, file, error}
+
+    for idx, case in enumerate(plan.cases, 1):
         seed_path = plan_dir / case.seed_file
+        outcome: dict = {
+            "strategy": case.strategy,
+            "target_file": case.target_file,
+            "classification": "ERROR",
+            "error": None,
+        }
         if not seed_path.exists():
-            errors += 1
+            outcome["error"] = f"seed file missing: {seed_path}"
+            case_outcomes[case.case_id] = outcome
+            print(f"  [{idx:>3}] ERROR   {case.case_id} — seed file missing")
             continue
-        try:
-            import json as _json
-            seed_spec = _json.loads(seed_path.read_text(encoding="utf-8"))
-            run_dir = output_root / case.case_id
-            result = run_pipeline(
-                seed_spec=seed_spec,
-                source_root=source,
-                output_dir=run_dir,
-                config=cfg,
-            )
-            classification = getattr(result, "classification", "UNKNOWN")
-            if classification in ("VALID", "ACCEPT", "ACCEPT_WITH_NOTES"):
-                accepted += 1
-            else:
-                rejected += 1
-        except Exception as exc:
-            print(f"  [error] {case.case_id}: {exc}", file=sys.stderr)
-            errors += 1
 
-    total = accepted + rejected + errors
+        try:
+            run_cfg = load_config(getattr(args, "config", None))
+            run_cfg = apply_cli_overrides(
+                run_cfg,
+                seed_file=seed_path,
+                source_path=source,
+                output_root=output_root / "cases",
+                no_llm=getattr(args, "no_llm", False),
+            )
+            bundle = run_pipeline(run_cfg, dry_run=False)
+
+            # Read the real classification from the audit_result artifact
+            classification = "UNKNOWN"
+            if bundle.audit_result.exists():
+                ar = _json.loads(bundle.audit_result.read_text(encoding="utf-8"))
+                classification = ar.get("classification", "UNKNOWN")
+
+            outcome["classification"] = classification
+            status = "OK  " if classification == "VALID" else "NOOP" if classification == "NOOP" else "FAIL"
+            print(f"  [{idx:>3}] {status}  {case.case_id}  [{classification}]")
+
+        except Exception as exc:
+            outcome["error"] = str(exc)
+            print(f"  [{idx:>3}] ERROR   {case.case_id}: {str(exc)[:60]}", file=sys.stderr)
+
+        case_outcomes[case.case_id] = outcome
+
+    # Tally results
+    accepted = sum(1 for o in case_outcomes.values() if o["classification"] == "VALID")
+    rejected = sum(1 for o in case_outcomes.values()
+                   if o["classification"] not in ("VALID", "ERROR") and o["error"] is None)
+    errors   = sum(1 for o in case_outcomes.values() if o["error"] is not None)
+    total = len(case_outcomes)
+
     print(f"\n  requested  : {plan.requested_count}")
     print(f"  planned    : {plan.planned_count}")
     print(f"  executed   : {total}")
@@ -1365,32 +1393,213 @@ def _cmd_generate_corpus(args: argparse.Namespace) -> int:
         print(f"  errors     : {errors}")
     print(f"\n[insert-me] corpus written to: {output_root}")
 
-    # Write acceptance_summary.json
-    import json as _json2
+    shortfall_cats = _compute_plan_shortfall(plan)
+    _write_acceptance_summary(output_root, plan, total, case_outcomes, shortfall_cats)
+    _write_generation_diagnostics(output_root, plan, case_outcomes, shortfall_cats)
+
+    summary_path = output_root / "acceptance_summary.json"
+    diag_path = output_root / "generation_diagnostics.json"
+    print(f"  acceptance_summary.json    : {summary_path}")
+    print(f"  generation_diagnostics.json: {diag_path}")
+
+    return 0 if errors == 0 else 1
+
+
+def _compute_plan_shortfall(plan) -> dict[str, int]:
+    """
+    Attribute shortfall between requested_count and planned_count to categories.
+
+    Returns a dict of {category: count}.
+    """
+    from insert_me.planning.inspector import VIABLE, LIMITED, BLOCKED
+
+    cats: dict[str, int] = {}
+    shortfall = plan.requested_count - plan.planned_count
+    if shortfall <= 0:
+        return cats
+
+    # Attribute shortfall to why strategies are BLOCKED or have limited capacity
+    blocked_strategies = [
+        s for s, suit in plan.suitability.items() if suit == BLOCKED
+    ]
+    limited_strategies = [
+        s for s, suit in plan.suitability.items() if suit == LIMITED
+    ]
+    experimental = [
+        s for s, suit in plan.suitability.items() if suit == "EXPERIMENTAL"
+    ]
+
+    if blocked_strategies:
+        cats["strategy_blocked_no_candidates"] = len(blocked_strategies)
+    if limited_strategies:
+        cats["strategy_limited_few_candidates"] = len(limited_strategies)
+    if experimental:
+        cats["experimental_strategy_skipped"] = len(experimental)
+    if plan.warnings:
+        for w in plan.warnings:
+            if "diverse" in w.lower() or "max-per-file" in w.lower():
+                cats["concentration_limits"] = cats.get("concentration_limits", 0) + 1
+            if "insufficient" in w.lower() or "cannot" in w.lower():
+                cats["target_too_small"] = cats.get("target_too_small", 0) + 1
+    if not cats and shortfall > 0:
+        cats["sweep_exhausted"] = shortfall
+
+    return cats
+
+
+def _write_acceptance_summary(
+    output_root: Path,
+    plan,
+    attempted: int,
+    case_outcomes: dict,
+    shortfall_categories: dict,
+) -> None:
+    """Write acceptance_summary.json with full per-strategy and per-file breakdown."""
+    import json as _json
+
+    # Per-strategy tally
+    by_strategy: dict[str, dict[str, int]] = {}
+    for case_id, outcome in case_outcomes.items():
+        strat = outcome.get("strategy", "unknown")
+        if strat not in by_strategy:
+            by_strategy[strat] = {"accepted": 0, "rejected": 0, "error": 0}
+        cl = outcome.get("classification", "ERROR")
+        err = outcome.get("error")
+        if err:
+            by_strategy[strat]["error"] += 1
+        elif cl == "VALID":
+            by_strategy[strat]["accepted"] += 1
+        else:
+            by_strategy[strat]["rejected"] += 1
+
+    # Per-file tally
+    by_file: dict[str, dict[str, int]] = {}
+    for case_id, outcome in case_outcomes.items():
+        fname = outcome.get("target_file", "unknown")
+        if fname not in by_file:
+            by_file[fname] = {"accepted": 0, "rejected": 0, "error": 0}
+        cl = outcome.get("classification", "ERROR")
+        err = outcome.get("error")
+        if err:
+            by_file[fname]["error"] += 1
+        elif cl == "VALID":
+            by_file[fname]["accepted"] += 1
+        else:
+            by_file[fname]["rejected"] += 1
+
+    accepted = sum(v["accepted"] for v in by_strategy.values())
+    rejected = sum(v["rejected"] for v in by_strategy.values())
+    errors   = sum(v["error"] for v in by_strategy.values())
+
     summary = {
         "schema_version": "1.0",
-        "source_root": str(source.resolve()),
+        "source_root": str((output_root / "..").resolve()),
         "requested_count": plan.requested_count,
         "planned_count": plan.planned_count,
         "projected_accepted_count": plan.projected_accepted_count,
-        "attempted_count": total,
+        "attempted_count": attempted,
         "accepted_count": accepted,
+        "revised_count": 0,
         "rejected_count": rejected,
         "error_count": errors,
         "unresolved_count": 0,
         "honest": plan.planned_count < plan.requested_count,
+        "shortfall_categories": shortfall_categories,
         "shortfall_message": (
             next((w for w in plan.warnings if "Only" in w and "cases planned" in w), None)
         ),
         "strategy_allocation": plan.strategy_allocation,
-        "plan_path": str(plan_dir / "corpus_plan.json"),
+        "by_strategy": by_strategy,
+        "by_file": by_file,
+        "plan_path": str(output_root / "_plan" / "corpus_plan.json"),
     }
-    summary_path = output_root / "acceptance_summary.json"
     output_root.mkdir(parents=True, exist_ok=True)
-    summary_path.write_text(_json2.dumps(summary, indent=2), encoding="utf-8")
-    print(f"  acceptance_summary.json: {summary_path}")
+    (output_root / "acceptance_summary.json").write_text(
+        _json.dumps(summary, indent=2), encoding="utf-8"
+    )
 
-    return 0 if errors == 0 else 1
+
+def _write_generation_diagnostics(
+    output_root: Path,
+    plan,
+    case_outcomes: dict,
+    shortfall_categories: dict,
+) -> None:
+    """
+    Write generation_diagnostics.json explaining plan-vs-outcome drift.
+
+    Attributes execution failures to grounded categories:
+    - patcher_noop: Seeder found no compatible target (plan/target mismatch)
+    - validator_fail: Validator checks failed (bad mutation quality)
+    - audit_ambiguous: Audit classified as AMBIGUOUS
+    - audit_invalid: Audit classified as INVALID
+    - pipeline_error: Exception during pipeline execution
+    """
+    import json as _json
+
+    # Attribute each non-accepted case to a category
+    plan_shortfall = plan.requested_count - plan.planned_count
+    exec_shortfall = plan.planned_count - sum(
+        1 for o in case_outcomes.values()
+        if o.get("classification") == "VALID" and not o.get("error")
+    )
+
+    categories: dict[str, list[str]] = {
+        "patcher_noop": [],
+        "validator_fail": [],
+        "audit_ambiguous": [],
+        "audit_invalid": [],
+        "pipeline_error": [],
+        "unknown": [],
+    }
+
+    for case_id, outcome in case_outcomes.items():
+        cl = outcome.get("classification", "UNKNOWN")
+        err = outcome.get("error")
+        if err:
+            categories["pipeline_error"].append(f"{case_id}: {str(err)[:80]}")
+        elif cl == "VALID":
+            pass  # accepted — no issue
+        elif cl == "NOOP":
+            categories["patcher_noop"].append(case_id)
+        elif cl == "INVALID":
+            categories["audit_invalid"].append(case_id)
+        elif cl == "AMBIGUOUS":
+            categories["audit_ambiguous"].append(case_id)
+        else:
+            categories["unknown"].append(f"{case_id}: classification={cl!r}")
+
+    # Summarise strategy suitability for plan shortfall context
+    strategy_suitability = {
+        s: plan.suitability.get(s, "UNKNOWN")
+        for s in plan.strategy_allocation
+    }
+
+    diag = {
+        "schema_version": "1.0",
+        "source_root": str((output_root / "..").resolve()),
+        "requested_count": plan.requested_count,
+        "planned_count": plan.planned_count,
+        "attempted_count": len(case_outcomes),
+        "accepted_count": sum(
+            1 for o in case_outcomes.values()
+            if o.get("classification") == "VALID" and not o.get("error")
+        ),
+        "plan_shortfall": plan_shortfall,
+        "execution_shortfall": max(0, exec_shortfall),
+        "plan_shortfall_categories": shortfall_categories,
+        "execution_failure_categories": {
+            k: {"count": len(v), "cases": v}
+            for k, v in categories.items()
+            if v
+        },
+        "strategy_suitability": strategy_suitability,
+        "plan_warnings": plan.warnings,
+        "plan_blockers": plan.blockers,
+    }
+    (output_root / "generation_diagnostics.json").write_text(
+        _json.dumps(diag, indent=2), encoding="utf-8"
+    )
 
 
 # ---------------------------------------------------------------------------

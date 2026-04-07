@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0",
+  "audit_id": "ar-141698be2dbda091",
+  "run_id": "141698be2dbda091",
+  "classification": "VALID",
+  "confidence": "medium",
+  "evidence": [
+    {
+      "source": "validator",
+      "observation": "Validator passed all 5 plausibility checks.",
+      "weight": "strong"
+    },
+    {
+      "source": "patcher",
+      "observation": "Patcher applied 1 mutation(s) using strategy 'remove_null_guard'.",
+      "weight": "moderate"
+    }
+  ],
+  "reviewer": {
+    "type": "deterministic",
+    "name": "auditor_phase6_v1"
+  },
+  "audited_at": "2026-04-07T01:54:16Z"
+}

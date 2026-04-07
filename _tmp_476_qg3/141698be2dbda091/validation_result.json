@@ -1,0 +1,34 @@
+{
+  "schema_version": "1.0",
+  "result_id": "vr-141698be2dbda091",
+  "run_id": "141698be2dbda091",
+  "plan_id": "plan-141698be2dbda091",
+  "overall": "PASS",
+  "checks": [
+    {
+      "name": "mutation_applied",
+      "status": "pass",
+      "reason": "1 mutation(s) applied."
+    },
+    {
+      "name": "good_tree_integrity",
+      "status": "pass",
+      "reason": "good/queue.c is byte-identical to the original source."
+    },
+    {
+      "name": "bad_tree_changed",
+      "status": "pass",
+      "reason": "bad/queue.c contains the expected mutation and differs from good/."
+    },
+    {
+      "name": "mutation_scope",
+      "status": "pass",
+      "reason": "Exactly 1 file changed: queue.c"
+    },
+    {
+      "name": "simple_syntax_sanity",
+      "status": "pass",
+      "reason": "Mutated line 196 has balanced parentheses."
+    }
+  ]
+}

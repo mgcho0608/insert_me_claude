@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "run_id": "141698be2dbda091",
+  "cwe_id": "CWE-476",
+  "spec_id": "cwe476-sandbox-queue-element-005",
+  "seed": 5,
+  "mutations": [
+    {
+      "file": "queue.c",
+      "line": 196,
+      "mutation_type": "remove_null_guard",
+      "original_fragment": "    if (!e)",
+      "mutated_fragment": "/* CWE-476: null guard removed */",
+      "extra": {
+        "guard_line": 196,
+        "deref_line": -1,
+        "guarded_pointer": "e",
+        "multiline": true,
+        "body_lines": [
+          197
+        ]
+      }
+    }
+  ],
+  "validation_passed": true
+}

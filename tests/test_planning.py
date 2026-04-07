@@ -650,23 +650,23 @@ class TestStrategyCatalogSchema:
 
     def test_catalog_has_10_plus_entries(self):
         root = Path(__file__).parent.parent
-        catalog = json.loads((root / "config" / "strategy_catalog.json").read_text())
+        catalog = json.loads((root / "config" / "strategy_catalog.json").read_text(encoding="utf-8"))
         assert len(catalog["strategies"]) >= 10, (
             f"Expected >= 10 strategy entries, got {len(catalog['strategies'])}"
         )
 
-    def test_catalog_has_4_corpus_admitted(self):
+    def test_catalog_has_5_corpus_admitted(self):
         root = Path(__file__).parent.parent
-        catalog = json.loads((root / "config" / "strategy_catalog.json").read_text())
+        catalog = json.loads((root / "config" / "strategy_catalog.json").read_text(encoding="utf-8"))
         admitted = [
             s for s in catalog["strategies"]
             if s["maturity"] == "IMPLEMENTED_AND_CORPUS_ADMITTED"
         ]
-        assert len(admitted) == 4, f"Expected 4 corpus-admitted, got {len(admitted)}"
+        assert len(admitted) == 5, f"Expected 5 corpus-admitted, got {len(admitted)}"
 
     def test_catalog_admitted_strategies_have_corpus_cases(self):
         root = Path(__file__).parent.parent
-        catalog = json.loads((root / "config" / "strategy_catalog.json").read_text())
+        catalog = json.loads((root / "config" / "strategy_catalog.json").read_text(encoding="utf-8"))
         for s in catalog["strategies"]:
             if s["maturity"] == "IMPLEMENTED_AND_CORPUS_ADMITTED":
                 assert s["corpus_cases"] > 0, (
@@ -675,13 +675,13 @@ class TestStrategyCatalogSchema:
 
     def test_catalog_schema_version_is_2_0(self):
         root = Path(__file__).parent.parent
-        catalog = json.loads((root / "config" / "strategy_catalog.json").read_text())
+        catalog = json.loads((root / "config" / "strategy_catalog.json").read_text(encoding="utf-8"))
         assert catalog["schema_version"] == "2.0"
 
     def test_catalog_all_cwe_ids_valid_format(self):
         import re
         root = Path(__file__).parent.parent
-        catalog = json.loads((root / "config" / "strategy_catalog.json").read_text())
+        catalog = json.loads((root / "config" / "strategy_catalog.json").read_text(encoding="utf-8"))
         pattern = re.compile(r"^CWE-\d+$")
         for s in catalog["strategies"]:
             assert pattern.match(s["cwe_id"]), (

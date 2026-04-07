@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "seed_id": "cwe476-sandbox-queue-element-005",
+  "seed": 5,
+  "cwe_id": "CWE-476",
+  "vulnerability_class": "NULL Pointer Dereference",
+  "description": "Remove the null guard in a queue function: the guard protecting a queue element pointer from NULL dereference. Removing it allows NULL pointer dereference when queue operations receive invalid elements.",
+  "mutation_strategy": "remove_null_guard",
+  "target_pattern": {
+    "pattern_type": "null_guard",
+    "require_function_scope": true,
+    "min_candidate_score": 0.7
+  },
+  "source_constraints": {
+    "file_patterns": ["*.c", "*.cpp"],
+    "exclude_patterns": ["*test*", "*_test.*", "*mock*", "*stub*", "*graph*"],
+    "max_targets": 1
+  },
+  "metadata": {
+    "tags": ["null-deref", "guard-removal", "multiline-guard", "sandbox-eval"],
+    "difficulty": "easy",
+    "notes": "Targets queue.c:196 — multiline guard protecting queue element dereference. graph.c excluded to ensure multiline guard coverage.",
+    "references": ["https://cwe.mitre.org/data/definitions/476.html"]
+  }
+}

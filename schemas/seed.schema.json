@@ -62,6 +62,7 @@
             "realloc_call",
             "free_call",
             "pointer_deref",
+            "null_guard",
             "array_index",
             "integer_arithmetic",
             "string_operation",

@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "seed_id": "cwe476-sandbox-graph-add-edge-008",
+  "seed": 8,
+  "cwe_id": "CWE-476",
+  "vulnerability_class": "NULL Pointer Dereference",
+  "description": "Remove the null guard protecting a graph edge pointer: the guard 'if (!e)' with a return body protects e->src or e->dst from NULL dereference. Removing it allows NULL pointer dereference when edge allocation fails.",
+  "mutation_strategy": "remove_null_guard",
+  "target_pattern": {
+    "pattern_type": "null_guard",
+    "require_function_scope": true,
+    "min_candidate_score": 0.7
+  },
+  "source_constraints": {
+    "file_patterns": ["*.c", "*.cpp"],
+    "exclude_patterns": ["*test*", "*_test.*", "*mock*", "*stub*"],
+    "max_targets": 1
+  },
+  "metadata": {
+    "tags": ["null-deref", "guard-removal", "multiline-guard", "sandbox-eval"],
+    "difficulty": "medium",
+    "notes": "Targets graph.c — multiline guard 'if (!e)\\n    return;' protecting edge struct member dereference.",
+    "references": ["https://cwe.mitre.org/data/definitions/476.html"]
+  }
+}

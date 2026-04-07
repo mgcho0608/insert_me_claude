@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "plan_id": "plan-141698be2dbda091",
+  "run_id": "141698be2dbda091",
+  "seed_id": "cwe476-sandbox-queue-element-005",
+  "seed": 5,
+  "status": "APPLIED",
+  "created_at": "2026-04-07T01:54:16Z",
+  "targets": [
+    {
+      "target_id": "t0001",
+      "file": "queue.c",
+      "line": 196,
+      "mutation_strategy": "remove_null_guard",
+      "candidate_score": 0.8,
+      "context": {
+        "expression": "if (!e)",
+        "function_name": "pq_entry_free",
+        "guarded_pointer": "e"
+      }
+    }
+  ],
+  "skipped_candidates": 41,
+  "source_tree_hash": "429c7630adfae14c"
+}

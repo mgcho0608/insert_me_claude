@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "seed_id": "cwe476-sandbox-graph-print-vertex-001",
+  "seed": 1,
+  "cwe_id": "CWE-476",
+  "vulnerability_class": "NULL Pointer Dereference",
+  "description": "Remove the null guard in graph_print_vertex(): the check 'if (!v) return;' prevents a NULL dereference of v->label. Removing it allows callers to trigger a NULL dereference when passing an invalid vertex pointer.",
+  "mutation_strategy": "remove_null_guard",
+  "target_pattern": {
+    "pattern_type": "null_guard",
+    "require_function_scope": true,
+    "min_candidate_score": 0.8
+  },
+  "source_constraints": {
+    "file_patterns": ["*.c", "*.cpp"],
+    "exclude_patterns": ["*test*", "*_test.*", "*mock*", "*stub*"],
+    "max_targets": 1
+  },
+  "metadata": {
+    "tags": ["null-deref", "guard-removal", "sandbox-eval"],
+    "difficulty": "easy",
+    "notes": "Targets graph.c:255 — inline guard 'if (!v) return;' followed by v->label dereference.",
+    "references": ["https://cwe.mitre.org/data/definitions/476.html"]
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "plan_id": "plan-b239fccdd593f6e9",
+  "run_id": "b239fccdd593f6e9",
+  "seed_id": "cwe476-sandbox-htable-init-007",
+  "seed": 16,
+  "status": "APPLIED",
+  "created_at": "2026-04-07T01:54:16Z",
+  "targets": [
+    {
+      "target_id": "t0001",
+      "file": "htable.c",
+      "line": 46,
+      "mutation_strategy": "remove_null_guard",
+      "candidate_score": 0.8,
+      "context": {
+        "expression": "if (!t)",
+        "function_name": "htable_new",
+        "guarded_pointer": "t"
+      }
+    }
+  ],
+  "skipped_candidates": 41,
+  "source_tree_hash": "429c7630adfae14c"
+}

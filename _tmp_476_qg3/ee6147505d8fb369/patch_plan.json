@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "plan_id": "plan-ee6147505d8fb369",
+  "run_id": "ee6147505d8fb369",
+  "seed_id": "cwe476-sandbox-list-init-003",
+  "seed": 3,
+  "status": "APPLIED",
+  "created_at": "2026-04-07T01:54:15Z",
+  "targets": [
+    {
+      "target_id": "t0001",
+      "file": "graph.c",
+      "line": 264,
+      "mutation_strategy": "remove_null_guard",
+      "candidate_score": 1.0,
+      "context": {
+        "expression": "if (!g) return;",
+        "function_name": "graph_free",
+        "guarded_pointer": "g"
+      }
+    }
+  ],
+  "skipped_candidates": 53,
+  "source_tree_hash": "b1dc7a8c914dc0b7"
+}

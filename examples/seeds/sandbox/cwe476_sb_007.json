@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "seed_id": "cwe476-sandbox-htable-init-007",
+  "seed": 16,
+  "cwe_id": "CWE-476",
+  "vulnerability_class": "NULL Pointer Dereference",
+  "description": "Remove the null guard in a hash table init function: the guard 'if (!t)' with a return body protects t->buckets from NULL dereference. Removing it allows callers passing NULL to crash.",
+  "mutation_strategy": "remove_null_guard",
+  "target_pattern": {
+    "pattern_type": "null_guard",
+    "require_function_scope": true,
+    "min_candidate_score": 0.7
+  },
+  "source_constraints": {
+    "file_patterns": ["*.c", "*.cpp"],
+    "exclude_patterns": ["*test*", "*_test.*", "*mock*", "*stub*", "*graph*"],
+    "max_targets": 1
+  },
+  "metadata": {
+    "tags": ["null-deref", "guard-removal", "multiline-guard", "sandbox-eval"],
+    "difficulty": "easy",
+    "notes": "Targets htable.c:46 — multiline guard 'if (!t)\\n    return NULL;' protecting t->buckets dereference. graph.c excluded to ensure multiline guard coverage.",
+    "references": ["https://cwe.mitre.org/data/definitions/476.html"]
+  }
+}

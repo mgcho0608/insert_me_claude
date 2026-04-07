@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "run_id": "330e1e58a579795b",
+  "seed": 1,
+  "spec_path": "examples\\seeds\\sandbox\\cwe476_sb_001.json",
+  "spec_hash": "b4572e87aa263dbe3f6a786dba77c84373e4844268cb4b0d8897a5abb4c69cb8",
+  "source_root": "examples\\sandbox_eval\\src",
+  "source_hash": "b1dc7a8c914dc0b7",
+  "pipeline_version": "0.1.0.dev0",
+  "timestamp_utc": "2026-04-07T01:54:15Z",
+  "validation_verdict": {
+    "passed": true,
+    "checks": [
+      {
+        "name": "mutation_applied",
+        "status": "pass",
+        "reason": "1 mutation(s) applied."
+      },
+      {
+        "name": "good_tree_integrity",
+        "status": "pass",
+        "reason": "good/graph.c is byte-identical to the original source."
+      },
+      {
+        "name": "bad_tree_changed",
+        "status": "pass",
+        "reason": "bad/graph.c contains the expected mutation and differs from good/."
+      },
+      {
+        "name": "mutation_scope",
+        "status": "pass",
+        "reason": "Exactly 1 file changed: graph.c"
+      },
+      {
+        "name": "simple_syntax_sanity",
+        "status": "pass",
+        "reason": "Mutated line 264 has balanced parentheses."
+      }
+    ]
+  }
+}

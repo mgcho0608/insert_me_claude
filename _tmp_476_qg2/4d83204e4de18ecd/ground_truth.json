@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0",
+  "run_id": "4d83204e4de18ecd",
+  "cwe_id": "CWE-476",
+  "spec_id": "cwe476-sandbox-htable-init-005",
+  "seed": 5,
+  "mutations": [],
+  "validation_passed": false
+}

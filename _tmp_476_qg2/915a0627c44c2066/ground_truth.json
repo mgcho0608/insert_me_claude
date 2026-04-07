@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0",
+  "run_id": "915a0627c44c2066",
+  "cwe_id": "CWE-476",
+  "spec_id": "cwe476-sandbox-strbuf-init-007",
+  "seed": 7,
+  "mutations": [],
+  "validation_passed": false
+}
