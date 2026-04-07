@@ -1,6 +1,6 @@
 # Reproducibility Runbook — insert_me Corpus Generation
 
-> **Phase:** 8 — Reliability, Reproducibility, and Corpus-Quality Hardening  
+> **Phase:** 9 + Phase 4c partial  
 > **Audience:** Engineers reproducing or extending the sandbox corpus without prior
 > familiarity with the insert_me pipeline.
 >
@@ -44,8 +44,11 @@ After cloning, the relevant directories are:
 ```
 insert_me/
 ├── examples/
-│   ├── sandbox_eval/src/       ← evaluation-only C source files (Sandbox Target A)
-│   └── seeds/sandbox/          ← 30 seed files for corpus generation
+│   ├── sandbox_eval/src/            ← evaluation-only C source files (Sandbox Target A, 6 files)
+│   ├── sandbox_targets/target_b/src/ ← Sandbox Target B (3 files)
+│   └── seeds/
+│       ├── sandbox/                 ← 40 seed files for Sandbox Target A
+│       └── target_b/                ← 15 seed files for Sandbox Target B
 ├── docs/
 │   ├── corpus_quality_gate.md  ← acceptance rubric
 │   ├── issue_fix_log.md        ← issues found and fixed during hardening
@@ -104,7 +107,7 @@ EOF
 
 ## 4. Running the Full Corpus Batch
 
-### 4.1 Run all 30 seeds with quality gate
+### 4.1 Run all 40 seeds (Sandbox Target A) with quality gate
 
 ```bash
 python scripts/generate_corpus.py \
@@ -112,6 +115,16 @@ python scripts/generate_corpus.py \
   --source-root examples/sandbox_eval/src \
   --output-dir  output/corpus \
   --manifest    examples/corpus_manifest.json
+```
+
+To run Sandbox Target B (15 seeds):
+
+```bash
+python scripts/generate_corpus.py \
+  --seeds-dir  examples/seeds/target_b \
+  --source-root examples/sandbox_targets/target_b/src \
+  --output-dir  output/corpus_target_b \
+  --manifest    examples/corpus_manifest_target_b.json
 ```
 
 Expected output:
@@ -133,7 +146,7 @@ python scripts/generate_corpus.py \
   --source-root examples/sandbox_eval/src \
   --output-dir  output/corpus \
   --manifest    examples/corpus_manifest.json \
-  --batch-sizes 2,5,10,20,30
+  --batch-sizes 2,5,10,20,30,40
 ```
 
 This pauses after each cumulative checkpoint (2, then 5, then 10, etc.) and prints
@@ -321,22 +334,35 @@ To reproduce the exact accepted corpus from scratch:
 
 ```bash
 # 1. Start from a clean output directory
-rm -rf output/corpus output/repro_check
+rm -rf output/corpus output/corpus_target_b output/repro_check
 
-# 2. Run the full corpus batch
+# 2a. Run Sandbox Target A (40 seeds)
 python scripts/generate_corpus.py \
   --seeds-dir   examples/seeds/sandbox \
   --source-root examples/sandbox_eval/src \
   --output-dir  output/corpus \
   --manifest    examples/corpus_manifest.json
 
-# 3. Verify reproducibility
+# 2b. Run Sandbox Target B (15 seeds)
+python scripts/generate_corpus.py \
+  --seeds-dir   examples/seeds/target_b \
+  --source-root examples/sandbox_targets/target_b/src \
+  --output-dir  output/corpus_target_b \
+  --manifest    examples/corpus_manifest_target_b.json
+
+# 3a. Verify reproducibility for Target A
 python scripts/check_reproducibility.py \
   --seeds-dir   examples/seeds/sandbox \
   --source-root examples/sandbox_eval/src
+
+# 3b. Verify reproducibility for Target B
+python scripts/check_reproducibility.py \
+  --seeds-dir   examples/seeds/target_b \
+  --source-root examples/sandbox_targets/target_b/src
 
 # 4. Run tests to confirm nothing regressed
 python -m pytest tests/ -q
 ```
 
-All three commands should succeed with exit code 0.
+All commands should succeed with exit code 0. Combined accepted corpus: 55 cases
+(40 Target A + 15 Target B), 100% ACCEPT or ACCEPT_WITH_NOTES, 55/55 reproducibility PASS.

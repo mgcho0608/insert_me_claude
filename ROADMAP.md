@@ -299,9 +299,9 @@ All deterministic artifacts are byte-identical in both modes.
 - [x] 100% accept rate on both sandbox targets (0 REJECT across all 55 seeds)
 - [x] Regression tests for CWE-415 and CWE-401 in `tests/test_patcher_cwe415_cwe401.py`
 - [x] `generate_corpus.py` and `check_reproducibility.py` — strategy catalog updated to include all 4 strategies
-- [x] 427 tests passing
+- [x] 427 tests passing at Phase 8 completion (468 total after Phase 4c partial work in same session)
 
-**Exit criterion met:** 4 strategies implemented (CWE-122/416/415/401); 55 seeds across 2 sandbox targets all ACCEPT or ACCEPT_WITH_NOTES; 55/55 reproducibility PASS across 3 runs each.
+**Exit criterion met:** 4 corpus-admitted strategies implemented (CWE-122/416/415/401); 55 seeds across 2 sandbox targets all ACCEPT or ACCEPT_WITH_NOTES; 55/55 reproducibility PASS across 3 runs each.
 
 ---
 
@@ -313,7 +313,7 @@ All deterministic artifacts are byte-identical in both modes.
 - [x] Reproducibility script (`scripts/check_reproducibility.py`) — verifies byte-identical output across N runs
 - [x] Corpus manifest (`examples/corpus_manifest.json`) aggregating all run IDs
 - [x] Duplicate detection across runs (implemented in `generate_corpus.py`)
-- [ ] `insert-me batch` CLI subcommand (`insert-me batch --seed-dir PATH --source PATH`) — scripts/generate_corpus.py covers this use case until CLI is added
+- [x] `insert-me batch` CLI subcommand (`insert-me batch --seed-dir PATH --source PATH`) — implemented in `cli.py`; dry-run mode supported; exit 0 iff all seeds produce VALID (or NOOP in dry-run)
 - [ ] Parallel execution with deterministic output (process-level parallelism)
 - [ ] `corpus_index.json` format distinct from corpus manifest — deferred
 

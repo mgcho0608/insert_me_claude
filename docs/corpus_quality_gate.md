@@ -1,7 +1,7 @@
 # Corpus Quality Gate — insert_me
 
-> **Version:** 1.0  
-> **Phase:** 8 — Reliability, Reproducibility, and Corpus-Quality Hardening  
+> **Version:** 1.1  
+> **Phase:** 9 + Phase 4c partial  
 > **Applies to:** Seeded cases generated from evaluation-only sandbox targets
 
 This document defines the formal acceptance rubric for every case in the insert_me corpus.  
@@ -81,9 +81,13 @@ changes.
 
 **Verification:** Automated  
 - `ground_truth.json → mutations[0].original_fragment != mutations[0].mutated_fragment`  
-- `mutation_type` is a known strategy: `alloc_size_undercount` or `insert_premature_free`  
+- `mutation_type` is a known corpus-admitted strategy:  
+  `alloc_size_undercount`, `insert_premature_free`, `insert_double_free`, `remove_free_call`  
+  (or `remove_null_guard` if experimental seed is explicitly admitted)  
 - For `alloc_size_undercount`: mutated fragment matches pattern `malloc((...) - 1)`  
-- For `insert_premature_free`: mutated fragment is exactly `free(<ptr>);`
+- For `insert_premature_free`: mutated fragment is exactly `free(<ptr>);`  
+- For `insert_double_free`: mutated fragment is exactly `free(<ptr>);` (duplicate before existing free)  
+- For `remove_free_call`: mutated fragment is a `/* CWE-401: free(ptr) removed */` comment
 
 **REJECT if:** original and mutated fragments are identical.  
 **REVISE if:** mutation_type is unknown or fragment patterns do not match expectations.

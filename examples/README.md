@@ -2,7 +2,7 @@
 
 ---
 
-## Current phase (Phase 7A — Juliet identity + per-project evaluation foundation)
+## Current phase (Phase 9 + Phase 4c partial — batch CLI, multi-line patcher, 5 strategies)
 
 All four core pipeline stages are implemented.  You can run the pipeline today and get
 **a complete output bundle**: real bad/good source trees, `validation_result.json` from
@@ -89,9 +89,15 @@ One extra line in `bad/`; all other content identical.
 
 | File | CWE | Pattern type | Strategy | Status |
 |---|---|---|---|---|
-| `cwe122_heap_overflow.json` | CWE-122 Heap Buffer Overflow | `malloc_call` | `alloc_size_undercount` | implemented |
-| `cwe416_use_after_free.json` | CWE-416 Use After Free | `pointer_deref` | `insert_premature_free` | implemented |
-| `cwe190_integer_overflow.json` | CWE-190 Integer Overflow | `integer_arithmetic` | `integer_size_overflow` | not yet implemented |
+| `cwe122_heap_overflow.json` | CWE-122 Heap Buffer Overflow | `malloc_call` | `alloc_size_undercount` | corpus-admitted |
+| `cwe416_use_after_free.json` | CWE-416 Use After Free | `pointer_deref` | `insert_premature_free` | corpus-admitted |
+| `cwe415_double_free.json` | CWE-415 Double Free | `free_call` | `insert_double_free` | corpus-admitted |
+| `cwe401_memory_leak.json` | CWE-401 Memory Leak | `free_call` | `remove_free_call` | corpus-admitted |
+| `cwe476_null_deref.json` | CWE-476 NULL Pointer Dereference | `null_guard` | `remove_null_guard` | experimental — not corpus-admitted |
+| `cwe190_integer_overflow.json` | CWE-190 Integer Overflow | `malloc_call` | *(planned)* | planned |
+
+Corpus-admitted strategies have sandbox seeds under `examples/seeds/sandbox/` and `examples/seeds/target_b/`.
+`remove_null_guard` is implemented but not yet corpus-admitted (handler only matches single-line inline guards; see `docs/strategy_catalog.md` for details).
 
 These seed files are valid inputs to `insert-me run --seed-file`.
 
@@ -170,6 +176,6 @@ The following examples will be added as later pipeline stages are implemented:
 
 | Example | Phase | Description |
 |---|---|---|
-| `basic_cwe122/` | Phase 8 | Additional CWE seeds exercising new strategies |
 | `custom_adapter/` | Phase 7B | Custom LLM adapter wiring example (labels.json enrichment) |
-| `multi_target/` | Phase 4b | Larger source tree, multiple ranked candidates |
+| `cwe476_sandbox_seeds/` | Phase 4c-remaining | CWE-476 sandbox seeds (requires handler enhancement for multi-line guards) |
+| `cwe190_seeds/` | Phase 4c-remaining | CWE-190 integer overflow guard removal seeds |

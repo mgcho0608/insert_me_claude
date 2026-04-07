@@ -13,22 +13,22 @@ regardless of which optional components are active.
 
 ## Current Implementation Status
 
-**Phase 8 — Reliability, Reproducibility, and Corpus-Quality Hardening: complete.**
-Full pipeline operational with a formal quality gate, operator-independent batch generation
-workflow, verified reproducibility, and a 30-case accepted sandbox corpus.
-Seeder quality improved with three additional scoring penalties (loop-body, sub-malloc,
-function-signature extraction fixed). All 30 corpus cases ACCEPT; 30/30 reproducibility PASS.
+**Phase 9 + Phase 4c partial: complete.**
+Full pipeline operational: 5 mutation strategies (4 corpus-admitted, 1 experimental),
+multi-line patcher infrastructure, `insert-me batch` CLI, 2 sandbox targets,
+55-seed accepted corpus (100% ACCEPT/ACCEPT_WITH_NOTES), 55/55 reproducibility PASS.
+468 tests passing.
 
 | Pipeline stage | Status | Notes |
 |---|---|---|
-| Seeder | **Complete** (Phase 3, hardened Phase 8) | Lexical/regex source scan; loop-body / sub-malloc / conditional-guard penalties; function-name extraction fixed |
-| Patcher | **Phase 4b** | `alloc_size_undercount` (CWE-122) + `insert_premature_free` (CWE-416); one mutation per run |
+| Seeder | **Complete** (Phase 3, hardened Phase 8) | 11 pattern types incl. `null_guard`; free_call/loop-body/sub-malloc scoring penalties |
+| Patcher | **Phase 4b/8/4c partial** | 4 corpus-admitted strategies (CWE-122/416/415/401) + 1 experimental (`remove_null_guard` CWE-476); multi-line handler infrastructure in place |
 | Validator | **Complete** (Phase 5) | Five deterministic checks; no compiler required |
 | Auditor | **Complete** (Phase 6) | Deterministic slice; writes ground_truth, audit, audit_result |
 | Evaluator | **Complete** (Phase 7A) | Optional separate step; compares detector reports against ground truth |
 | Adjudicator | **Phase 7B-prep** | `HeuristicAdjudicator` (offline default) · `DisabledAdjudicator` · `LLMAdjudicator` placeholder |
 | LLM Adapter | Interface only | `NoOpAdapter` always available; LLM enrichment (labels.json) deferred to Phase 7B |
-| Corpus tooling | **Phase 8** | `scripts/generate_corpus.py` (batch gen + quality gate) · `scripts/check_reproducibility.py` · `examples/corpus_manifest.json` |
+| Corpus tooling | **Phase 8/9** | `scripts/generate_corpus.py` (batch gen + quality gate) · `scripts/check_reproducibility.py` · `insert-me batch` CLI · `examples/corpus_manifest.json` |
 
 The pipeline orchestrator (`pipeline/__init__.py`) coordinates all four stages.
 Each stage's `run()` method is implemented and called in sequence.
@@ -99,29 +99,30 @@ Each stage's `run()` method is implemented and called in sequence.
 
 No LLM calls.  No file writes.  `Seeder.run()` is fully implemented.
 
-### Patcher (`pipeline/patcher.py`) — Phase 4b
+### Patcher (`pipeline/patcher.py`) — Phase 4b/8/4c partial
 
 **Deterministic.**
 
 - Copies source_root byte-identically to `good/`.
-- Copies source_root to `bad/` and applies one line-level mutation to the first compatible target.
+- Copies source_root to `bad/` and applies one mutation to the first compatible target.
 - Output: `PatchResult` — paths to bad/good trees, list of `Mutation` records (0 or 1).
+- Supports both **single-line handlers** (`_STRATEGY_HANDLERS`) and **multi-line handlers** (`_MULTILINE_STRATEGY_HANDLERS`). Multi-line handlers receive `(lines, line_idx)` and may modify any line in the file via `MultilineMutationResult.line_replacements`.
 
 **Implemented strategies:**
 
-| Strategy | CWE | Rule |
-|---|---|---|
-| `alloc_size_undercount` | CWE-122 | `malloc(<expr>)` → `malloc((<expr>) - 1)` |
-| `insert_premature_free` | CWE-416 | Insert `free(ptr);` immediately before a pointer dereference |
+| Strategy | CWE | Handler type | Corpus status | Rule |
+|---|---|---|---|---|
+| `alloc_size_undercount` | CWE-122 | single-line | corpus-admitted | `malloc(<expr>)` → `malloc((<expr>) - 1)` |
+| `insert_premature_free` | CWE-416 | single-line | corpus-admitted | Insert `free(ptr);` before a pointer dereference |
+| `insert_double_free` | CWE-415 | single-line | corpus-admitted | Insert duplicate `free(ptr);` before existing free |
+| `remove_free_call` | CWE-401 | single-line | corpus-admitted | Replace `free(ptr);` with a memory-leak comment |
+| `remove_null_guard` | CWE-476 | multi-line | experimental | Replace preceding null-check guard (`if (!ptr) return;`) with a comment |
 
-**Phase 4 scope limits:**
-- One mutation per run (first compatible target only).
-- No AST parser — regex + paren-counting only.
-- If the target line has no applicable dereference/malloc call, or the strategy is unrecognised,
-  the target is added to `skipped_targets` and `bad/` remains identical to `good/`.
+One mutation per run (first compatible target only). No AST parser — regex + paren-counting only.
+If the strategy is unrecognised or cannot be applied, the target is moved to `skipped_targets`.
 
-Additional strategies (integer overflow variants, etc.) are registered in `_STRATEGY_HANDLERS`
-when implemented.
+Additional strategies are registered in `_STRATEGY_HANDLERS` (single-line) or
+`_MULTILINE_STRATEGY_HANDLERS` (multi-line) when implemented.
 
 ### Validator (`pipeline/validator.py`) — Phase 5 COMPLETE
 
@@ -242,7 +243,7 @@ seed.json + source tree
 | Component | Deterministic? | LLM-dependent? | Implemented? | Output artifact |
 |---|---|---|---|---|
 | Seeder | Yes | No | **Yes (Phase 3)** | `patch_plan.json` |
-| Patcher | Yes | No | **Yes (Phase 4b)** | `bad/` `good/` trees |
+| Patcher | Yes | No | **Yes (Phase 4b/8/4c)** | `bad/` `good/` trees |
 | Validator (rule checks) | Yes | No | **Yes (Phase 5)** | `validation_result.json` |
 | Validator (soft score) | No | Optional | Deferred (Phase 7+) | adds field to `validation_result.json` |
 | Auditor (structural) | Yes | No | **Yes (Phase 6)** | `ground_truth.json` `audit.json` `audit_result.json` |
@@ -279,14 +280,14 @@ This also means:
 ```
 src/insert_me/
 ├── __init__.py          # Package version, public re-exports
-├── cli.py               # CLI entrypoint (argparse) — run/validate-bundle/audit/evaluate
+├── cli.py               # CLI entrypoint (argparse) — run/batch/validate-bundle/audit/evaluate
 ├── config.py            # Config loader + dataclass (TOML + CLI overrides)
 ├── schema.py            # Schema loader, artifact validation, validate_bundle()
 ├── artifacts.py         # BundlePaths, run ID derivation, write_json_artifact
 ├── pipeline/
 │   ├── __init__.py      # Orchestrator — run_pipeline() [Phases 3–6 wired]
 │   ├── seeder.py        # Seeder, PatchTarget, PatchTargetList  [Phase 3: COMPLETE]
-│   ├── patcher.py       # Patcher, Mutation, PatchResult        [Phase 4b: two strategies]
+│   ├── patcher.py       # Patcher, Mutation, PatchResult, MultilineMutationResult [Phase 4b/8/4c: 5 strategies]
 │   ├── validator.py     # Validator, ValidationVerdict           [Phase 5: COMPLETE]
 │   ├── auditor.py       # Auditor, GroundTruthRecord, AuditRecord [Phase 6: COMPLETE]
 │   └── evaluator.py     # shim — re-exports from evaluation/    [backward compat]
