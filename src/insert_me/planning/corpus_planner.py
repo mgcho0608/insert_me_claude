@@ -145,6 +145,49 @@ class CorpusPlan:
             },
         }
 
+    @classmethod
+    def from_dict(cls, d: dict) -> "CorpusPlan":
+        """Reconstruct a CorpusPlan from a corpus_plan.json dict (for replay)."""
+        c_dict = d.get("constraints", {})
+        constraints = PlanConstraints(
+            max_per_file=c_dict.get("max_per_file", 5),
+            max_per_function=c_dict.get("max_per_function", 2),
+            max_per_family=c_dict.get("max_per_family"),
+            allow_strategies=c_dict.get("allow_strategies"),
+            disallow_strategies=c_dict.get("disallow_strategies"),
+            min_candidate_score=c_dict.get("min_candidate_score", 0.0),
+            strict_quality=c_dict.get("strict_quality", False),
+        )
+        alloc_summary = d.get("allocation_summary", {})
+        cases = [
+            PlanCase(
+                case_id=c["case_id"],
+                strategy=c["strategy"],
+                cwe_id=c["cwe_id"],
+                seed_integer=c["seed_integer"],
+                target_file=c["target_file"],
+                target_line=c["target_line"],
+                function_name=c.get("function_name", ""),
+                candidate_score=c["candidate_score"],
+                confidence=c["confidence"],
+                seed_file=c["seed_file"],
+            )
+            for c in d.get("cases", [])
+        ]
+        return cls(
+            source_root=d["source_root"],
+            source_hash=d["source_hash"],
+            requested_count=d["requested_count"],
+            planned_count=d["planned_count"],
+            projected_accepted_count=d["projected_accepted_count"],
+            constraints=constraints,
+            strategy_allocation=d.get("strategy_allocation", {}),
+            suitability=d.get("suitability", {}),
+            cases=cases,
+            blockers=alloc_summary.get("blockers", []),
+            warnings=alloc_summary.get("warnings", []),
+        )
+
     def write(self, output_dir: Path) -> None:
         """
         Write corpus_plan.json and one seed file per planned case.

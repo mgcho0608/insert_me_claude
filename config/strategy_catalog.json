@@ -1,6 +1,6 @@
 {
   "schema_version": "2.0",
-  "catalog_version": "phase-9-final",
+  "catalog_version": "phase-12",
   "description": "insert_me mutation strategy catalog. Each entry describes one CWE family, its current implementation maturity, Juliet-derived rationale, and planning-layer suitability metadata.",
   "maturity_levels": {
     "IMPLEMENTED_AND_CORPUS_ADMITTED": "Implemented in patcher.py, has sandbox seeds, quality gate pass rate >= 80%, reproducibility 100%, corpus-admitted. Suitable for planning layer.",
@@ -118,7 +118,7 @@
         "Guard followed by function call rather than pointer dereference -- patcher correctly returns NOOP",
         "Guard followed by abort() rather than return -- body not classified as return/break/continue, scan fails"
       ],
-      "notes": "Corpus-admitted in Phase 10. Dual-mode handler: primary mode targets guard lines (Seeder null_guard pattern); backward-compat mode targets deref lines. 8 sandbox seeds, 8/8 VALID quality gate."
+      "notes": "Corpus-admitted in Phase 10. Dual-mode handler: primary mode targets guard lines (Seeder null_guard pattern); backward-compat mode targets deref lines. 8 sandbox seeds, 8/8 VALID quality gate. Phase 12: validated VIABLE on target_b (bstree.c, dynarray.c, strmap.c) with 5/5 VALID."
     },
     {
       "strategy_id": null,

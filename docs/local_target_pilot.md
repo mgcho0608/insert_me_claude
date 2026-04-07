@@ -400,18 +400,38 @@ Three diagnostic files are written to `corpus_out/`:
 | `audit_invalid` | Auditor classified the mutation as INVALID |
 | `pipeline_error` | Exception during pipeline execution |
 
-### Step 6: Rerun from a saved plan
+### Step 6: Replay from a saved plan
 
-To rerun the execution phase with the same plan (e.g., after a tool fix):
+Phase 12 introduced first-class replay: re-execute the exact same cases in the same order
+without re-running the planning phase.
 
 ```bash
-# Plan artifacts are in corpus_out/_plan/
-# Re-execute using the batch command:
-insert-me batch \
-  --seed-dir  corpus_out/_plan/seeds/ \
-  --source    /path/to/local/project \
-  --output    corpus_out/cases_rerun/
+# Replay using --from-plan (directory form):
+insert-me generate-corpus \
+  --from-plan corpus_out/_plan/ \
+  --output-root corpus_out_replay/ \
+  --no-llm
+
+# Or point directly at the plan file:
+insert-me generate-corpus \
+  --from-plan corpus_out/_plan/corpus_plan.json \
+  --output-root corpus_out_replay/ \
+  --no-llm
+
+# If the source tree has moved, override --source:
+insert-me generate-corpus \
+  --from-plan corpus_out/_plan/ \
+  --source /new/path/to/project \
+  --output-root corpus_out_replay/ \
+  --no-llm
 ```
+
+The replay run writes the same set of artifacts as a generate run
+(`acceptance_summary.json`, `generation_diagnostics.json`, `shortfall_report.json`,
+`corpus_index.json`), but `corpus_index.json` will show `"run_mode": "replay"`.
+
+The `corpus_index.json` artifact written by every run includes a `replay_command` field
+with the exact command needed to reproduce that run.
 
 ---
 

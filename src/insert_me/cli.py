@@ -388,23 +388,34 @@ def _build_parser() -> argparse.ArgumentParser:
     gen_p.add_argument(
         "--source",
         type=Path,
-        required=True,
+        default=None,
         metavar="PATH",
-        help="Root of the C/C++ source tree.",
+        help="Root of the C/C++ source tree. Required unless --from-plan is given.",
     )
     gen_p.add_argument(
         "--count",
         type=int,
-        required=True,
+        default=None,
         metavar="N",
-        help="Target number of corpus cases.",
+        help="Target number of corpus cases. Required unless --from-plan is given.",
+    )
+    gen_p.add_argument(
+        "--from-plan",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help=(
+            "Replay an existing corpus plan. PATH may be corpus_plan.json or "
+            "the directory containing it. Skips re-planning; re-executes the "
+            "same cases in the same order."
+        ),
     )
     gen_p.add_argument(
         "--output-root",
         type=Path,
         default=None,
         metavar="PATH",
-        help="Root directory for plan and generated bundles (default: ./corpus_output/).",
+        help="Root directory for plan and generated bundles (default: ./corpus_out/).",
     )
     gen_p.add_argument(
         "--no-llm",
@@ -1264,13 +1275,31 @@ def _cmd_plan_corpus(args: argparse.Namespace) -> int:
 
 
 def _cmd_generate_corpus(args: argparse.Namespace) -> int:
-    """Plan + execute: synthesise a corpus plan then run the batch pipeline."""
+    """Plan + execute (or replay): synthesise a corpus plan then run the batch pipeline."""
     import json as _json
     from insert_me.planning import CorpusPlanner, PlanConstraints
-    from insert_me.config import load_config, apply_cli_overrides
-    from insert_me.pipeline import run_pipeline
+    from insert_me.planning.corpus_planner import CorpusPlan
 
-    source: Path = args.source
+    dry_run: bool = args.dry_run
+    from_plan: Path | None = getattr(args, "from_plan", None)
+
+    # ------------------------------------------------------------------
+    # Mode A: Replay from existing plan
+    # ------------------------------------------------------------------
+    if from_plan is not None:
+        return _cmd_generate_corpus_replay(args, from_plan, dry_run)
+
+    # ------------------------------------------------------------------
+    # Mode B: Fresh plan + execute
+    # ------------------------------------------------------------------
+    source: Path | None = args.source
+    count: int | None = args.count
+    if source is None:
+        print("[insert-me] error: --source is required unless --from-plan is given.", file=sys.stderr)
+        return 1
+    if count is None:
+        print("[insert-me] error: --count is required unless --from-plan is given.", file=sys.stderr)
+        return 1
     if not source.exists():
         print(f"[insert-me] error: --source not found: {source}", file=sys.stderr)
         return 1
@@ -1280,7 +1309,6 @@ def _cmd_generate_corpus(args: argparse.Namespace) -> int:
 
     output_root: Path = args.output_root or (Path.cwd() / "corpus_out")
     plan_dir = output_root / "_plan"
-    dry_run: bool = args.dry_run
 
     def _parse_strategy_list_gen(val: str | None) -> list[str] | None:
         if val is None:
@@ -1298,10 +1326,10 @@ def _cmd_generate_corpus(args: argparse.Namespace) -> int:
     )
 
     # --- Phase 1: Plan ---
-    print(f"[insert-me] [1/2] planning {args.count} cases for {source} ...")
+    print(f"[insert-me] [1/2] planning {count} cases for {source} ...")
     planner = CorpusPlanner(
         source_root=source,
-        requested_count=args.count,
+        requested_count=count,
         constraints=constraints,
     )
     plan = planner.plan()
@@ -1321,6 +1349,9 @@ def _cmd_generate_corpus(args: argparse.Namespace) -> int:
     plan.write(plan_dir)
     print(f"  plan written to: {plan_dir}")
 
+    plan_file = plan_dir / "corpus_plan.json"
+    run_mode = "generate"
+
     if dry_run:
         print("[insert-me] --dry-run: skipping batch execution.")
         shortfall_cats_dry = _compute_plan_shortfall(plan)
@@ -1332,13 +1363,84 @@ def _cmd_generate_corpus(args: argparse.Namespace) -> int:
             output_root, plan, attempted=0, case_outcomes={},
             plan_shortfall_cats=shortfall_cats_dry,
         )
+        _write_corpus_index(output_root, plan, 0, {}, "dry-run", plan_file)
         return 0
 
     # --- Phase 2: Execute ---
-    print(f"\n[insert-me] [2/2] executing {plan.planned_count} cases ...")
+    case_outcomes = _execute_plan_cases(args, plan, plan_dir, source, output_root)
+    return _finish_generate_corpus(output_root, plan, case_outcomes, run_mode, plan_file)
 
-    # Per-case outcome tracking for diagnostics
-    case_outcomes: dict[str, dict] = {}  # case_id -> {classification, strategy, file, error}
+
+def _cmd_generate_corpus_replay(
+    args: argparse.Namespace,
+    from_plan: Path,
+    dry_run: bool,
+) -> int:
+    """Replay an existing corpus plan: skip re-planning, re-execute cases."""
+    import json as _json
+    from insert_me.planning.corpus_planner import CorpusPlan
+
+    # Resolve the plan file
+    if from_plan.is_dir():
+        plan_file = from_plan / "corpus_plan.json"
+    else:
+        plan_file = from_plan
+    if not plan_file.exists():
+        print(f"[insert-me] error: corpus_plan.json not found: {plan_file}", file=sys.stderr)
+        return 1
+
+    plan_data = _json.loads(plan_file.read_text(encoding="utf-8"))
+    plan = CorpusPlan.from_dict(plan_data)
+    plan_dir = plan_file.parent
+
+    # Source: explicit --source overrides plan's source_root (for portability)
+    source: Path
+    if args.source is not None:
+        source = args.source
+    else:
+        source = Path(plan.source_root)
+    if not source.exists() or not source.is_dir():
+        print(f"[insert-me] error: source not found or not a directory: {source}", file=sys.stderr)
+        print("  Tip: use --source to specify an alternate source root.", file=sys.stderr)
+        return 1
+
+    output_root: Path = args.output_root or (Path.cwd() / "corpus_out_replay")
+
+    print(f"[insert-me] [replay] loading plan from: {plan_file}")
+    print(f"  {plan.planned_count} cases, requested {plan.requested_count}, source: {source}")
+
+    if dry_run:
+        print("[insert-me] --dry-run: plan loaded, skipping execution.")
+        shortfall_cats_dry = _compute_plan_shortfall(plan)
+        _write_acceptance_summary(
+            output_root, plan, attempted=0, case_outcomes={},
+            shortfall_categories=shortfall_cats_dry,
+        )
+        _write_shortfall_report(
+            output_root, plan, attempted=0, case_outcomes={},
+            plan_shortfall_cats=shortfall_cats_dry,
+        )
+        _write_corpus_index(output_root, plan, 0, {}, "dry-run-replay", plan_file)
+        return 0
+
+    print(f"\n[insert-me] [replay] executing {plan.planned_count} cases ...")
+    case_outcomes = _execute_plan_cases(args, plan, plan_dir, source, output_root)
+    return _finish_generate_corpus(output_root, plan, case_outcomes, "replay", plan_file)
+
+
+def _execute_plan_cases(
+    args: argparse.Namespace,
+    plan,
+    plan_dir: Path,
+    source: Path,
+    output_root: Path,
+) -> dict:
+    """Execute all cases in a plan, returning per-case outcome dict."""
+    import json as _json
+    from insert_me.config import load_config, apply_cli_overrides
+    from insert_me.pipeline import run_pipeline
+
+    case_outcomes: dict[str, dict] = {}
 
     for idx, case in enumerate(plan.cases, 1):
         seed_path = plan_dir / case.seed_file
@@ -1365,7 +1467,6 @@ def _cmd_generate_corpus(args: argparse.Namespace) -> int:
             )
             bundle = run_pipeline(run_cfg, dry_run=False)
 
-            # Read the real classification from the audit_result artifact
             classification = "UNKNOWN"
             if bundle.audit_result.exists():
                 ar = _json.loads(bundle.audit_result.read_text(encoding="utf-8"))
@@ -1381,11 +1482,22 @@ def _cmd_generate_corpus(args: argparse.Namespace) -> int:
 
         case_outcomes[case.case_id] = outcome
 
-    # Tally results
-    accepted = sum(1 for o in case_outcomes.values() if o["classification"] == "VALID")
+    return case_outcomes
+
+
+def _finish_generate_corpus(
+    output_root: Path,
+    plan,
+    case_outcomes: dict,
+    run_mode: str,
+    plan_file: Path,
+) -> int:
+    """Write all diagnostics artifacts and print summary. Returns exit code."""
+    accepted = sum(1 for o in case_outcomes.values() if o.get("classification") == "VALID")
     rejected = sum(1 for o in case_outcomes.values()
-                   if o["classification"] not in ("VALID", "ERROR") and o["error"] is None)
-    errors   = sum(1 for o in case_outcomes.values() if o["error"] is not None)
+                   if o.get("classification") not in ("VALID", "ERROR", "UNKNOWN")
+                   and o.get("error") is None)
+    errors   = sum(1 for o in case_outcomes.values() if o.get("error") is not None)
     total = len(case_outcomes)
 
     print(f"\n  requested  : {plan.requested_count}")
@@ -1401,15 +1513,124 @@ def _cmd_generate_corpus(args: argparse.Namespace) -> int:
     _write_acceptance_summary(output_root, plan, total, case_outcomes, shortfall_cats)
     _write_generation_diagnostics(output_root, plan, case_outcomes, shortfall_cats)
     _write_shortfall_report(output_root, plan, total, case_outcomes, shortfall_cats)
+    _write_corpus_index(output_root, plan, total, case_outcomes, run_mode, plan_file)
 
-    summary_path = output_root / "acceptance_summary.json"
-    diag_path = output_root / "generation_diagnostics.json"
-    shortfall_path = output_root / "shortfall_report.json"
-    print(f"  acceptance_summary.json    : {summary_path}")
-    print(f"  generation_diagnostics.json: {diag_path}")
-    print(f"  shortfall_report.json      : {shortfall_path}")
+    print(f"  acceptance_summary.json    : {output_root / 'acceptance_summary.json'}")
+    print(f"  generation_diagnostics.json: {output_root / 'generation_diagnostics.json'}")
+    print(f"  shortfall_report.json      : {output_root / 'shortfall_report.json'}")
+    print(f"  corpus_index.json          : {output_root / 'corpus_index.json'}")
 
     return 0 if errors == 0 else 1
+
+
+def _write_corpus_index(
+    output_root: Path,
+    plan,
+    attempted: int,
+    case_outcomes: dict,
+    run_mode: str,
+    plan_file: Path,
+) -> None:
+    """
+    Write corpus_index.json — machine-readable corpus manifest.
+
+    Captures target identity, plan identity, all counts, per-strategy/file
+    breakdowns, artifact locations, and reproducibility metadata.
+    """
+    import json as _json
+    import hashlib
+
+    accepted = sum(
+        1 for o in case_outcomes.values()
+        if o.get("classification") == "VALID" and not o.get("error")
+    )
+    rejected = sum(
+        1 for o in case_outcomes.values()
+        if o.get("classification") not in ("VALID", "ERROR", "UNKNOWN")
+        and not o.get("error")
+    )
+    errors = sum(1 for o in case_outcomes.values() if o.get("error") is not None)
+
+    # Per-strategy breakdown
+    per_strategy: dict[str, dict[str, int]] = {}
+    for outcome in case_outcomes.values():
+        s = outcome.get("strategy", "unknown")
+        if s not in per_strategy:
+            per_strategy[s] = {"attempted": 0, "accepted": 0, "rejected": 0, "error": 0}
+        per_strategy[s]["attempted"] += 1
+        cl = outcome.get("classification", "UNKNOWN")
+        err = outcome.get("error")
+        if err:
+            per_strategy[s]["error"] += 1
+        elif cl == "VALID":
+            per_strategy[s]["accepted"] += 1
+        else:
+            per_strategy[s]["rejected"] += 1
+
+    # Per-file breakdown
+    per_file: dict[str, dict[str, int]] = {}
+    for outcome in case_outcomes.values():
+        f = outcome.get("target_file", "unknown")
+        if f not in per_file:
+            per_file[f] = {"attempted": 0, "accepted": 0, "rejected": 0, "error": 0}
+        per_file[f]["attempted"] += 1
+        cl = outcome.get("classification", "UNKNOWN")
+        err = outcome.get("error")
+        if err:
+            per_file[f]["error"] += 1
+        elif cl == "VALID":
+            per_file[f]["accepted"] += 1
+        else:
+            per_file[f]["rejected"] += 1
+
+    # Plan hash (sha256 of corpus_plan.json bytes for reproducibility auditing)
+    plan_hash = "unknown"
+    if plan_file.exists():
+        plan_hash = hashlib.sha256(plan_file.read_bytes()).hexdigest()[:16]
+
+    replay_cmd = (
+        f"insert-me generate-corpus --from-plan {plan_file} "
+        f"--output-root {output_root}"
+    )
+
+    index = {
+        "schema_version": "1.0",
+        "run_mode": run_mode,
+        "source_root": plan.source_root,
+        "source_hash": plan.source_hash,
+        "plan_path": str(plan_file),
+        "plan_hash": plan_hash,
+        "counts": {
+            "requested": plan.requested_count,
+            "planned": plan.planned_count,
+            "attempted": attempted,
+            "accepted": accepted,
+            "rejected": rejected,
+            "errors": errors,
+        },
+        "per_strategy": per_strategy,
+        "per_file": per_file,
+        "artifacts": {
+            "corpus_plan": str(plan_file),
+            "acceptance_summary": str(output_root / "acceptance_summary.json"),
+            "generation_diagnostics": str(output_root / "generation_diagnostics.json"),
+            "shortfall_report": str(output_root / "shortfall_report.json"),
+            "corpus_index": str(output_root / "corpus_index.json"),
+            "cases_dir": str(output_root / "cases"),
+        },
+        "reproducibility": {
+            "deterministic": True,
+            "replay_command": replay_cmd,
+            "note": (
+                "Same source tree + same corpus_plan.json => same outputs. "
+                "Use --from-plan to replay this run exactly."
+            ),
+        },
+    }
+    output_root.mkdir(parents=True, exist_ok=True)
+    (output_root / "corpus_index.json").write_text(
+        _json.dumps(index, indent=2), encoding="utf-8"
+    )
 
 
 def _compute_plan_shortfall(plan) -> dict[str, int]:

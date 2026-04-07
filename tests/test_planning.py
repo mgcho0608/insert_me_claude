@@ -1056,3 +1056,202 @@ class TestGenerateCorpusLocalE2E:
         d = json.loads((tmp_path / "acceptance_summary.json").read_text(encoding="utf-8"))
         assert d["attempted_count"] == 0
         assert d["accepted_count"] == 0
+
+    def test_moderate_generate_corpus_index_written(self, tmp_path):
+        """corpus_index.json must be written with correct schema after execution."""
+        if not MODERATE_TARGET.exists():
+            pytest.skip("moderate target not found")
+        r = self._run_generate(MODERATE_TARGET, tmp_path, 5)
+        assert r.returncode in (0, 1)
+        index_path = tmp_path / "corpus_index.json"
+        assert index_path.exists(), "corpus_index.json not written"
+        d = json.loads(index_path.read_text(encoding="utf-8"))
+        for field in (
+            "schema_version", "run_mode", "source_root", "source_hash",
+            "plan_path", "plan_hash", "counts", "per_strategy", "per_file",
+            "artifacts", "reproducibility",
+        ):
+            assert field in d, f"corpus_index.json missing field: {field}"
+        assert d["run_mode"] == "generate"
+        for count_field in ("requested", "planned", "attempted", "accepted", "rejected", "errors"):
+            assert count_field in d["counts"], f"counts missing: {count_field}"
+        assert d["counts"]["requested"] == 5
+        assert "replay_command" in d["reproducibility"]
+
+
+class TestCorpusPlanFromDict:
+    """Tests for CorpusPlan.from_dict() — deserialization for replay."""
+
+    def test_from_dict_roundtrip(self):
+        """CorpusPlan.from_dict(plan.to_dict()) == original plan (key fields)."""
+        from insert_me.planning import CorpusPlanner, PlanConstraints
+        from insert_me.planning.corpus_planner import CorpusPlan
+
+        if not MODERATE_TARGET.exists():
+            pytest.skip("moderate target not found")
+
+        planner = CorpusPlanner(MODERATE_TARGET, requested_count=3)
+        plan = planner.plan()
+        d = plan.to_dict()
+        reloaded = CorpusPlan.from_dict(d)
+
+        assert reloaded.requested_count == plan.requested_count
+        assert reloaded.planned_count == plan.planned_count
+        assert reloaded.source_hash == plan.source_hash
+        assert len(reloaded.cases) == len(plan.cases)
+        for orig, reloaded_case in zip(plan.cases, reloaded.cases):
+            assert reloaded_case.case_id == orig.case_id
+            assert reloaded_case.strategy == orig.strategy
+            assert reloaded_case.seed_integer == orig.seed_integer
+            assert reloaded_case.target_file == orig.target_file
+            assert reloaded_case.target_line == orig.target_line
+
+    def test_from_dict_preserves_strategy_allocation(self):
+        from insert_me.planning import CorpusPlanner
+        from insert_me.planning.corpus_planner import CorpusPlan
+
+        if not MODERATE_TARGET.exists():
+            pytest.skip("moderate target not found")
+
+        plan = CorpusPlanner(MODERATE_TARGET, requested_count=3).plan()
+        reloaded = CorpusPlan.from_dict(plan.to_dict())
+        assert reloaded.strategy_allocation == plan.strategy_allocation
+
+    def test_from_dict_constraints_preserved(self):
+        from insert_me.planning import CorpusPlanner, PlanConstraints
+        from insert_me.planning.corpus_planner import CorpusPlan
+
+        if not MODERATE_TARGET.exists():
+            pytest.skip("moderate target not found")
+
+        constraints = PlanConstraints(max_per_file=3, max_per_function=1)
+        plan = CorpusPlanner(MODERATE_TARGET, requested_count=3, constraints=constraints).plan()
+        reloaded = CorpusPlan.from_dict(plan.to_dict())
+        assert reloaded.constraints.max_per_file == 3
+        assert reloaded.constraints.max_per_function == 1
+
+
+class TestReplayFromPlan:
+    """E2E tests: generate-corpus --from-plan on local target fixtures."""
+
+    def _run_generate(self, source, output_root, count, extra_args=()):
+        cmd = [
+            sys.executable, "-m", "insert_me.cli",
+            "generate-corpus",
+            "--source", str(source),
+            "--count", str(count),
+            "--output-root", str(output_root),
+            "--no-llm",
+        ] + list(extra_args)
+        return subprocess.run(
+            cmd, capture_output=True, text=True,
+            cwd=str(Path(__file__).parent.parent),
+            timeout=300,
+        )
+
+    def _run_replay(self, plan_path, output_root, extra_args=()):
+        cmd = [
+            sys.executable, "-m", "insert_me.cli",
+            "generate-corpus",
+            "--from-plan", str(plan_path),
+            "--output-root", str(output_root),
+            "--no-llm",
+        ] + list(extra_args)
+        return subprocess.run(
+            cmd, capture_output=True, text=True,
+            cwd=str(Path(__file__).parent.parent),
+            timeout=300,
+        )
+
+    def test_replay_exits_zero(self, tmp_path):
+        """--from-plan replay on moderate fixture should exit 0."""
+        if not MODERATE_TARGET.exists():
+            pytest.skip("moderate target not found")
+        out1 = tmp_path / "run1"
+        r1 = self._run_generate(MODERATE_TARGET, out1, 3)
+        assert r1.returncode == 0, f"Initial generate failed:\n{r1.stderr}"
+
+        plan_dir = out1 / "_plan"
+        out2 = tmp_path / "replay1"
+        r2 = self._run_replay(plan_dir, out2)
+        assert r2.returncode == 0, f"Replay failed:\n{r2.stderr}\n{r2.stdout}"
+
+    def test_replay_produces_same_case_count(self, tmp_path):
+        """Replay must execute exactly the same number of cases as the original run."""
+        if not MODERATE_TARGET.exists():
+            pytest.skip("moderate target not found")
+        out1 = tmp_path / "run1"
+        r1 = self._run_generate(MODERATE_TARGET, out1, 3)
+        assert r1.returncode in (0, 1), f"Generate failed: {r1.stderr}"
+
+        plan_dir = out1 / "_plan"
+        corpus_plan_file = plan_dir / "corpus_plan.json"
+        assert corpus_plan_file.exists(), "corpus_plan.json not written"
+        orig_plan = json.loads(corpus_plan_file.read_text(encoding="utf-8"))
+
+        out2 = tmp_path / "replay1"
+        r2 = self._run_replay(plan_dir, out2)
+        assert r2.returncode in (0, 1), f"Replay failed: {r2.stderr}"
+
+        # Replay acceptance summary should show same attempted count as planned
+        summary = json.loads((out2 / "acceptance_summary.json").read_text(encoding="utf-8"))
+        assert summary["planned_count"] == orig_plan["planned_count"], (
+            f"Replay planned_count {summary['planned_count']} != "
+            f"original {orig_plan['planned_count']}"
+        )
+
+    def test_replay_corpus_index_run_mode(self, tmp_path):
+        """corpus_index.json written by replay must show run_mode='replay'."""
+        if not MODERATE_TARGET.exists():
+            pytest.skip("moderate target not found")
+        out1 = tmp_path / "run1"
+        r1 = self._run_generate(MODERATE_TARGET, out1, 3)
+        assert r1.returncode in (0, 1)
+
+        plan_file = out1 / "_plan" / "corpus_plan.json"
+        if not plan_file.exists():
+            pytest.skip("corpus_plan.json not written")
+
+        out2 = tmp_path / "replay1"
+        r2 = self._run_replay(out1 / "_plan", out2)
+        assert r2.returncode in (0, 1), f"Replay failed: {r2.stderr}"
+
+        index_path = out2 / "corpus_index.json"
+        assert index_path.exists(), "corpus_index.json not written by replay"
+        d = json.loads(index_path.read_text(encoding="utf-8"))
+        assert d["run_mode"] == "replay", f"Expected run_mode='replay', got {d['run_mode']!r}"
+
+    def test_replay_dry_run(self, tmp_path):
+        """--from-plan --dry-run must load plan and write artifacts without executing."""
+        if not MODERATE_TARGET.exists():
+            pytest.skip("moderate target not found")
+        out1 = tmp_path / "run1"
+        r1 = self._run_generate(MODERATE_TARGET, out1, 3, extra_args=["--dry-run"])
+        assert r1.returncode == 0, f"Initial dry-run failed: {r1.stderr}"
+
+        plan_file = out1 / "_plan" / "corpus_plan.json"
+        if not plan_file.exists():
+            pytest.skip("corpus_plan.json not written")
+
+        out2 = tmp_path / "replay_dry"
+        r2 = self._run_replay(plan_file, out2, extra_args=["--dry-run"])
+        assert r2.returncode == 0, f"Replay dry-run failed: {r2.stderr}"
+        assert (out2 / "acceptance_summary.json").exists()
+        d = json.loads((out2 / "acceptance_summary.json").read_text(encoding="utf-8"))
+        assert d["attempted_count"] == 0
+
+    def test_replay_from_plan_file_directly(self, tmp_path):
+        """--from-plan PATH/corpus_plan.json (file path, not dir) must work."""
+        if not MODERATE_TARGET.exists():
+            pytest.skip("moderate target not found")
+        out1 = tmp_path / "run1"
+        r1 = self._run_generate(MODERATE_TARGET, out1, 3, extra_args=["--dry-run"])
+        assert r1.returncode == 0
+
+        plan_file = out1 / "_plan" / "corpus_plan.json"
+        if not plan_file.exists():
+            pytest.skip("corpus_plan.json not written")
+
+        out2 = tmp_path / "replay_from_file"
+        r2 = self._run_replay(plan_file, out2, extra_args=["--dry-run"])
+        assert r2.returncode == 0, f"Replay from file failed: {r2.stderr}"

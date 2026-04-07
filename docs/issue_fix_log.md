@@ -342,9 +342,33 @@ Added `_is_null_guard_body_line()` to classify `return`/`break`/`continue` body 
 
 ---
 
+## IFL-011 — `_cmd_generate_corpus` non-modular: execution not reusable for replay
+
+**Observed:** Phase 12 added `--from-plan` replay path. The original `_cmd_generate_corpus`
+had the case-execution loop inline, making it impossible to share between generate and replay
+without duplication.
+
+**Evidence:** Attempting to add `--from-plan` without refactoring would require duplicating
+the 40-line execution loop and all post-execution artifact writers.
+
+**Root cause:** `_cmd_generate_corpus` was written as a monolithic function combining planning,
+execution, and artifact writing into a single pass.
+
+**Fix:** Factored the execution loop into `_execute_plan_cases()` (shared by generate and replay),
+the artifact-writing + summary into `_finish_generate_corpus()`, and the replay entry-point
+into `_cmd_generate_corpus_replay()`. `CorpusPlan.from_dict()` classmethod added to enable
+deserialization from `corpus_plan.json`.
+
+**Verification:** `TestReplayFromPlan` (5 tests) — all pass. Replay produces `run_mode=replay`
+in `corpus_index.json` and identical planned/accepted counts.
+
+**Status:** FIXED (Phase 12)
+
+---
+
 ## Open Issues
 
-No open issues at time of Phase 10 pass.
+No open issues at time of Phase 12 pass.
 
 ### Issue Template
 

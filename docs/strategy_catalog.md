@@ -1,6 +1,6 @@
 # insert_me Strategy Catalog
 
-> **Phase 9 — planning layer complete**  
+> **Phase 12 — replay + multi-target validation complete**  
 > **Machine-readable form:** `config/strategy_catalog.json` (schema: `schemas/strategy_catalog.schema.json`)
 
 This document lists all mutation strategies that insert_me knows about, with their
@@ -129,8 +129,8 @@ subsequent `ptr->field` line. Uses the multi-line handler API (`_MULTILINE_STRAT
 Guard forms matched: `!ptr`, `ptr == NULL`, `ptr == nullptr`, `ptr == 0`, reversed (`NULL == ptr`).  
 Supported multiline form: `if (!ptr)\n    return NULL;` (body on separate line blanked in output).
 
-Quality gate pass rate: **100%** (8/8 sandbox seeds VALID)  
-Corpus cases: **8**
+Quality gate pass rate: **100%** (8/8 sandbox_eval seeds VALID; 5/5 VALID on target_b bstree/dynarray/strmap)  
+Corpus cases: **8** (sandbox_eval seeds)
 
 ---
 
@@ -190,7 +190,7 @@ These strategies are in the catalog for planning-space coverage; none are implem
 | `insert_premature_free` | CWE-416 | IMPLEMENTED_AND_CORPUS_ADMITTED | VIABLE | 24 (19 + 5 target_b) |
 | `insert_double_free` | CWE-415 | IMPLEMENTED_AND_CORPUS_ADMITTED | VIABLE | 13 (10 + 3 target_b) |
 | `remove_free_call` | CWE-401 | IMPLEMENTED_AND_CORPUS_ADMITTED | VIABLE | 13 (10 + 3 target_b) |
-| `remove_null_guard` | CWE-476 | IMPLEMENTED_AND_CORPUS_ADMITTED | VIABLE | 8 (sandbox_eval only) |
+| `remove_null_guard` | CWE-476 | IMPLEMENTED_AND_CORPUS_ADMITTED | VIABLE | 8 (sandbox_eval) + 5/5 VALID on target_b |
 | *(planned)* | CWE-190 | PLANNED | BLOCKED | 0 |
 | *(planned)* | CWE-787 | PLANNED | BLOCKED | 0 |
 | *(candidate x 8)* | CWE-125/134/121/369/680/131/252/120 | CANDIDATE | BLOCKED | 0 |
