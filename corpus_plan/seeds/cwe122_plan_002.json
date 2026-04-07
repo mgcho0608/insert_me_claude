@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "seed_id": "cwe122_plan_002",
+  "seed": 2,
+  "cwe_id": "CWE-122",
+  "mutation_strategy": "alloc_size_undercount",
+  "target_pattern": {
+    "pattern_type": "malloc_call",
+    "min_candidate_score": 0.0
+  },
+  "source_constraints": {
+    "max_targets": 1
+  },
+  "metadata": {
+    "tags": [
+      "auto-synthesised",
+      "alloc_size_undercount",
+      "cwe-122"
+    ],
+    "notes": "Auto-synthesised by insert-me plan-corpus. Target: queue.c:151 (score=0.75) | source: C:\\Users\\User\\insert_me\\examples\\sandbox_eval\\src"
+  }
+}

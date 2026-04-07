@@ -1,0 +1,79 @@
+{
+  "schema_version": "1.0",
+  "source_root": "C:\\Users\\User\\insert_me\\examples\\sandbox_eval\\src",
+  "source_hash": "b1dc7a8c914dc0b7",
+  "requested_count": 3,
+  "planned_count": 3,
+  "projected_accepted_count": 3,
+  "constraints": {
+    "max_per_file": 5,
+    "max_per_function": 2,
+    "max_per_family": null,
+    "allow_strategies": null,
+    "disallow_strategies": null,
+    "min_candidate_score": 0.0,
+    "strict_quality": false
+  },
+  "strategy_allocation": {
+    "alloc_size_undercount": 3,
+    "insert_premature_free": 0,
+    "insert_double_free": 0,
+    "remove_free_call": 0
+  },
+  "suitability": {
+    "alloc_size_undercount": "VIABLE",
+    "insert_premature_free": "VIABLE",
+    "insert_double_free": "VIABLE",
+    "remove_free_call": "VIABLE",
+    "remove_null_guard": "EXPERIMENTAL"
+  },
+  "cases": [
+    {
+      "case_id": "cwe122_plan_001",
+      "strategy": "alloc_size_undercount",
+      "cwe_id": "CWE-122",
+      "seed_integer": 1,
+      "target_file": "strbuf.c",
+      "target_line": 141,
+      "function_name": "strbuf_concat_new",
+      "candidate_score": 0.75,
+      "confidence": "high",
+      "seed_file": "seeds\\cwe122_plan_001.json"
+    },
+    {
+      "case_id": "cwe122_plan_002",
+      "strategy": "alloc_size_undercount",
+      "cwe_id": "CWE-122",
+      "seed_integer": 2,
+      "target_file": "queue.c",
+      "target_line": 151,
+      "function_name": "pq_entry_create",
+      "candidate_score": 0.75,
+      "confidence": "high",
+      "seed_file": "seeds\\cwe122_plan_002.json"
+    },
+    {
+      "case_id": "cwe122_plan_003",
+      "strategy": "alloc_size_undercount",
+      "cwe_id": "CWE-122",
+      "seed_integer": 3,
+      "target_file": "strbuf.c",
+      "target_line": 73,
+      "function_name": "strbuf_clone",
+      "candidate_score": 0.75,
+      "confidence": "high",
+      "seed_file": "seeds\\cwe122_plan_003.json"
+    }
+  ],
+  "allocation_summary": {
+    "by_strategy": {
+      "alloc_size_undercount": 3
+    },
+    "by_file": {
+      "strbuf.c": 2,
+      "queue.c": 1
+    },
+    "blockers": [],
+    "warnings": []
+  }
+}
