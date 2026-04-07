@@ -5,6 +5,7 @@ Commands
 --------
 run             Run the vulnerability insertion pipeline for a given seed file + source tree.
 batch           Run the pipeline for every seed file in a directory.
+inspect-target  Preflight suitability check for a C/C++ source tree (no mutation applied).
 validate-bundle Validate the schema conformance of an existing output bundle.
 audit           Pretty-print the audit record from an output bundle.
 evaluate        Evaluate a detector report against an insert_me output bundle.
@@ -16,6 +17,10 @@ Canonical interface (primary)
 Batch interface
 ---------------
     insert-me batch --seed-dir PATH --source PATH [--output PATH] [--config PATH] [--no-llm] [--dry-run]
+
+Preflight suitability check
+----------------------------
+    insert-me inspect-target --source PATH [--output PATH]
 
 Legacy interface (backward-compatible fallback)
 -----------------------------------------------
@@ -209,6 +214,47 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Emit all artifacts without modifying source files (passed through to each run).",
     )
     batch_p.set_defaults(func=_cmd_batch)
+
+    # -----------------------------------------------------------------------
+    # inspect-target
+    # -----------------------------------------------------------------------
+    inspect_p = subparsers.add_parser(
+        "inspect-target",
+        help="Preflight suitability check: scan a C/C++ source tree before running seeds.",
+        description=(
+            "Inspect a C/C++ source tree and report deterministic suitability signals\n"
+            "for use with insert_me. No mutations are applied; this is a read-only scan.\n\n"
+            "Reports:\n"
+            "  - Number and list of C/C++ source files found\n"
+            "  - Candidate site counts by strategy (corpus-admitted + experimental)\n"
+            "  - File concentration risk\n"
+            "  - Suitability tier: pilot-single / pilot-small-batch / corpus-generation\n"
+            "  - Blockers and warnings\n\n"
+            "Optionally writes a machine-readable target_suitability.json.\n\n"
+            "Example:\n"
+            "  insert-me inspect-target --source /path/to/local/toy_project\n"
+            "  insert-me inspect-target --source /path/to/project --output inspect_out/"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    inspect_p.add_argument(
+        "--source",
+        type=Path,
+        required=True,
+        metavar="PATH",
+        help="Root of the C/C++ source tree to inspect.",
+    )
+    inspect_p.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help=(
+            "If provided, write target_suitability.json to this directory. "
+            "Directory is created if it does not exist."
+        ),
+    )
+    inspect_p.set_defaults(func=_cmd_inspect_target)
 
     # -----------------------------------------------------------------------
     # validate-bundle
@@ -625,6 +671,262 @@ def _cmd_evaluate(args: argparse.Namespace) -> int:
     if adj_path.exists():
         print(f"  adj_result      : {adj_path}")
     return 0
+
+
+# ---------------------------------------------------------------------------
+# inspect-target helpers
+# ---------------------------------------------------------------------------
+
+#: Corpus-admitted strategies and one experimental, mapped to their pattern types.
+_INSPECT_STRATEGIES: tuple[tuple[str, str, str, bool], ...] = (
+    # (strategy_name, cwe, pattern_type, experimental)
+    ("alloc_size_undercount", "CWE-122", "malloc_call",   False),
+    ("insert_premature_free", "CWE-416", "pointer_deref", False),
+    ("insert_double_free",    "CWE-415", "free_call",     False),
+    ("remove_free_call",      "CWE-401", "free_call",     False),
+    ("remove_null_guard",     "CWE-476", "null_guard",    True),
+)
+
+_INSPECT_PATTERN_TYPES: tuple[str, ...] = (
+    "malloc_call", "pointer_deref", "free_call", "null_guard"
+)
+
+
+def _inspect_source_tree(source_root: Path) -> dict:
+    """
+    Scan *source_root* and return a suitability report dict.
+
+    Uses the same SOURCE_EXTENSIONS, DEFAULT_EXCLUDE_PATTERNS, and
+    PATTERN_REGEXES as the Seeder.  No file writes; read-only.
+    """
+    import fnmatch
+
+    from insert_me.pipeline.seeder import (
+        SOURCE_EXTENSIONS,
+        DEFAULT_EXCLUDE_PATTERNS,
+        PATTERN_REGEXES,
+    )
+
+    all_paths = sorted(
+        p for p in source_root.rglob("*")
+        if p.is_file()
+        and p.suffix.lower() in SOURCE_EXTENSIONS
+        and not any(fnmatch.fnmatch(p.name, pat) for pat in DEFAULT_EXCLUDE_PATTERNS)
+    )
+    rel_files = [str(p.relative_to(source_root)) for p in all_paths]
+
+    counts: dict[str, dict[str, int]] = {pt: {} for pt in _INSPECT_PATTERN_TYPES}
+    compiled = {pt: PATTERN_REGEXES[pt] for pt in _INSPECT_PATTERN_TYPES}
+
+    for fpath in all_paths:
+        rel = str(fpath.relative_to(source_root))
+        try:
+            lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+        except Exception:
+            continue
+        in_block = False
+        for line in lines:
+            stripped = line.strip()
+            if "/*" in stripped:
+                in_block = True
+            if "*/" in stripped:
+                in_block = False
+                continue
+            if in_block or stripped.startswith("//"):
+                continue
+            for pt, rx in compiled.items():
+                if rx.search(line):
+                    counts[pt][rel] = counts[pt].get(rel, 0) + 1
+
+    strategies: dict[str, dict] = {}
+    for strategy_name, cwe, pattern_type, experimental in _INSPECT_STRATEGIES:
+        by_file = counts[pattern_type]
+        total = sum(by_file.values())
+        entry: dict = {
+            "cwe": cwe,
+            "pattern_type": pattern_type,
+            "total": total,
+            "by_file": dict(by_file),
+        }
+        if experimental:
+            entry["note"] = "experimental -- not corpus-admitted"
+        strategies[strategy_name] = entry
+
+    concentration: dict[str, dict] = {}
+    for pt in _INSPECT_PATTERN_TYPES:
+        by_file = counts[pt]
+        total = sum(by_file.values())
+        if total > 0:
+            max_file = max(by_file, key=lambda k: by_file[k])
+            fraction = round(by_file[max_file] / total, 3)
+            concentration[pt] = {"file": max_file, "fraction": fraction, "total": total}
+        else:
+            concentration[pt] = {"file": None, "fraction": 0.0, "total": 0}
+
+    _corpus_admitted = [s for s, _, _, exp in _INSPECT_STRATEGIES if not exp]
+
+    def _files_with_hits(sname: str) -> int:
+        return sum(1 for v in strategies[sname]["by_file"].values() if v > 0)
+
+    blockers: list[str] = []
+    warnings: list[str] = []
+
+    file_count = len(all_paths)
+    if file_count == 0:
+        blockers.append(
+            "No C/C++ source files found. Ensure --source points at a directory "
+            "containing .c, .cpp, .cc, .cxx, .h, .hpp, or .hh files."
+        )
+
+    admitted_nonzero = [s for s in _corpus_admitted if strategies[s]["total"] > 0]
+    pilot_single = bool(admitted_nonzero)
+    if not pilot_single and file_count > 0:
+        blockers.append(
+            "No candidate sites found for any corpus-admitted strategy. "
+            "Check that the source files contain malloc/free/pointer-dereference patterns."
+        )
+
+    batch_ready = [
+        s for s in _corpus_admitted
+        if strategies[s]["total"] >= 5 and _files_with_hits(s) >= 2
+    ]
+    pilot_batch = bool(batch_ready)
+    if pilot_single and not pilot_batch:
+        warnings.append(
+            "Too few candidates for a small batch (need >= 5 candidates across >= 2 files "
+            "for at least one admitted strategy). Suitable for single-case pilot only."
+        )
+
+    corpus_ready_strategies = [
+        s for s in _corpus_admitted
+        if strategies[s]["total"] >= 10 and _files_with_hits(s) >= 3
+    ]
+    corpus_ready = len(corpus_ready_strategies) >= 2
+
+    if file_count > 0 and file_count < 3 and pilot_batch and not corpus_ready:
+        warnings.append(
+            f"Only {file_count} source file(s) found. "
+            "Corpus generation typically needs >= 3 files for adequate diversity."
+        )
+
+    for pt in ("malloc_call", "pointer_deref", "free_call"):
+        c = concentration[pt]
+        if c["total"] >= 5 and c["fraction"] > 0.80:
+            warnings.append(
+                f"High concentration risk for {pt}: {c['fraction']:.0%} of candidates "
+                f"in one file ({c['file']}). Corpus quality gate may flag over-concentration."
+            )
+        elif c["total"] >= 5 and c["fraction"] > 0.60:
+            warnings.append(
+                f"Moderate concentration for {pt}: {c['fraction']:.0%} of candidates "
+                f"in one file ({c['file']})."
+            )
+
+    if not corpus_ready and pilot_batch:
+        warnings.append(
+            "Corpus generation needs >= 2 strategies each with >= 10 candidates "
+            "across >= 3 files. Consider adding more source files or choosing a richer target."
+        )
+
+    return {
+        "schema_version": "1.0",
+        "source_root": str(source_root.resolve()),
+        "file_count": file_count,
+        "files": rel_files,
+        "candidates_by_strategy": strategies,
+        "concentration_risk": concentration,
+        "suitability": {
+            "pilot_single_case": pilot_single,
+            "pilot_small_batch": pilot_batch,
+            "corpus_generation": corpus_ready,
+            "blockers": blockers,
+            "warnings": warnings,
+        },
+    }
+
+
+def _format_inspection_report(report: dict) -> str:
+    """Format a suitability report dict as a human-readable string."""
+    out: list[str] = []
+    suitability = report["suitability"]
+
+    out.append(f"[insert-me] target inspection: {report['source_root']}")
+    out.append("")
+    out.append(f"Source files found: {report['file_count']}")
+    for f in report["files"]:
+        out.append(f"  {f}")
+
+    out.append("")
+    out.append("Candidate sites by strategy:")
+    for strategy_name, info in report["candidates_by_strategy"].items():
+        total = info["total"]
+        n_files = sum(1 for v in info["by_file"].values() if v > 0)
+        exp_tag = "  [experimental]" if "note" in info else ""
+        label = f"{strategy_name} ({info['cwe']}, {info['pattern_type']}){exp_tag}"
+        out.append(f"  {label:<55}: {total:>4}  candidates across {n_files} file(s)")
+
+    out.append("")
+    out.append("Concentration risk (fraction of candidates in most-loaded file):")
+    for pt, c in report["concentration_risk"].items():
+        if c["total"] > 0:
+            risk = "HIGH" if c["fraction"] > 0.80 else ("MODERATE" if c["fraction"] > 0.60 else "OK")
+            out.append(f"  {pt:<18}: {c['fraction']:>5.0%} in {c['file']}  [{risk}]")
+        else:
+            out.append(f"  {pt:<18}: no candidates")
+
+    out.append("")
+    out.append("Suitability assessment:")
+    def yn(v: bool) -> str:
+        return "YES" if v else "NO "
+    out.append(f"  pilot_single_case  : {yn(suitability['pilot_single_case'])}  "
+               "(any admitted strategy has >= 1 candidate)")
+    out.append(f"  pilot_small_batch  : {yn(suitability['pilot_small_batch'])}  "
+               "(>= 1 strategy with >= 5 candidates across >= 2 files)")
+    out.append(f"  corpus_generation  : {yn(suitability['corpus_generation'])}  "
+               "(>= 2 strategies with >= 10 candidates across >= 3 files)")
+
+    if suitability["blockers"]:
+        out.append("")
+        out.append("BLOCKERS:")
+        for b in suitability["blockers"]:
+            out.append(f"  [!] {b}")
+
+    if suitability["warnings"]:
+        out.append("")
+        out.append("Warnings:")
+        for w in suitability["warnings"]:
+            out.append(f"  [~] {w}")
+
+    if not suitability["blockers"] and not suitability["warnings"]:
+        out.append("")
+        out.append("No blockers or warnings.")
+
+    return "\n".join(out)
+
+
+def _cmd_inspect_target(args: argparse.Namespace) -> int:
+    import json
+
+    source: Path = args.source
+    output_dir: Path | None = args.output
+
+    if not source.exists():
+        print(f"[insert-me] error: --source not found: {source}", file=sys.stderr)
+        return 1
+    if not source.is_dir():
+        print(f"[insert-me] error: --source must be a directory: {source}", file=sys.stderr)
+        return 1
+
+    report = _inspect_source_tree(source)
+    print(_format_inspection_report(report))
+
+    if output_dir is not None:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        out_path = output_dir / "target_suitability.json"
+        out_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        print(f"\n[insert-me] suitability report written to: {out_path}")
+
+    return 1 if report["suitability"]["blockers"] else 0
 
 
 # ---------------------------------------------------------------------------

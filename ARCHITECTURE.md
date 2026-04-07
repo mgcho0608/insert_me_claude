@@ -15,9 +15,9 @@ regardless of which optional components are active.
 
 **Phase 9 + Phase 4c partial: complete.**
 Full pipeline operational: 5 mutation strategies (4 corpus-admitted, 1 experimental),
-multi-line patcher infrastructure, `insert-me batch` CLI, 2 sandbox targets,
-55-seed accepted corpus (100% ACCEPT/ACCEPT_WITH_NOTES), 55/55 reproducibility PASS.
-468 tests passing.
+multi-line patcher infrastructure, `insert-me batch` CLI, `insert-me inspect-target`
+preflight, 2 sandbox targets, 55-seed accepted corpus (100% ACCEPT/ACCEPT_WITH_NOTES),
+55/55 reproducibility PASS. 499 tests passing.
 
 | Pipeline stage | Status | Notes |
 |---|---|---|
@@ -28,7 +28,7 @@ multi-line patcher infrastructure, `insert-me batch` CLI, 2 sandbox targets,
 | Evaluator | **Complete** (Phase 7A) | Optional separate step; compares detector reports against ground truth |
 | Adjudicator | **Phase 7B-prep** | `HeuristicAdjudicator` (offline default) · `DisabledAdjudicator` · `LLMAdjudicator` placeholder |
 | LLM Adapter | Interface only | `NoOpAdapter` always available; LLM enrichment (labels.json) deferred to Phase 7B |
-| Corpus tooling | **Phase 8/9** | `scripts/generate_corpus.py` (batch gen + quality gate) · `scripts/check_reproducibility.py` · `insert-me batch` CLI · `examples/corpus_manifest.json` |
+| Corpus tooling | **Phase 8/9** | `scripts/generate_corpus.py` (batch gen + quality gate) · `scripts/check_reproducibility.py` · `insert-me batch` CLI · `insert-me inspect-target` (preflight) · `scripts/inspect_target.py` · `examples/corpus_manifest.json` · `docs/local_target_pilot.md` |
 
 The pipeline orchestrator (`pipeline/__init__.py`) coordinates all four stages.
 Each stage's `run()` method is implemented and called in sequence.
@@ -51,7 +51,7 @@ Each stage's `run()` method is implemented and called in sequence.
 │        |  [patch_plan.json]  <- schema: patch_plan.schema.json       │
 │        v                                                              │
 │  ┌───────────┐   PatchPlan -> bad/good source trees                  │
-│  │  Patcher  │   DETERMINISTIC  [✓ Phase 4b — two strategies]          │
+│  │  Patcher  │   DETERMINISTIC  [✓ Phase 4b/8/4c — 5 strategies]       │
 │  └─────┬─────┘                                                        │
 │        |                                                              │
 │        v                                                              │
@@ -280,7 +280,7 @@ This also means:
 ```
 src/insert_me/
 ├── __init__.py          # Package version, public re-exports
-├── cli.py               # CLI entrypoint (argparse) — run/batch/validate-bundle/audit/evaluate
+├── cli.py               # CLI entrypoint (argparse) — run/batch/inspect-target/validate-bundle/audit/evaluate
 ├── config.py            # Config loader + dataclass (TOML + CLI overrides)
 ├── schema.py            # Schema loader, artifact validation, validate_bundle()
 ├── artifacts.py         # BundlePaths, run ID derivation, write_json_artifact

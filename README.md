@@ -10,7 +10,7 @@
 
 ---
 
-## Current Status — Phase 9 (corpus generation tooling and multi-sandbox expansion)
+## Current Status — Phase 9 (corpus generation tooling, local-target pilot, multi-sandbox expansion)
 
 | | |
 |---|---|
@@ -72,7 +72,7 @@ For engineers picking this up for the first time inside an organisation:
 | | |
 |---|---|
 | **What it is** | A Python CLI that inserts one known vulnerability into a C/C++ source tree and produces a fully annotated, schema-validated output bundle. |
-| **Current maturity** | Phase 9 + Phase 4c partial — all four core pipeline stages + evaluator + deterministic heuristic adjudicator + 5 mutation strategies (4 corpus-admitted: CWE-122/416/415/401; 1 experimental: CWE-476) + multi-line patcher + `insert-me batch` CLI + 2 sandbox targets + corpus generation tooling implemented and tested (468 tests). Not production-hardened; alpha-quality. |
+| **Current maturity** | Phase 9 + Phase 4c partial — all four core pipeline stages + evaluator + deterministic heuristic adjudicator + 5 mutation strategies (4 corpus-admitted: CWE-122/416/415/401; 1 experimental: CWE-476) + multi-line patcher + `insert-me batch` CLI + `insert-me inspect-target` preflight + 2 sandbox targets + local-target pilot workflow + corpus generation tooling implemented and tested (499 tests). Not production-hardened; alpha-quality. |
 | **Install path** | `pip install -e .` from source. No PyPI release exists yet. |
 | **Python versions** | 3.11, 3.12 — **CI-tested**. 3.10 — **statically reviewed only** (single shim: `tomllib` → `tomli`). No other version-specific features used. |
 | **Dependencies** | `jsonschema>=4.17` + `tomli>=1.2.0` on Python 3.10 only. No other mandatory runtime dependencies. |
@@ -90,6 +90,7 @@ For engineers picking this up for the first time inside an organisation:
 - Additional mutation strategies (CWE-190, CWE-787) — planned; CWE-190 blocker resolved (multi-line handler exists); needs implementation
 - AST-based or compiler-backed patching/validation — future phases
 - Phase 7B: real LLM adjudicator (placeholder exists; `LLMAdjudicator.adjudicate()` raises `NotImplementedError`)
+- Formally reproducibility-verified results on user-provided local targets (the bundled sandbox targets are the reference; local targets are user-managed with `check_reproducibility.py`)
 
 ---
 
@@ -110,6 +111,13 @@ For engineers picking this up for the first time inside an organisation:
 # Primary interface (recommended)
 insert-me run --seed-file examples/seeds/cwe122_heap_overflow.json \
               --source /path/to/c-project
+
+# Batch run — every .json seed file in a directory
+insert-me batch --seed-dir examples/seeds/sandbox \
+                --source /path/to/c-project
+
+# Preflight suitability check — inspect a source tree before running seeds
+insert-me inspect-target --source /path/to/c-project
 
 # Validate a completed output bundle
 insert-me validate-bundle output/<run-id>/
@@ -227,6 +235,7 @@ scores candidates with strategy-specific rules (base score 0.4, capped at 1.0).
 | `array_index` | `arr[...]` subscript access | Extra score for arithmetic in subscript |
 | `loop_bound` | `for (...)` headers | Extra score for `<=` condition (off-by-one) |
 | `pointer_deref` | `*ptr`, `ptr->field` | Arrow operator scores higher |
+| `null_guard` | `if (!ptr) return;`, `if (ptr == NULL) ...` | CWE-476 guard-removal pattern; +0.40 for single-line return guard |
 | `custom` | Union of all dangerous patterns | Fallback for novel CWEs |
 
 Deterministic ordering: score descending → (file, line) ascending → seed-integer shuffle
@@ -420,6 +429,40 @@ python scripts/check_reproducibility.py \
 See `docs/corpus_quality_gate.md` for the acceptance rubric,
 `docs/repro_runbook.md` for the operator-independent reproduction guide,
 and `docs/issue_fix_log.md` for a record of issues found and fixed during hardening.
+
+---
+
+## Local Target Pilot
+
+insert_me also works on user-provided local evaluation-only C/C++ projects.
+
+**Step 1: Inspect the target (preflight check)**
+```bash
+insert-me inspect-target --source /path/to/local/toy_project
+```
+Reports candidate density, concentration risk, and a suitability tier
+(pilot-single / pilot-small-batch / corpus-generation). No mutations applied.
+
+**Step 2: Run a single seed**
+```bash
+insert-me run --seed-file examples/seeds/sandbox/cwe416_sb_001.json \
+              --source /path/to/local/toy_project
+```
+
+**Step 3: Run a small batch**
+```bash
+insert-me batch --seed-dir my_seeds/ \
+                --source /path/to/local/toy_project
+```
+
+See `docs/local_target_pilot.md` for the full workflow including quality review,
+reproducibility verification, and the decision tree for scaling to corpus generation.
+
+**Suitable local targets:** evaluation-only toy/lab projects, small C programs with
+clear `malloc`/`free`/pointer patterns, purpose-built sandbox files.
+
+**Not recommended:** real production codebases, macro-heavy or template-heavy code,
+targets with no `malloc`/`free` patterns. See `docs/local_target_pilot.md §1.2`.
 
 ---
 

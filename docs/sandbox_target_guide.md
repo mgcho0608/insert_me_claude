@@ -1,6 +1,6 @@
 # Sandbox Target Guide — insert_me
 
-> **Phase:** 8 — Reliability, Reproducibility, and Corpus-Quality Hardening  
+> **Phase:** 9 + Phase 4c partial  
 > **Audience:** Engineers adding new sandbox targets or verifying existing ones
 
 ---
@@ -41,8 +41,24 @@ It is NOT:
 | `htable.c` | Open-addressing hash table | CWE-416, CWE-122 |
 | `graph.c` | Directed graph with adjacency lists | CWE-416, CWE-122 |
 
-**Accepted corpus (as of Phase 8):** 30 cases (19 CWE-416, 11 CWE-122)  
+**Accepted corpus:** 40 cases (11 CWE-122 · 19 CWE-416 · 5 CWE-415 · 5 CWE-401)  
 **Unique target functions:** 16 across 6 files  
+**Reproducibility:** 100% verified (`scripts/check_reproducibility.py`)
+
+### Target B — `examples/sandbox_targets/target_b/src/`
+
+**Status:** Secondary sandbox (Phase 8)  
+**Files:** 3 C source files  
+**CWE-416 candidate sites:** 30+  
+**CWE-122 candidate sites:** 8+  
+
+| File | Purpose | CWE patterns |
+|---|---|---|
+| `dynarray.c` | Dynamic array with resize operations | CWE-416 (pointer_deref), CWE-122 (malloc with expr), CWE-415/401 (free_call) |
+| `bstree.c` | Binary search tree with insert/delete | CWE-416, CWE-122, CWE-415/401 |
+| `strmap.c` | String map with key/value storage | CWE-416, CWE-122, CWE-415/401 |
+
+**Accepted corpus:** 15 cases (4 CWE-122 · 5 CWE-416 · 3 CWE-415 · 3 CWE-401)  
 **Reproducibility:** 100% verified (`scripts/check_reproducibility.py`)
 
 ---
@@ -61,6 +77,7 @@ generation:
 | Real allocation patterns (`malloc`, `calloc`, `realloc`) | Seeder requires allocation calls for CWE-122 and CWE-416 targets |
 | Struct field writes after allocation | Required for `insert_premature_free` to produce clean UAF sites |
 | Deep-copy functions (key copying, label copying) | High-value alloc_size_undercount targets |
+| `free()` calls at clear ownership-release points | Required for `insert_double_free` (CWE-415) and `remove_free_call` (CWE-401) |
 | No test functions, no stub functions | Seeder excludes `*test*` and `*mock*` patterns; include explicitly ensures quality |
 
 ### 3.2 Quality Requirements

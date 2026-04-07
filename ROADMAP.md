@@ -307,13 +307,17 @@ All deterministic artifacts are byte-identical in both modes.
 
 ## Phase 9 — Corpus Generation Tooling
 
-**Goal:** Tooling to generate large labelled corpora efficiently.
+**Goal:** Tooling to generate large labelled corpora efficiently and support local-target pilot workflows.
 
 - [x] Batch script (`scripts/generate_corpus.py`) — quality-gate review, duplicate detection, corpus manifest
 - [x] Reproducibility script (`scripts/check_reproducibility.py`) — verifies byte-identical output across N runs
 - [x] Corpus manifest (`examples/corpus_manifest.json`) aggregating all run IDs
 - [x] Duplicate detection across runs (implemented in `generate_corpus.py`)
 - [x] `insert-me batch` CLI subcommand (`insert-me batch --seed-dir PATH --source PATH`) — implemented in `cli.py`; dry-run mode supported; exit 0 iff all seeds produce VALID (or NOOP in dry-run)
+- [x] `insert-me inspect-target` CLI subcommand — deterministic preflight suitability check for any C/C++ source tree; reports candidate counts by strategy, concentration risk, suitability tier (pilot-single / pilot-small-batch / corpus-generation)
+- [x] `scripts/inspect_target.py` — standalone script wrapping the same inspection logic
+- [x] `docs/local_target_pilot.md` — first-class documentation for local evaluation-only target projects
+- [x] Local-target pilot test fixture (`tests/fixtures/local_target/`) and 31 focused tests (`tests/test_inspect_target.py`)
 - [ ] Parallel execution with deterministic output (process-level parallelism)
 - [ ] `corpus_index.json` format distinct from corpus manifest — deferred
 
