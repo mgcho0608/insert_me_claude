@@ -10,7 +10,7 @@
 
 ---
 
-## Current Status — Phase 9 (target-aware planning layer, count-driven corpus synthesis)
+## Current Status — Phase 13 (fresh-plan reproducibility + plan stability closure)
 
 | | |
 |---|---|
@@ -22,7 +22,7 @@
 | **`ground_truth.json` mutations** | Real record when mutation applied; `[]` in dry-run |
 | **`ground_truth.json` validation_passed** | `true` when Validator passes; `false` in dry-run |
 | **`bad/` `good/` source trees** | Written in real mode; empty dirs in dry-run |
-| **Mutation strategies** | `alloc_size_undercount` (CWE-122) · `insert_premature_free` (CWE-416) · `insert_double_free` (CWE-415) · `remove_free_call` (CWE-401) — **corpus-admitted**; `remove_null_guard` (CWE-476) — **implemented, experimental** (corpus admission pending; see docs/strategy_catalog.md) |
+| **Mutation strategies** | `alloc_size_undercount` (CWE-122) · `insert_premature_free` (CWE-416) · `insert_double_free` (CWE-415) · `remove_free_call` (CWE-401) · `remove_null_guard` (CWE-476) — **all 5 corpus-admitted** |
 | **`validation_result.json`** | Real check results (5 checks) in real mode; `overall: SKIP` in dry-run |
 | **`audit_result.json`** | `VALID` (validator pass) · `INVALID` (fail) · `AMBIGUOUS` (skip+mutations) · `NOOP` (no mutations) |
 | **Evaluation strategy** | `exact` / `family` / `semantic` / `no_match` — per-mutation match against inserted ground truth |
@@ -89,7 +89,7 @@ For engineers picking this up for the first time inside an organisation:
 | | |
 |---|---|
 | **What it is** | A Python CLI that inserts one known vulnerability into a C/C++ source tree and produces a fully annotated, schema-validated output bundle. |
-| **Current maturity** | Phase 9 — target-aware planning layer complete. Full pipeline: 5 mutation strategies (4 corpus-admitted: CWE-122/416/415/401; 1 experimental: CWE-476), planning layer (TargetInspector/SeedSynthesizer/CorpusPlanner), `plan-corpus` + `generate-corpus` CLI, 15-entry strategy catalog (4 admitted / 1 experimental / 2 planned / 8 candidate), 2 sandbox targets + local-target fixtures, 558 tests. Not production-hardened; alpha-quality. |
+| **Current maturity** | Phase 13 — fresh-plan reproducibility closure. Full pipeline: 5 corpus-admitted mutation strategies (CWE-122/416/415/401/476), planning layer (TargetInspector/SeedSynthesizer/CorpusPlanner), `plan-corpus` + `generate-corpus` + `generate-corpus --from-plan` CLI, 15-entry strategy catalog (5 admitted / 2 planned / 8 candidate), 2 sandbox targets + local-target fixtures, `corpus_index.json` with fingerprints, `check_plan_stability.py`, 609 tests. Not production-hardened; alpha-quality. |
 | **Install path** | `pip install -e .` from source. No PyPI release exists yet. |
 | **Python versions** | 3.11, 3.12 — **CI-tested**. 3.10 — **statically reviewed only** (single shim: `tomllib` → `tomli`). No other version-specific features used. |
 | **Dependencies** | `jsonschema>=4.17` + `tomli>=1.2.0` on Python 3.10 only. No other mandatory runtime dependencies. |
@@ -98,17 +98,14 @@ For engineers picking this up for the first time inside an organisation:
 | **First command** | `pip install -e . && insert-me run --seed-file examples/seeds/cwe122_heap_overflow.json --source examples/demo/src` |
 
 **What to expect from a run today:**
-- One mutation applied to the source tree: `alloc_size_undercount` (CWE-122), `insert_premature_free` (CWE-416), `insert_double_free` (CWE-415), `remove_free_call` (CWE-401) — fully corpus-admitted; `remove_null_guard` (CWE-476) — implemented and unit-tested, corpus admission pending
+- One mutation applied to the source tree: any of the 5 corpus-admitted strategies (`alloc_size_undercount` CWE-122, `insert_premature_free` CWE-416, `insert_double_free` CWE-415, `remove_free_call` CWE-401, `remove_null_guard` CWE-476)
 - Five deterministic rule-based plausibility checks
 - Five JSON artifacts: `patch_plan.json`, `validation_result.json`, `audit_result.json`, `ground_truth.json`, `audit.json`
 
 **What is NOT available yet:**
-- `remove_null_guard` (CWE-476) corpus admission — implemented but sandbox target coverage is insufficient for corpus admission; handler currently only matches single-line inline guards (`if (!ptr) return;`); multi-line guard style in sandbox needs handler enhancement
-- `generate-corpus` full execution — plan phase works; batch execution phase is wired but requires a well-configured target with compatible seeds
 - Additional mutation strategies (CWE-190, CWE-787) — planned; CWE-190 blocker resolved (multi-line handler exists); needs implementation
 - AST-based or compiler-backed patching/validation — future phases
 - Phase 7B: real LLM adjudicator (placeholder exists; `LLMAdjudicator.adjudicate()` raises `NotImplementedError`)
-- Formally reproducibility-verified results on user-provided local targets (the bundled sandbox targets are the reference; local targets are user-managed with `check_reproducibility.py`)
 
 ---
 
@@ -142,6 +139,9 @@ insert-me plan-corpus --source /path/to/c-project --count 30 --output-dir corpus
 
 # Plan + execute — plan then run the full pipeline for each case
 insert-me generate-corpus --source /path/to/c-project --count 30 --output-root corpus_out/
+
+# Replay — re-execute a saved plan without re-planning
+insert-me generate-corpus --from-plan corpus_out/_plan/ --output-root corpus_out_replay/
 
 # Validate a completed output bundle
 insert-me validate-bundle output/<run-id>/
@@ -432,7 +432,7 @@ Two sandbox targets are included with a combined 55-seed accepted corpus (4 corp
 
 All 55 seeds reproduce byte-identically across 3 runs each (55/55 PASS).
 
-**CWE-476 (`remove_null_guard`) is implemented and unit-tested but not yet corpus-admitted.** The handler currently only matches single-line inline guards (`if (!ptr) return;` on one line); the sandbox source files predominantly use multi-line guard style. No CWE-476 seeds are in the accepted corpus. See `docs/strategy_catalog.md` for the explicit admission blocker.
+**CWE-476 (`remove_null_guard`) is corpus-admitted** as of Phase 10. The dual-mode handler supports both single-line inline guards (`if (!ptr) return;`) and multi-line guard forms. 8 CWE-476 sandbox seeds are in `examples/seeds/sandbox/` with 8/8 VALID quality gate. Validated VIABLE on both sandbox_eval and target_b (5/5 VALID). See `docs/strategy_catalog.md`.
 
 **Reproduce the full corpus from a fresh clone:**
 ```bash

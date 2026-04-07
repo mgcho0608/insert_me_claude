@@ -13,24 +13,25 @@ regardless of which optional components are active.
 
 ## Current Implementation Status
 
-**Phase 9 + Phase 4c partial: complete.**
-Full pipeline operational: 5 mutation strategies (4 corpus-admitted, 1 experimental),
-multi-line patcher infrastructure, `insert-me batch` CLI, `insert-me inspect-target`
-preflight, `insert-me plan-corpus` target-aware planning, 2 sandbox targets,
-55-seed accepted corpus (100% ACCEPT/ACCEPT_WITH_NOTES), 55/55 reproducibility PASS.
-540 tests passing.
+**Phase 13 complete.**
+Full pipeline operational: 5 corpus-admitted mutation strategies (CWE-122/416/415/401/476),
+multi-line patcher infrastructure, `insert-me batch` · `insert-me inspect-target`
+· `insert-me plan-corpus` · `insert-me generate-corpus` (incl. `--from-plan` replay) CLIs,
+2 sandbox targets, 55-seed accepted corpus (100% ACCEPT), corpus_index.json with fingerprints,
+`scripts/check_plan_stability.py` for fresh-plan reproducibility verification.
+609 tests passing.
 
 | Pipeline stage | Status | Notes |
 |---|---|---|
 | Seeder | **Complete** (Phase 3, hardened Phase 8) | 11 pattern types incl. `null_guard`; free_call/loop-body/sub-malloc scoring penalties |
-| Patcher | **Phase 4b/8/4c partial** | 4 corpus-admitted strategies (CWE-122/416/415/401) + 1 experimental (`remove_null_guard` CWE-476); multi-line handler infrastructure in place |
+| Patcher | **Phase 4b/8/4c/10** | 5 corpus-admitted strategies (CWE-122/416/415/401/476); multi-line handler infrastructure in place |
 | Validator | **Complete** (Phase 5) | Five deterministic checks; no compiler required |
 | Auditor | **Complete** (Phase 6) | Deterministic slice; writes ground_truth, audit, audit_result |
 | Evaluator | **Complete** (Phase 7A) | Optional separate step; compares detector reports against ground truth |
 | Adjudicator | **Phase 7B-prep** | `HeuristicAdjudicator` (offline default) · `DisabledAdjudicator` · `LLMAdjudicator` placeholder |
 | LLM Adapter | Interface only | `NoOpAdapter` always available; LLM enrichment (labels.json) deferred to Phase 7B |
-| Corpus tooling | **Phase 8/9** | `scripts/generate_corpus.py` (batch gen + quality gate) · `scripts/check_reproducibility.py` · `insert-me batch` · `insert-me inspect-target` (preflight) · `insert-me plan-corpus` (target-aware planning) · `insert-me generate-corpus` (plan + execute) · `scripts/inspect_target.py` · `examples/corpus_manifest.json` · `docs/local_target_pilot.md` |
-| Planning layer | **Phase 9** | `src/insert_me/planning/` — `TargetInspector`, `SeedSynthesizer`, `CorpusPlanner`; count-driven; deterministic; suitability tiers VIABLE/LIMITED/BLOCKED |
+| Corpus tooling | **Phase 8/9/10/11/12/13** | `scripts/generate_corpus.py` · `scripts/check_reproducibility.py` · `scripts/check_plan_stability.py` (Phase 13) · `insert-me batch` · `insert-me inspect-target` · `insert-me plan-corpus` · `insert-me generate-corpus` (incl. `--from-plan` replay) · `examples/corpus_manifest.json` · `docs/local_target_pilot.md` |
+| Planning layer | **Phase 9/11/12** | `src/insert_me/planning/` -- `TargetInspector`, `SeedSynthesizer`, `CorpusPlanner` (incl. `from_dict()` for replay); count-driven; deterministic; suitability tiers VIABLE/LIMITED/BLOCKED; patcher viability verification |
 
 The pipeline orchestrator (`pipeline/__init__.py`) coordinates all four stages.
 Each stage's `run()` method is implemented and called in sequence.
@@ -118,7 +119,7 @@ No LLM calls.  No file writes.  `Seeder.run()` is fully implemented.
 | `insert_premature_free` | CWE-416 | single-line | corpus-admitted | Insert `free(ptr);` before a pointer dereference |
 | `insert_double_free` | CWE-415 | single-line | corpus-admitted | Insert duplicate `free(ptr);` before existing free |
 | `remove_free_call` | CWE-401 | single-line | corpus-admitted | Replace `free(ptr);` with a memory-leak comment |
-| `remove_null_guard` | CWE-476 | multi-line | experimental | Replace preceding null-check guard (`if (!ptr) return;`) with a comment |
+| `remove_null_guard` | CWE-476 | multi-line | corpus-admitted | Replace null-check guard (`if (!ptr) return;` or multiline form) with a comment; dual-mode handler |
 
 One mutation per run (first compatible target only). No AST parser — regex + paren-counting only.
 If the strategy is unrecognised or cannot be applied, the target is moved to `skipped_targets`.

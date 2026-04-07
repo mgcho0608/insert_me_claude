@@ -1588,13 +1588,62 @@ def _write_corpus_index(
     if plan_file.exists():
         plan_hash = hashlib.sha256(plan_file.read_bytes()).hexdigest()[:16]
 
+    # ------------------------------------------------------------------
+    # Fingerprints (Phase 13 — fresh-plan reproducibility)
+    # ------------------------------------------------------------------
+    import json as _json2
+
+    # plan_fingerprint — sha256 of canonical plan cases (stable, semantic fields only)
+    plan_cases_canonical = sorted(
+        [
+            {
+                "case_id":      c.case_id,
+                "strategy":     c.strategy,
+                "seed_integer": c.seed_integer,
+                "target_file":  c.target_file,
+                "target_line":  c.target_line,
+            }
+            for c in plan.cases
+        ],
+        key=lambda x: x["case_id"],
+    )
+    plan_fingerprint = hashlib.sha256(
+        _json2.dumps(
+            {
+                "source_hash":         plan.source_hash,
+                "requested_count":     plan.requested_count,
+                "planned_count":       plan.planned_count,
+                "strategy_allocation": plan.strategy_allocation,
+                "cases":               plan_cases_canonical,
+            },
+            sort_keys=True,
+        ).encode()
+    ).hexdigest()[:16]
+
+    # synthesized_seed_fingerprint — sha256 of sorted (seed_integer, file, line) tuples
+    seed_coords = sorted(
+        (c.seed_integer, c.target_file, c.target_line) for c in plan.cases
+    )
+    synthesized_seed_fingerprint = hashlib.sha256(
+        _json2.dumps(seed_coords).encode()
+    ).hexdigest()[:16]
+
+    # acceptance_fingerprint — sha256 of sorted accepted case_ids
+    accepted_ids = sorted(
+        k for k, v in case_outcomes.items()
+        if v.get("classification") == "VALID" and not v.get("error")
+    )
+    acceptance_fingerprint = hashlib.sha256(
+        _json2.dumps(accepted_ids).encode()
+    ).hexdigest()[:16]
+
     replay_cmd = (
         f"insert-me generate-corpus --from-plan {plan_file} "
         f"--output-root {output_root}"
     )
 
     index = {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "run_mode": run_mode,
         "source_root": plan.source_root,
         "source_hash": plan.source_hash,
@@ -1607,6 +1656,12 @@ def _write_corpus_index(
             "accepted": accepted,
             "rejected": rejected,
             "errors": errors,
+        },
+        "fingerprints": {
+            "plan_fingerprint":               plan_fingerprint,
+            "synthesized_seed_fingerprint":   synthesized_seed_fingerprint,
+            "acceptance_fingerprint":         acceptance_fingerprint,
+            "adjudicator_mode":               "heuristic",
         },
         "per_strategy": per_strategy,
         "per_file": per_file,
@@ -1623,7 +1678,8 @@ def _write_corpus_index(
             "replay_command": replay_cmd,
             "note": (
                 "Same source tree + same corpus_plan.json => same outputs. "
-                "Use --from-plan to replay this run exactly."
+                "Use --from-plan to replay this run exactly. "
+                "Use check_plan_stability.py to verify fresh-plan stability."
             ),
         },
     }

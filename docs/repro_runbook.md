@@ -371,7 +371,8 @@ All commands should succeed with exit code 0. Combined accepted corpus: 55 cases
 
 ## 14. Planning Layer Reproducibility
 
-The planning layer (`plan-corpus`, `generate-corpus`) is also deterministic.
+The planning layer (`plan-corpus`, `generate-corpus`) is deterministic and
+**fresh-plan stable** — verified by `scripts/check_plan_stability.py` (Phase 13).
 
 ### Guarantee
 
@@ -384,26 +385,72 @@ insert_me will always produce:
 - the same `source_hash` in `corpus_plan.json`
 - the same set of planned cases (same `case_id`, `seed_integer`, `target_file`, `target_line`)
 - the same `seeds/*.json` files (byte-for-byte identical)
+- the same `plan_fingerprint` in `corpus_index.json`
 
 This follows from: TargetInspector uses `seed=1` (fixed) for enumeration;
 SeedSynthesizer sweeps seed integers 1, 2, 3, ... in fixed order; allocation
 uses `int()` floor + sorted leftover top-up (deterministic given candidate counts).
+Patcher viability filtering (`verify_patcher=True`) is also deterministic (reads file
+lines and applies a pure function; no state).
 
-### Verification
+### Verification — fresh-plan reproducibility
+
+**Using `check_plan_stability.py` (recommended):**
 
 ```bash
-# Run plan-corpus twice on the same source; compare corpus_plan.json
-insert-me plan-corpus --source examples/sandbox_eval/src --count 20 --output-dir /tmp/plan_run1/
-insert-me plan-corpus --source examples/sandbox_eval/src --count 20 --output-dir /tmp/plan_run2/
+# Verify fresh-plan stability on the moderate local-target fixture
+python scripts/check_plan_stability.py \
+    --source examples/local_targets/moderate/src \
+    --count 5
 
-# Both corpus_plan.json files must be byte-identical
+# Verify on the bundled sandbox_eval target
+python scripts/check_plan_stability.py \
+    --source examples/sandbox_eval/src \
+    --count 20 \
+    --runs 3 \
+    --output plan_repro_report.json
+```
+
+Exit code 0 = STABLE (all plans byte-identical).
+Exit code 1 = PLAN_UNSTABLE (drift detected; see `plan_repro_report.json`).
+
+**Manual check (for any two directories):**
+
+```bash
+insert-me plan-corpus --source examples/sandbox_eval/src --count 20 --output-dir /tmp/plan_a/
+insert-me plan-corpus --source examples/sandbox_eval/src --count 20 --output-dir /tmp/plan_b/
+
 python -c "
-a = open('/tmp/plan_run1/corpus_plan.json').read()
-b = open('/tmp/plan_run2/corpus_plan.json').read()
+a = open('/tmp/plan_a/corpus_plan.json').read()
+b = open('/tmp/plan_b/corpus_plan.json').read()
 assert a == b, 'FAIL: plans differ'
 print('PASS: plans are identical')
 "
 ```
+
+### plan_repro_report.json
+
+Written by `check_plan_stability.py`. Schema v1.0:
+
+| Field | Meaning |
+|---|---|
+| `verdict` | `STABLE` or `PLAN_UNSTABLE` |
+| `plan_stable` | Boolean |
+| `all_identical` | Boolean — true only if all runs produced byte-identical plans |
+| `plan_fingerprints` | List of 16-char hex fingerprints (one per run) |
+| `plan_diff` | `null` if stable; otherwise `{categories, first_diverging_run, field_diffs}` |
+| `run_details` | Per-run `planned_count` + `strategy_allocation` + `plan_fingerprint` |
+
+### Drift categories (plan_diff.categories)
+
+| Category | Cause |
+|---|---|
+| `source_hash_mismatch` | Source tree was modified between runs |
+| `planned_count_mismatch` | Candidate enumeration returned different counts |
+| `strategy_allocation_drift` | Candidate proportions changed, altering distribution |
+| `case_set_drift` | Different case_ids chosen (severe — entirely different targets) |
+| `case_content_drift` | Same case_ids but different target_file/line/seed_integer |
+| `case_ordering_drift` | Same cases, different order in `cases` array (non-critical) |
 
 ### What can break reproducibility
 
@@ -426,3 +473,57 @@ All randomness is seeded through the explicit `seed_integer` parameter passed to
 | Generation (`generate-corpus` pipeline) | YES — given same seed JSON + same source tree | `bad/`, `good/`, all 5 pipeline artifacts |
 | Quality gate classification | YES — HeuristicAdjudicator is fully offline and deterministic | `audit_result.json` ACCEPT/REJECT |
 | LLM adjudication | NO — disabled by default; use `--adjudicator heuristic` | N/A |
+
+---
+
+## 15. Replay vs Fresh-Plan Reproducibility
+
+These are distinct reproducibility guarantees:
+
+### Replay reproducibility (insert-me generate-corpus --from-plan)
+
+The saved `corpus_plan.json` contains the exact seed files used in the original run.
+Replay re-executes the same seed files in the same order against the same source tree.
+This is the strongest guarantee: if nothing has changed, outputs must be byte-identical.
+
+```bash
+# Original run
+insert-me generate-corpus --source /path/to/project --count 20 \
+    --output-root corpus_out/
+
+# Replay (load existing plan, re-execute)
+insert-me generate-corpus --from-plan corpus_out/_plan/ \
+    --output-root corpus_out_replay/
+```
+
+The `corpus_index.json` written by the replay run will show `"run_mode": "replay"`
+and the same `fingerprints.plan_fingerprint` as the original run.
+
+### Fresh-plan reproducibility (two independent plan-corpus runs)
+
+A fresh plan run re-inspects the source tree and re-synthesises seed files from scratch.
+The guarantee is that the same source + count + constraints always produce the same plan.
+This is verified by `check_plan_stability.py` and `TestFreshPlanReproducibility` tests.
+
+### Side-by-side comparison
+
+| Property | Replay | Fresh-plan |
+|---|---|---|
+| Plan phase | Skipped (loads saved plan) | Re-run from scratch |
+| Seed files | Same physical files | Re-generated (byte-identical) |
+| Output guaranteed identical? | YES (if source unchanged) | YES (proven by tests) |
+| When to use | After a tool fix; audit; CI regression | To prove planner is deterministic |
+| `run_mode` in corpus_index | `"replay"` | `"generate"` |
+| Detect plan drift? | No (plan not re-generated) | YES — check_plan_stability.py |
+
+### Reference reproducibility targets
+
+| Target | Class | Plan-stable verified | Generate-stable verified |
+|---|---|---|---|
+| `examples/sandbox_eval/src` | Bundled | YES (55/55 seeds, 3 runs each) | YES (`check_reproducibility.py`) |
+| `examples/sandbox_targets/target_b/src` | Bundled | YES | YES (`check_reproducibility.py`) |
+| `examples/local_targets/moderate/src` | Local pilot | YES (`check_plan_stability.py`, `TestFreshPlanReproducibility`) | YES (`TestFreshGenerateReproducibility`) |
+| `examples/local_targets/minimal/src` | Local pilot | YES (`TestFreshPlanReproducibility`) | Partial (honest shortfall) |
+
+**Supported pilot targets** (user-provided local projects) are expected to be plan-stable
+but reproducibility is not formally pre-verified. Use `check_plan_stability.py` to check.

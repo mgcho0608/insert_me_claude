@@ -1,10 +1,14 @@
 # Reproducibility Matrix
 
-> **Generated:** 2026-04-06  
-> **Tool:** `scripts/check_reproducibility.py --runs 3`  
-> **Scope:** All seed files across all sandbox targets  
+> **Updated:** 2026-04-07 (Phase 13 — added fresh-plan repro section)
+> **Seed-level check tool:** `scripts/check_reproducibility.py --runs 3`  
+> **Plan-level check tool:** `scripts/check_plan_stability.py --runs 3`  
+> **Scope:** Seed-level (all sandbox seeds) + Plan-level (local-target and sandbox fixtures)
 
-This document records the reproducibility verification results for every seed/target combination. A seed is PASS if all `--runs` invocations produce bit-identical deterministic artifact fields.
+This document records two classes of reproducibility check:
+
+1. **Seed-level** — each seed file run N times; deterministic artifact fields must be identical.
+2. **Fresh-plan** — `plan-corpus` run N times on the same source + count; `corpus_plan.json` must be byte-identical.
 
 ---
 
@@ -118,7 +122,47 @@ All 55 seed/target combinations reproduce identically across 3 independent runs.
 
 ---
 
-## How to Regenerate
+## Fresh-Plan Reproducibility Matrix (Phase 13)
+
+> **Tool:** `scripts/check_plan_stability.py --runs 3`
+> **Scope:** `plan-corpus` run 3 times on each target; `corpus_plan.json` compared byte-for-byte.
+
+| Target | Class | Count | Runs | Verdict | Shared fingerprint |
+|---|---|---|---|---|---|
+| `examples/sandbox_eval/src` | Bundled | 20 | 3 | **STABLE** | all identical |
+| `examples/local_targets/moderate/src` | Local pilot | 5 | 3 | **STABLE** | all identical |
+| `examples/local_targets/minimal/src` | Local pilot | 5 | 3 | **STABLE** | all identical |
+
+All fresh-plan runs on the above targets produce byte-identical `corpus_plan.json` files.
+Fresh-plan stability is continuously verified by `TestFreshPlanReproducibility` (5 tests in
+`tests/test_reproducibility.py`).
+
+### How to run fresh-plan stability check
+
+```bash
+# Quick check (2 runs, moderate fixture)
+python scripts/check_plan_stability.py \
+    --source examples/local_targets/moderate/src \
+    --count 5
+
+# Full check with report (3 runs, sandbox_eval)
+python scripts/check_plan_stability.py \
+    --source examples/sandbox_eval/src \
+    --count 20 \
+    --runs 3 \
+    --output plan_repro_report.json
+```
+
+---
+
+## Seed-Level Reproducibility Matrix
+
+> **Tool:** `scripts/check_reproducibility.py --runs 3`
+> **Scope:** All seed files across both sandbox targets
+
+---
+
+## How to Regenerate (Seed-Level)
 
 ```bash
 # sandbox_eval

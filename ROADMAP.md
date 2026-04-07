@@ -323,8 +323,75 @@ All deterministic artifacts are byte-identical in both modes.
 - [x] `insert-me generate-corpus` CLI subcommand — plan + execute; reports requested/planned/accepted/rejected counts
 - [x] `schemas/corpus_plan.schema.json` — JSON Schema for corpus_plan.json artifact
 - [x] `tests/test_planning.py` — 41 tests covering TargetInspector, SeedSynthesizer, CorpusPlanner, CLI plan-corpus
-- [ ] Parallel execution with deterministic output (process-level parallelism)
-- [ ] `corpus_index.json` format distinct from corpus manifest — deferred
+- [ ] Parallel execution with deterministic output (process-level parallelism) — deferred
+
+---
+
+## Phase 10 — CWE-476 Corpus Admission ✓ COMPLETE
+
+**Goal:** Admit `remove_null_guard` (CWE-476) to the corpus-admitted strategy set.
+
+- [x] Dual-mode `_mutate_remove_null_guard` handler: primary mode targets guard lines (Seeder `null_guard` pattern); backward-compat mode targets deref lines
+- [x] Multi-line guard body blanking (prevents orphaned `return;` on next line)
+- [x] 8 CWE-476 sandbox seeds (`examples/seeds/sandbox/cwe476_sb_001.json` through `cwe476_sb_008.json`), 8/8 VALID quality gate
+- [x] `remove_null_guard` promoted to `IMPLEMENTED_AND_CORPUS_ADMITTED` in strategy catalog
+- [x] `null_guard` pattern type added to `seed.schema.json` enum
+- [x] `corpus_admitted=True` in `PLANNING_STRATEGIES` (inspector.py)
+- [x] `_STRATEGY_PASS_RATE["remove_null_guard"]` = 1.00 in corpus_planner.py
+- [x] 570 tests passing
+
+---
+
+## Phase 11 — Local-Target Corpus Realization + Shortfall Diagnostics ✓ COMPLETE
+
+**Goal:** Make `generate-corpus` truly count-oriented and execution-complete on local targets.
+
+- [x] `SeedSynthesizer.to_seed_dict()` — added missing `vulnerability_class` field (blocked all generate-corpus on non-sandbox targets)
+- [x] `SweepConstraints.verify_patcher: bool = True` — filters NOOP candidates at planning time via `_verify_patcher_will_mutate()`
+- [x] `_write_shortfall_report()` → `shortfall_report.json` — unified plan + execution shortfall view
+- [x] `acceptance_summary.json` schema v1.1: `requested_count_met`, `shortfall_amount`, honest `honest` field
+- [x] `generation_diagnostics.json` — execution failure category attribution
+- [x] `examples/local_targets/moderate/src/` — 4-file moderate fixture; 10/10 VALID at count=10
+- [x] `examples/local_targets/minimal/src/` — 1-file minimal fixture; tests honest shortfall
+- [x] `TestGenerateCorpusLocalE2E` — 8 E2E tests on moderate/minimal fixtures
+- [x] 582 tests passing
+
+---
+
+## Phase 12 — Replayable Corpus Runs ✓ COMPLETE
+
+**Goal:** `generate-corpus --from-plan PATH` replay path + `corpus_index.json` manifest.
+
+- [x] `--from-plan PATH` argument on `generate-corpus` (PATH = dir or corpus_plan.json file)
+- [x] `--source` and `--count` now optional (required only for fresh generate, not replay)
+- [x] `CorpusPlan.from_dict()` classmethod for JSON deserialization
+- [x] `_execute_plan_cases()` shared execution loop (generate + replay)
+- [x] `_finish_generate_corpus()` shared artifact writing
+- [x] `corpus_index.json` schema v1.0: run_mode, source_hash, plan_hash, counts, per_strategy, per_file, artifacts, reproducibility.replay_command
+- [x] `_cmd_generate_corpus_replay()` — dedicated replay entry point
+- [x] CWE-476 validated VIABLE on target_b (bstree/dynarray/strmap), 5/5 VALID
+- [x] `TestReplayFromPlan` (5 tests) + `TestCorpusPlanFromDict` (3 tests)
+- [x] 591 tests passing
+
+---
+
+## Phase 13 — Fresh-Plan Reproducibility + Plan Stability Closure ✓ COMPLETE
+
+**Goal:** Prove and document that plan-corpus is reproducible across fresh runs (not just replay).
+
+- [x] `scripts/check_plan_stability.py` — runs plan-corpus N times, compares corpus_plan.json, writes `plan_repro_report.json`; drift categories: source_hash_mismatch, planned_count_mismatch, strategy_allocation_drift, case_set_drift, case_content_drift, case_ordering_drift
+- [x] `plan_repro_report.json` schema v1.0: verdict (STABLE/PLAN_UNSTABLE), plan_stable, all_identical, plan_fingerprints, plan_diff, run_details
+- [x] `corpus_index.json` schema v1.1: added `fingerprints` block — plan_fingerprint, synthesized_seed_fingerprint, acceptance_fingerprint, adjudicator_mode
+- [x] `tests/test_reproducibility.py` — 18 official reproducibility tests:
+  - `TestFreshPlanReproducibility` (5): byte-identical plans on moderate/minimal/sandbox_eval
+  - `TestFreshGenerateReproducibility` (3): stable accepted counts + fingerprints
+  - `TestReplayVsFreshReproducibility` (3): replay matches fresh run
+  - `TestCheckPlanStabilityScript` (5): script smoke tests
+  - `TestCorpusIndexFingerprints` (2): fingerprints schema
+- [x] README.md, ARCHITECTURE.md, ROADMAP.md truth-synced to Phase 13
+- [x] `docs/repro_runbook.md` §14 updated + §15 added (replay vs fresh-plan distinction)
+- [x] `docs/repro_matrix.md` updated with fresh-plan repro check results
+- [x] 609 tests passing
 
 ---
 
