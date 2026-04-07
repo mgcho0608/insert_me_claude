@@ -6,6 +6,8 @@ Commands
 run             Run the vulnerability insertion pipeline for a given seed file + source tree.
 batch           Run the pipeline for every seed file in a directory.
 inspect-target  Preflight suitability check for a C/C++ source tree (no mutation applied).
+plan-corpus     Target-aware corpus planning: synthesise seeds for a requested count.
+generate-corpus Plan + execute the full corpus pipeline toward a requested count.
 validate-bundle Validate the schema conformance of an existing output bundle.
 audit           Pretty-print the audit record from an output bundle.
 evaluate        Evaluate a detector report against an insert_me output bundle.
@@ -21,6 +23,11 @@ Batch interface
 Preflight suitability check
 ----------------------------
     insert-me inspect-target --source PATH [--output PATH]
+
+Count-driven corpus planning
+-----------------------------
+    insert-me plan-corpus --source PATH --count N [--output-dir DIR] [options]
+    insert-me generate-corpus --source PATH --count N [--output-root DIR] [options]
 
 Legacy interface (backward-compatible fallback)
 -----------------------------------------------
@@ -255,6 +262,159 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     inspect_p.set_defaults(func=_cmd_inspect_target)
+
+    # -----------------------------------------------------------------------
+    # plan-corpus
+    # -----------------------------------------------------------------------
+    def _add_planning_args(p: argparse.ArgumentParser) -> None:
+        """Shared planning constraint arguments."""
+        p.add_argument(
+            "--max-per-file",
+            type=int,
+            default=5,
+            metavar="N",
+            help="Max cases per source file (default: 5).",
+        )
+        p.add_argument(
+            "--max-per-function",
+            type=int,
+            default=2,
+            metavar="N",
+            help="Max cases per function (default: 2).",
+        )
+        p.add_argument(
+            "--max-per-family",
+            type=int,
+            default=None,
+            metavar="N",
+            help="Max cases per strategy/CWE family (default: no limit).",
+        )
+        p.add_argument(
+            "--allow-strategies",
+            type=str,
+            default=None,
+            metavar="LIST",
+            help="Comma-separated list of strategy names to allow (default: all admitted).",
+        )
+        p.add_argument(
+            "--disallow-strategies",
+            type=str,
+            default=None,
+            metavar="LIST",
+            help="Comma-separated list of strategy names to disallow.",
+        )
+        p.add_argument(
+            "--min-candidate-score",
+            type=float,
+            default=0.0,
+            metavar="SCORE",
+            help="Minimum candidate suitability score (0.0–1.0, default: 0.0).",
+        )
+        p.add_argument(
+            "--strict-quality",
+            action="store_true",
+            help="Skip LIMITED strategies; only use VIABLE ones.",
+        )
+
+    plan_p = subparsers.add_parser(
+        "plan-corpus",
+        help="Target-aware corpus planning: inspect target and synthesise seed files.",
+        description=(
+            "Inspect a local C/C++ source tree, determine which strategies are\n"
+            "viable, and synthesise a deterministic corpus plan toward --count cases.\n\n"
+            "Outputs (written to --output-dir):\n"
+            "  corpus_plan.json    -- allocation plan with per-case details\n"
+            "  seeds/*.json        -- one synthesised seed file per planned case\n\n"
+            "The plan is deterministic: same source tree + same count + same options\n"
+            "=> same plan and same seed files.\n\n"
+            "After planning, run the generation pipeline with:\n"
+            "  insert-me batch --seed-dir <output-dir>/seeds/ --source PATH\n"
+            "or apply the full quality gate with scripts/generate_corpus.py.\n\n"
+            "Example:\n"
+            "  insert-me plan-corpus --source /path/to/project --count 20\n"
+            "  insert-me plan-corpus --source /path/to/project --count 30 \\\n"
+            "    --output-dir plan_out/ --max-per-file 4 --strict-quality"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    plan_p.add_argument(
+        "--source",
+        type=Path,
+        required=True,
+        metavar="PATH",
+        help="Root of the C/C++ source tree to plan for.",
+    )
+    plan_p.add_argument(
+        "--count",
+        type=int,
+        required=True,
+        metavar="N",
+        help="Target number of corpus cases to plan. Actual planned count may be less if the target lacks sufficient diverse candidates.",
+    )
+    plan_p.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help="Directory to write corpus_plan.json and seeds/. Defaults to ./plan_output/.",
+    )
+    _add_planning_args(plan_p)
+    plan_p.set_defaults(func=_cmd_plan_corpus)
+
+    # -----------------------------------------------------------------------
+    # generate-corpus
+    # -----------------------------------------------------------------------
+    gen_p = subparsers.add_parser(
+        "generate-corpus",
+        help="Plan + execute full corpus pipeline toward a requested count.",
+        description=(
+            "Full count-driven corpus generation pipeline:\n"
+            "  1. Inspect target (insert-me inspect-target)\n"
+            "  2. Synthesise seed plan (insert-me plan-corpus)\n"
+            "  3. Run pipeline for every planned seed (insert-me batch)\n"
+            "  4. Report acceptance summary (requested / planned / accepted / rejected)\n\n"
+            "The system honestly reports if fewer than --count high-quality cases\n"
+            "are achievable given the target's candidate diversity.\n\n"
+            "Example:\n"
+            "  insert-me generate-corpus --source /path/to/project --count 20\n"
+            "  insert-me generate-corpus --source /path/to/project --count 30 \\\n"
+            "    --output-root corpus_out/ --max-per-file 4"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    gen_p.add_argument(
+        "--source",
+        type=Path,
+        required=True,
+        metavar="PATH",
+        help="Root of the C/C++ source tree.",
+    )
+    gen_p.add_argument(
+        "--count",
+        type=int,
+        required=True,
+        metavar="N",
+        help="Target number of corpus cases.",
+    )
+    gen_p.add_argument(
+        "--output-root",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help="Root directory for plan and generated bundles (default: ./corpus_output/).",
+    )
+    gen_p.add_argument(
+        "--no-llm",
+        action="store_true",
+        help="Disable LLM adapter.",
+    )
+    gen_p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Plan only; do not execute the pipeline.",
+    )
+    _add_planning_args(gen_p)
+    gen_p.set_defaults(func=_cmd_generate_corpus)
 
     # -----------------------------------------------------------------------
     # validate-bundle
@@ -927,6 +1087,181 @@ def _cmd_inspect_target(args: argparse.Namespace) -> int:
         print(f"\n[insert-me] suitability report written to: {out_path}")
 
     return 1 if report["suitability"]["blockers"] else 0
+
+
+def _cmd_plan_corpus(args: argparse.Namespace) -> int:
+    from insert_me.planning import CorpusPlanner, PlanConstraints
+
+    source: Path = args.source
+    if not source.exists():
+        print(f"[insert-me] error: --source not found: {source}", file=sys.stderr)
+        return 1
+    if not source.is_dir():
+        print(f"[insert-me] error: --source must be a directory: {source}", file=sys.stderr)
+        return 1
+
+    output_dir: Path = args.output_dir or (Path.cwd() / "corpus_plan")
+
+    def _parse_strategy_list(val: str | None) -> list[str] | None:
+        if val is None:
+            return None
+        return [s.strip() for s in val.split(",") if s.strip()]
+
+    constraints = PlanConstraints(
+        max_per_file=args.max_per_file,
+        max_per_function=args.max_per_function,
+        max_per_family=args.max_per_family,
+        allow_strategies=_parse_strategy_list(args.allow_strategies),
+        disallow_strategies=_parse_strategy_list(args.disallow_strategies),
+        min_candidate_score=args.min_candidate_score,
+        strict_quality=args.strict_quality,
+    )
+
+    print(f"[insert-me] planning {args.count} cases for {source} ...")
+    planner = CorpusPlanner(
+        source_root=source,
+        requested_count=args.count,
+        constraints=constraints,
+    )
+    plan = planner.plan()
+
+    # Print summary
+    print(f"\n  requested : {plan.requested_count}")
+    print(f"  planned   : {plan.planned_count}")
+    print(f"  projected : {plan.projected_accepted_count} (after quality gate)")
+    print()
+    if plan.strategy_allocation:
+        print("  allocation by strategy:")
+        for strat, cnt in sorted(plan.strategy_allocation.items()):
+            suit = plan.suitability.get(strat, "")
+            print(f"    {strat:<30} {cnt:>4}  [{suit}]")
+    print()
+
+    if plan.blockers:
+        print("  BLOCKERS:")
+        for b in plan.blockers:
+            print(f"    - {b}")
+        print()
+
+    if plan.warnings:
+        print("  warnings:")
+        for w in plan.warnings:
+            print(f"    - {w}")
+        print()
+
+    if plan.planned_count > 0:
+        plan.write(output_dir)
+        print(f"[insert-me] corpus plan written to: {output_dir / 'corpus_plan.json'}")
+        print(f"            seeds written to:       {output_dir / 'seeds'}/")
+    else:
+        print("[insert-me] no cases planned — nothing written.", file=sys.stderr)
+
+    return 1 if plan.blockers else 0
+
+
+def _cmd_generate_corpus(args: argparse.Namespace) -> int:
+    """Plan + execute: synthesise a corpus plan then run the batch pipeline."""
+    from insert_me.planning import CorpusPlanner, PlanConstraints
+    from insert_me.config import load_config, apply_cli_overrides
+    from insert_me.pipeline import run_pipeline
+
+    source: Path = args.source
+    if not source.exists():
+        print(f"[insert-me] error: --source not found: {source}", file=sys.stderr)
+        return 1
+    if not source.is_dir():
+        print(f"[insert-me] error: --source must be a directory: {source}", file=sys.stderr)
+        return 1
+
+    output_root: Path = args.output_root or (Path.cwd() / "corpus_out")
+    plan_dir = output_root / "_plan"
+    dry_run: bool = args.dry_run
+
+    def _parse_strategy_list_gen(val: str | None) -> list[str] | None:
+        if val is None:
+            return None
+        return [s.strip() for s in val.split(",") if s.strip()]
+
+    constraints = PlanConstraints(
+        max_per_file=args.max_per_file,
+        max_per_function=args.max_per_function,
+        max_per_family=args.max_per_family,
+        allow_strategies=_parse_strategy_list_gen(args.allow_strategies),
+        disallow_strategies=_parse_strategy_list_gen(args.disallow_strategies),
+        min_candidate_score=args.min_candidate_score,
+        strict_quality=args.strict_quality,
+    )
+
+    # --- Phase 1: Plan ---
+    print(f"[insert-me] [1/2] planning {args.count} cases for {source} ...")
+    planner = CorpusPlanner(
+        source_root=source,
+        requested_count=args.count,
+        constraints=constraints,
+    )
+    plan = planner.plan()
+
+    print(f"  planned {plan.planned_count}/{plan.requested_count} cases "
+          f"(projected accepted: {plan.projected_accepted_count})")
+
+    if plan.blockers:
+        for b in plan.blockers:
+            print(f"  BLOCKER: {b}", file=sys.stderr)
+        return 1
+
+    if plan.planned_count == 0:
+        print("[insert-me] no cases planned — nothing to execute.", file=sys.stderr)
+        return 1
+
+    plan.write(plan_dir)
+    print(f"  plan written to: {plan_dir}")
+
+    if dry_run:
+        print("[insert-me] --dry-run: skipping batch execution.")
+        return 0
+
+    # --- Phase 2: Execute ---
+    print(f"\n[insert-me] [2/2] executing {plan.planned_count} cases ...")
+    accepted = 0
+    rejected = 0
+    errors = 0
+
+    cfg = load_config()
+    for case in plan.cases:
+        seed_path = plan_dir / case.seed_file
+        if not seed_path.exists():
+            errors += 1
+            continue
+        try:
+            import json as _json
+            seed_spec = _json.loads(seed_path.read_text(encoding="utf-8"))
+            run_dir = output_root / case.case_id
+            result = run_pipeline(
+                seed_spec=seed_spec,
+                source_root=source,
+                output_dir=run_dir,
+                config=cfg,
+            )
+            classification = getattr(result, "classification", "UNKNOWN")
+            if classification in ("VALID", "ACCEPT", "ACCEPT_WITH_NOTES"):
+                accepted += 1
+            else:
+                rejected += 1
+        except Exception as exc:
+            print(f"  [error] {case.case_id}: {exc}", file=sys.stderr)
+            errors += 1
+
+    total = accepted + rejected + errors
+    print(f"\n  requested  : {plan.requested_count}")
+    print(f"  planned    : {plan.planned_count}")
+    print(f"  executed   : {total}")
+    print(f"  accepted   : {accepted}")
+    print(f"  rejected   : {rejected}")
+    if errors:
+        print(f"  errors     : {errors}")
+    print(f"\n[insert-me] corpus written to: {output_root}")
+
+    return 0 if errors == 0 else 1
 
 
 # ---------------------------------------------------------------------------

@@ -269,10 +269,96 @@ Before running the full quality gate, review each bundle against the criteria in
 
 ---
 
-## 6. Scaling to Corpus Generation
+## 6. Target-Aware Corpus Planning (`plan-corpus`)
 
-When the small batch review is clean, you can scale to larger corpus generation
-using the same tools as the bundled sandbox targets.
+`insert-me plan-corpus` automates seed synthesis: given a source tree and a
+requested case count, it inspects the target, determines which strategies are
+viable, and produces a deterministic corpus plan with synthesised seed files.
+
+### Step 1: Generate a corpus plan
+
+```bash
+insert-me plan-corpus \
+  --source  /path/to/local/project \
+  --count   30 \
+  --output-dir  corpus_plan/
+```
+
+Output:
+- `corpus_plan/corpus_plan.json` — full plan artifact (schema-validated)
+- `corpus_plan/seeds/*.json` — one seed file per planned case
+
+The command prints a summary:
+
+```
+  requested : 30
+  planned   : 28
+  projected : 25 (after quality gate)
+
+  allocation by strategy:
+    alloc_size_undercount          14  [VIABLE]
+    insert_premature_free           8  [VIABLE]
+    insert_double_free              6  [LIMITED]
+```
+
+Exit 0 = no blockers.  Exit 1 = target has blockers (see printed BLOCKER messages).
+
+### Step 2: Inspect the plan
+
+```bash
+python -c "
+import json
+d = json.load(open('corpus_plan/corpus_plan.json'))
+print('planned:', d['planned_count'], '/', d['requested_count'])
+for c in d['cases'][:3]:
+    print(' ', c['case_id'], c['target_file'], c['target_line'], c['confidence'])
+"
+```
+
+### Step 3: Tune constraints if needed
+
+```bash
+# Restrict to one strategy
+insert-me plan-corpus --source /path/to/project --count 10 \
+  --allow-strategies alloc_size_undercount --output-dir plan_cwe122/
+
+# Reduce concentration per file
+insert-me plan-corpus --source /path/to/project --count 20 \
+  --max-per-file 2 --output-dir plan_diverse/
+
+# Only VIABLE strategies (skip LIMITED)
+insert-me plan-corpus --source /path/to/project --count 20 \
+  --strict-quality --output-dir plan_strict/
+```
+
+### Step 4: Execute the plan with `generate-corpus`
+
+Once the plan looks reasonable, execute it in one step:
+
+```bash
+insert-me generate-corpus \
+  --source  /path/to/local/project \
+  --count   30 \
+  --output-root  corpus_out/
+```
+
+This runs plan-corpus internally, then executes the full pipeline for each
+planned case and reports:
+
+```
+  requested  : 30
+  planned    : 28
+  executed   : 28
+  accepted   : 25
+  rejected   : 3
+```
+
+---
+
+## 7. Scaling to Corpus Generation (Manual Workflow)
+
+When using manually authored seeds rather than the planning layer, you can
+scale with the existing batch tools.
 
 ### Step 1: Run the quality gate
 
@@ -306,7 +392,7 @@ insert-me evaluate \
 
 ---
 
-## 7. Full Pilot Decision Tree
+## 8. Full Pilot Decision Tree
 
 ```
 inspect-target
@@ -350,7 +436,7 @@ inspect-target
 
 ---
 
-## 8. Supported vs. Reference Environment
+## 9. Supported vs. Reference Environment
 
 | Aspect | Bundled sandbox targets | User-provided local targets |
 |---|---|---|
@@ -367,7 +453,7 @@ reproducible given the same source tree, but they are not included in the offici
 
 ---
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 | Symptom | Cause | Fix |
 |---|---|---|

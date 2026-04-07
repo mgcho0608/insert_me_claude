@@ -318,6 +318,11 @@ All deterministic artifacts are byte-identical in both modes.
 - [x] `scripts/inspect_target.py` — standalone script wrapping the same inspection logic
 - [x] `docs/local_target_pilot.md` — first-class documentation for local evaluation-only target projects
 - [x] Local-target pilot test fixture (`tests/fixtures/local_target/`) and 31 focused tests (`tests/test_inspect_target.py`)
+- [x] `src/insert_me/planning/` — TargetInspector, SeedSynthesizer, CorpusPlanner; target-aware seed synthesis; VIABLE/LIMITED/BLOCKED suitability tiers; deterministic allocation
+- [x] `insert-me plan-corpus` CLI subcommand — count-driven corpus planning; writes `corpus_plan.json` + `seeds/*.json`; honest shortfall reporting
+- [x] `insert-me generate-corpus` CLI subcommand — plan + execute; reports requested/planned/accepted/rejected counts
+- [x] `schemas/corpus_plan.schema.json` — JSON Schema for corpus_plan.json artifact
+- [x] `tests/test_planning.py` — 41 tests covering TargetInspector, SeedSynthesizer, CorpusPlanner, CLI plan-corpus
 - [ ] Parallel execution with deterministic output (process-level parallelism)
 - [ ] `corpus_index.json` format distinct from corpus manifest — deferred
 

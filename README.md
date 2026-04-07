@@ -72,7 +72,7 @@ For engineers picking this up for the first time inside an organisation:
 | | |
 |---|---|
 | **What it is** | A Python CLI that inserts one known vulnerability into a C/C++ source tree and produces a fully annotated, schema-validated output bundle. |
-| **Current maturity** | Phase 9 + Phase 4c partial — all four core pipeline stages + evaluator + deterministic heuristic adjudicator + 5 mutation strategies (4 corpus-admitted: CWE-122/416/415/401; 1 experimental: CWE-476) + multi-line patcher + `insert-me batch` CLI + `insert-me inspect-target` preflight + 2 sandbox targets + local-target pilot workflow + corpus generation tooling implemented and tested (499 tests). Not production-hardened; alpha-quality. |
+| **Current maturity** | Phase 9 + Phase 4c partial — all four core pipeline stages + evaluator + deterministic heuristic adjudicator + 5 mutation strategies (4 corpus-admitted: CWE-122/416/415/401; 1 experimental: CWE-476) + multi-line patcher + `insert-me batch` CLI + `insert-me inspect-target` preflight + `insert-me plan-corpus` target-aware planning + 2 sandbox targets + local-target pilot workflow + corpus generation tooling implemented and tested (540 tests). Not production-hardened; alpha-quality. |
 | **Install path** | `pip install -e .` from source. No PyPI release exists yet. |
 | **Python versions** | 3.11, 3.12 — **CI-tested**. 3.10 — **statically reviewed only** (single shim: `tomllib` → `tomli`). No other version-specific features used. |
 | **Dependencies** | `jsonschema>=4.17` + `tomli>=1.2.0` on Python 3.10 only. No other mandatory runtime dependencies. |
@@ -87,6 +87,7 @@ For engineers picking this up for the first time inside an organisation:
 
 **What is NOT available yet:**
 - `remove_null_guard` (CWE-476) corpus admission — implemented but sandbox target coverage is insufficient for corpus admission; handler currently only matches single-line inline guards (`if (!ptr) return;`); multi-line guard style in sandbox needs handler enhancement
+- `generate-corpus` full execution — plan phase works; batch execution phase is wired but requires a well-configured target with compatible seeds
 - Additional mutation strategies (CWE-190, CWE-787) — planned; CWE-190 blocker resolved (multi-line handler exists); needs implementation
 - AST-based or compiler-backed patching/validation — future phases
 - Phase 7B: real LLM adjudicator (placeholder exists; `LLMAdjudicator.adjudicate()` raises `NotImplementedError`)
@@ -118,6 +119,12 @@ insert-me batch --seed-dir examples/seeds/sandbox \
 
 # Preflight suitability check — inspect a source tree before running seeds
 insert-me inspect-target --source /path/to/c-project
+
+# Target-aware corpus planning — synthesise a deterministic plan toward N cases
+insert-me plan-corpus --source /path/to/c-project --count 30 --output-dir corpus_plan/
+
+# Plan + execute — plan then run the full pipeline for each case
+insert-me generate-corpus --source /path/to/c-project --count 30 --output-root corpus_out/
 
 # Validate a completed output bundle
 insert-me validate-bundle output/<run-id>/

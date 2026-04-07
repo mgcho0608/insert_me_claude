@@ -16,8 +16,9 @@ regardless of which optional components are active.
 **Phase 9 + Phase 4c partial: complete.**
 Full pipeline operational: 5 mutation strategies (4 corpus-admitted, 1 experimental),
 multi-line patcher infrastructure, `insert-me batch` CLI, `insert-me inspect-target`
-preflight, 2 sandbox targets, 55-seed accepted corpus (100% ACCEPT/ACCEPT_WITH_NOTES),
-55/55 reproducibility PASS. 499 tests passing.
+preflight, `insert-me plan-corpus` target-aware planning, 2 sandbox targets,
+55-seed accepted corpus (100% ACCEPT/ACCEPT_WITH_NOTES), 55/55 reproducibility PASS.
+540 tests passing.
 
 | Pipeline stage | Status | Notes |
 |---|---|---|
@@ -28,7 +29,8 @@ preflight, 2 sandbox targets, 55-seed accepted corpus (100% ACCEPT/ACCEPT_WITH_N
 | Evaluator | **Complete** (Phase 7A) | Optional separate step; compares detector reports against ground truth |
 | Adjudicator | **Phase 7B-prep** | `HeuristicAdjudicator` (offline default) · `DisabledAdjudicator` · `LLMAdjudicator` placeholder |
 | LLM Adapter | Interface only | `NoOpAdapter` always available; LLM enrichment (labels.json) deferred to Phase 7B |
-| Corpus tooling | **Phase 8/9** | `scripts/generate_corpus.py` (batch gen + quality gate) · `scripts/check_reproducibility.py` · `insert-me batch` CLI · `insert-me inspect-target` (preflight) · `scripts/inspect_target.py` · `examples/corpus_manifest.json` · `docs/local_target_pilot.md` |
+| Corpus tooling | **Phase 8/9** | `scripts/generate_corpus.py` (batch gen + quality gate) · `scripts/check_reproducibility.py` · `insert-me batch` · `insert-me inspect-target` (preflight) · `insert-me plan-corpus` (target-aware planning) · `insert-me generate-corpus` (plan + execute) · `scripts/inspect_target.py` · `examples/corpus_manifest.json` · `docs/local_target_pilot.md` |
+| Planning layer | **Phase 9** | `src/insert_me/planning/` — `TargetInspector`, `SeedSynthesizer`, `CorpusPlanner`; count-driven; deterministic; suitability tiers VIABLE/LIMITED/BLOCKED |
 
 The pipeline orchestrator (`pipeline/__init__.py`) coordinates all four stages.
 Each stage's `run()` method is implemented and called in sequence.
@@ -280,7 +282,7 @@ This also means:
 ```
 src/insert_me/
 ├── __init__.py          # Package version, public re-exports
-├── cli.py               # CLI entrypoint (argparse) — run/batch/inspect-target/validate-bundle/audit/evaluate
+├── cli.py               # CLI entrypoint — run/batch/inspect-target/plan-corpus/generate-corpus/validate-bundle/audit/evaluate
 ├── config.py            # Config loader + dataclass (TOML + CLI overrides)
 ├── schema.py            # Schema loader, artifact validation, validate_bundle()
 ├── artifacts.py         # BundlePaths, run ID derivation, write_json_artifact
@@ -291,6 +293,11 @@ src/insert_me/
 │   ├── validator.py     # Validator, ValidationVerdict           [Phase 5: COMPLETE]
 │   ├── auditor.py       # Auditor, GroundTruthRecord, AuditRecord [Phase 6: COMPLETE]
 │   └── evaluator.py     # shim — re-exports from evaluation/    [backward compat]
+├── planning/
+│   ├── __init__.py      # Public API re-exports (CorpusPlanner, TargetInspector, SeedSynthesizer, …)
+│   ├── inspector.py     # TargetInspector — suitability scan; VIABLE/LIMITED/BLOCKED tiers [Phase 9]
+│   ├── seed_synthesis.py # SeedSynthesizer — deterministic seed-integer sweep [Phase 9]
+│   └── corpus_planner.py # CorpusPlanner — allocation, plan generation, write() [Phase 9]
 ├── evaluation/
 │   ├── __init__.py      # Public API re-exports
 │   ├── evaluator.py     # Evaluator, MatchRecord, EvaluationResult [Phase 7A]

@@ -1,0 +1,112 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "corpus_plan.schema.json",
+  "title": "CorpusPlan",
+  "description": "Output of insert-me plan-corpus: a deterministic target-aware corpus plan.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "source_root",
+    "source_hash",
+    "requested_count",
+    "planned_count",
+    "projected_accepted_count",
+    "constraints",
+    "strategy_allocation",
+    "suitability",
+    "cases",
+    "allocation_summary"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Schema version for this artifact.",
+      "enum": ["1.0"]
+    },
+    "source_root": {
+      "type": "string",
+      "description": "Absolute path to the source tree this plan was generated for."
+    },
+    "source_hash": {
+      "type": "string",
+      "description": "16-char hex hash of the source tree at planning time. Used to detect if the source has changed."
+    },
+    "requested_count": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "The count requested by the user."
+    },
+    "planned_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of cases actually planned. May be less than requested_count if the target lacks sufficient diverse candidates."
+    },
+    "projected_accepted_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Projected number of cases that will pass the quality gate, based on strategy-specific historical pass rates."
+    },
+    "constraints": {
+      "type": "object",
+      "description": "The planning constraints used to produce this plan.",
+      "required": ["max_per_file", "max_per_function"],
+      "properties": {
+        "max_per_file": { "type": "integer" },
+        "max_per_function": { "type": "integer" },
+        "max_per_family": { "type": ["integer", "null"] },
+        "allow_strategies": { "type": ["array", "null"], "items": { "type": "string" } },
+        "disallow_strategies": { "type": ["array", "null"], "items": { "type": "string" } },
+        "min_candidate_score": { "type": "number" },
+        "strict_quality": { "type": "boolean" }
+      }
+    },
+    "strategy_allocation": {
+      "type": "object",
+      "description": "Planned case count per strategy name.",
+      "additionalProperties": { "type": "integer" }
+    },
+    "suitability": {
+      "type": "object",
+      "description": "Suitability tier per strategy: VIABLE, LIMITED, BLOCKED, or EXPERIMENTAL.",
+      "additionalProperties": {
+        "type": "string",
+        "enum": ["VIABLE", "LIMITED", "BLOCKED", "EXPERIMENTAL"]
+      }
+    },
+    "cases": {
+      "type": "array",
+      "description": "One entry per planned insertion case.",
+      "items": {
+        "type": "object",
+        "required": [
+          "case_id", "strategy", "cwe_id", "seed_integer",
+          "target_file", "target_line", "candidate_score", "confidence", "seed_file"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "case_id": { "type": "string" },
+          "strategy": { "type": "string" },
+          "cwe_id": { "type": "string" },
+          "seed_integer": { "type": "integer", "minimum": 1 },
+          "target_file": { "type": "string" },
+          "target_line": { "type": "integer", "minimum": 1 },
+          "function_name": { "type": "string" },
+          "candidate_score": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+          "confidence": { "type": "string", "enum": ["high", "medium", "low"] },
+          "seed_file": { "type": "string" }
+        }
+      }
+    },
+    "allocation_summary": {
+      "type": "object",
+      "required": ["by_strategy", "by_file", "blockers", "warnings"],
+      "properties": {
+        "by_strategy": { "type": "object", "additionalProperties": { "type": "integer" } },
+        "by_file": { "type": "object", "additionalProperties": { "type": "integer" } },
+        "blockers": { "type": "array", "items": { "type": "string" } },
+        "warnings": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}
