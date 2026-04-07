@@ -154,11 +154,13 @@ across repeated runs for the same seed + source tree. `patch_plan.json` carries 
   - 40 focused tests in `tests/test_patcher_cwe416.py`
 - [x] `extra` dict in `Mutation` and `ground_truth.json` (e.g. `freed_pointer`)
 
-### Phase 4c — remaining
+### Phase 4c — partial
 
-- [ ] Implement `integer_size_overflow` strategy (CWE-190)
+- [x] Patcher multi-line mutation support — `MultilineMutationResult` dataclass + `_MULTILINE_STRATEGY_HANDLERS` registry + `_register_multiline` decorator
+- [x] Implement `remove_null_guard` strategy (CWE-476): replaces preceding null-check guard with comment; guard and dereference are on different lines (multi-line handler)
+- [x] Seeder `null_guard` pattern type: matches `if (!ptr) return;` / `if (ptr == NULL) return;` etc., with scoring bonus for single-line return guards and following dereference
+- [ ] Implement `integer_size_overflow` strategy (CWE-190) — guard-line removal pattern; feasible with multi-line handler now available
 - [ ] Handle multi-file source trees with multiple targets across files
-- [ ] Confirm determinism: same seed + spec → same diff across runs
 - [ ] Benchmark copy performance on mid-size source trees (~100k LOC)
 
 Note: `source_hash` is already computed by the Seeder and written to
@@ -166,6 +168,10 @@ Note: `source_hash` is already computed by the Seeder and written to
 
 **Phase 4b exit criterion met:** two strategies implemented (`alloc_size_undercount`,
 `insert_premature_free`); good/bad trees are written; 335 tests pass.
+
+**Note:** `insert_double_free` (CWE-415) and `remove_free_call` (CWE-401) were implemented in Phase 8 (CWE Coverage Expansion), not Phase 4c.
+
+**Phase 4c partial exit criterion met:** multi-line handler infrastructure in place; `remove_null_guard` (CWE-476) implemented and tested (30 tests); 468 total tests passing.
 
 ---
 
@@ -280,16 +286,22 @@ All deterministic artifacts are byte-identical in both modes.
 
 ---
 
-## Phase 8 — CWE Coverage Expansion
+## Phase 8 — CWE Coverage Expansion ✓ COMPLETE
 
 **Goal:** Expand the supported vulnerability class set beyond the initial 1–3 CWEs.
 
-- [ ] Audit existing mutation strategies for generalizability
-- [ ] Add mutation strategies for priority CWEs (to be defined based on use case)
-- [ ] Add corresponding seed file templates under `examples/seeds/`
-- [ ] Regression test suite for each new CWE
+- [x] Audit existing mutation strategies for generalizability (free_call quality penalties added to Seeder)
+- [x] Implement `insert_double_free` strategy (CWE-415): inserts duplicate `free(ptr);` before existing free
+- [x] Implement `remove_free_call` strategy (CWE-401): replaces `free(ptr);` with memory-leak comment
+- [x] Seeder free_call quality penalties: −0.20 conditional guard, −0.30 inside loop body, −0.50 complex arg expression
+- [x] Add second sandbox target (`examples/sandbox_targets/target_b/src/` — 3 files: dynarray, bstree, strmap)
+- [x] Seed files under `examples/seeds/sandbox/` (40 seeds) and `examples/seeds/target_b/` (15 seeds)
+- [x] 100% accept rate on both sandbox targets (0 REJECT across all 55 seeds)
+- [x] Regression tests for CWE-415 and CWE-401 in `tests/test_patcher_cwe415_cwe401.py`
+- [x] `generate_corpus.py` and `check_reproducibility.py` — strategy catalog updated to include all 4 strategies
+- [x] 427 tests passing
 
-**Deferred until Phase 6 is stable.**
+**Exit criterion met:** 4 strategies implemented (CWE-122/416/415/401); 55 seeds across 2 sandbox targets all ACCEPT or ACCEPT_WITH_NOTES; 55/55 reproducibility PASS across 3 runs each.
 
 ---
 
@@ -297,10 +309,13 @@ All deterministic artifacts are byte-identical in both modes.
 
 **Goal:** Tooling to generate large labelled corpora efficiently.
 
-- [ ] Batch run support (`insert-me batch --seed-dir examples/seeds/ --source /project`)
+- [x] Batch script (`scripts/generate_corpus.py`) — quality-gate review, duplicate detection, corpus manifest
+- [x] Reproducibility script (`scripts/check_reproducibility.py`) — verifies byte-identical output across N runs
+- [x] Corpus manifest (`examples/corpus_manifest.json`) aggregating all run IDs
+- [x] Duplicate detection across runs (implemented in `generate_corpus.py`)
+- [ ] `insert-me batch` CLI subcommand (`insert-me batch --seed-dir PATH --source PATH`) — scripts/generate_corpus.py covers this use case until CLI is added
 - [ ] Parallel execution with deterministic output (process-level parallelism)
-- [ ] Corpus manifest (`corpus_index.json`) aggregating all run IDs in a directory
-- [ ] Deduplication check across runs
+- [ ] `corpus_index.json` format distinct from corpus manifest — deferred
 
 ---
 

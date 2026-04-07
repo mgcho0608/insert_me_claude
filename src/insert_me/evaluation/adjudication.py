@@ -73,6 +73,10 @@ _STRATEGY_KEYWORDS: dict[str, list[str]] = {
         "memory leak", "leak", "not freed", "unreleased", "missing free",
         "resource leak", "lost pointer",
     ],
+    "remove_null_guard": [
+        "null dereference", "null pointer", "null ptr", "dereference null",
+        "nullptr", "null check", "missing null check", "guard removed",
+    ],
 }
 
 

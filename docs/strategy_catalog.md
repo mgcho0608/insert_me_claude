@@ -75,27 +75,29 @@ Quality gate pass rate: **~90%** (9/10 sandbox_eval seeds; 3/3 target_b seeds AC
 
 ---
 
-## Planned Strategies
-
 ### CWE-476 — NULL Pointer Dereference  
-**Strategy:** *(not yet named)*  
-**Pattern type:** `pointer_deref`  
-**Maturity:** PLANNED
+**Strategy:** `remove_null_guard`  
+**Pattern type:** `null_guard` (or `pointer_deref` with multi-line handler)  
+**Maturity:** IMPLEMENTED
 
-Remove or invert the null-check guard before a pointer dereference. Target: `if (!ptr) return;` followed by `ptr->field`. Mutation: remove the guard line.
+Replaces a null-check guard (`if (!ptr) return;` / `if (ptr == NULL) return;`) with a comment, leaving a NULL dereference reachable at the subsequent `ptr->field` line. Uses the multi-line handler API (`_MULTILINE_STRATEGY_HANDLERS`) since the guard and dereference are on different lines.
 
-**Blocker:** Patcher currently operates on single lines. Removing a guard requires a two-line deletion mode. Design needed before implementation.
+Guard forms matched: `!ptr`, `ptr == NULL`, `ptr == nullptr`, `ptr == 0`, and reversed (`NULL == ptr`).
+
+**Needs corpus validation:** No sandbox seeds yet. Add seed files under `examples/seeds/sandbox/` targeting guard patterns in the sandbox source files before using in production corpora.
 
 ---
 
+## Planned Strategies
+
 ### CWE-190 — Integer Overflow or Wraparound  
 **Strategy:** *(not yet named)*  
-**Pattern type:** `malloc_call`  
+**Pattern type:** `malloc_call` (or a new `overflow_guard` type)  
 **Maturity:** PLANNED
 
 Remove the overflow check (e.g., `if (n > MAX) return;`) that precedes a multiplication-based `malloc(n * sizeof(T))`. The resulting allocation is undersized when `n` overflows.
 
-**Blocker:** Multi-line mutation (delete the guard, keep the malloc). Same requirement as CWE-476.
+**Blocker resolved:** Multi-line mutation infrastructure now in place (`MultilineMutationResult`, `_MULTILINE_STRATEGY_HANDLERS`). Implementation can proceed following the CWE-476 pattern.
 
 ---
 
@@ -130,7 +132,8 @@ Target `memcpy`/`strcpy` calls whose destination is a heap allocation; mutate th
 | `insert_premature_free` | CWE-416 | IMPLEMENTED | 24 cases (19 + 5 target_b) |
 | `insert_double_free` | CWE-415 | IMPLEMENTED | 13 cases (10 + 3 target_b) |
 | `remove_free_call` | CWE-401 | IMPLEMENTED | 13 cases (10 + 3 target_b) |
-| *(planned)* | CWE-476, CWE-190, CWE-787 | PLANNED | 0 |
+| `remove_null_guard` | CWE-476 | IMPLEMENTED | 0 (corpus seeds pending) |
+| *(planned)* | CWE-190, CWE-787 | PLANNED | 0 |
 | *(candidate)* | CWE-125, CWE-134, CWE-121, CWE-369, CWE-680 | CANDIDATE | 0 |
 
 ---

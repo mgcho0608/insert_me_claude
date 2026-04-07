@@ -4,6 +4,7 @@ CLI entrypoint for insert_me.
 Commands
 --------
 run             Run the vulnerability insertion pipeline for a given seed file + source tree.
+batch           Run the pipeline for every seed file in a directory.
 validate-bundle Validate the schema conformance of an existing output bundle.
 audit           Pretty-print the audit record from an output bundle.
 evaluate        Evaluate a detector report against an insert_me output bundle.
@@ -11,6 +12,10 @@ evaluate        Evaluate a detector report against an insert_me output bundle.
 Canonical interface (primary)
 ------------------------------
     insert-me run --seed-file PATH --source PATH [--output PATH] [--config PATH] [--no-llm] [--dry-run]
+
+Batch interface
+---------------
+    insert-me batch --seed-dir PATH --source PATH [--output PATH] [--config PATH] [--no-llm] [--dry-run]
 
 Legacy interface (backward-compatible fallback)
 -----------------------------------------------
@@ -144,6 +149,66 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     run_p.set_defaults(func=_cmd_run)
+
+    # -----------------------------------------------------------------------
+    # batch
+    # -----------------------------------------------------------------------
+    batch_p = subparsers.add_parser(
+        "batch",
+        help="Run the pipeline for every seed file in a directory.",
+        description=(
+            "Run the vulnerability insertion pipeline for every .json seed file\n"
+            "found in --seed-dir and collect results into a summary table.\n\n"
+            "Each seed is processed sequentially. The command exits 0 if every\n"
+            "seed produces a VALID bundle, non-zero if any seed fails.\n\n"
+            "For quality-gate review and corpus manifests, use\n"
+            "scripts/generate_corpus.py (a superset of this command).\n\n"
+            "Example:\n"
+            "  insert-me batch \\\n"
+            "    --seed-dir examples/seeds/sandbox \\\n"
+            "    --source   examples/sandbox_eval/src"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    batch_p.add_argument(
+        "--seed-dir",
+        type=Path,
+        required=True,
+        metavar="PATH",
+        help="Directory containing seed JSON files (.json). All files are processed in sorted order.",
+    )
+    batch_p.add_argument(
+        "--source",
+        type=Path,
+        required=True,
+        metavar="PATH",
+        help="Root of the C/C++ source tree to mutate.",
+    )
+    batch_p.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help="Output root directory (default: ./output).",
+    )
+    batch_p.add_argument(
+        "--config",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help="Path to config TOML (default: built-in defaults).",
+    )
+    batch_p.add_argument(
+        "--no-llm",
+        action="store_true",
+        help="Disable LLM adapter; use NoOpAdapter for all enrichment steps.",
+    )
+    batch_p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Emit all artifacts without modifying source files (passed through to each run).",
+    )
+    batch_p.set_defaults(func=_cmd_batch)
 
     # -----------------------------------------------------------------------
     # validate-bundle
@@ -343,6 +408,74 @@ def _cmd_run(args: argparse.Namespace) -> int:
     print(f"  ground_truth.json     : {bundle.ground_truth}")
     print(f"  audit.json            : {bundle.audit}")
     return 0
+
+
+def _cmd_batch(args: argparse.Namespace) -> int:
+    from insert_me.config import load_config, apply_cli_overrides
+    from insert_me.pipeline import run_pipeline
+
+    seed_dir: Path = args.seed_dir
+    if not seed_dir.is_dir():
+        print(f"[insert-me] error: --seed-dir not found: {seed_dir}", file=sys.stderr)
+        return 2
+
+    seed_files = sorted(seed_dir.glob("*.json"))
+    if not seed_files:
+        print(f"[insert-me] error: no .json files found in {seed_dir}", file=sys.stderr)
+        return 2
+
+    dry_run: bool = args.dry_run
+    total = len(seed_files)
+
+    print(f"[insert-me] batch {'dry-run ' if dry_run else ''}-- {total} seed(s) in {seed_dir}")
+    print(f"  source : {args.source}")
+    print(f"  output : {args.output or Path('output')}")
+    print()
+    print(f"  {'#':>3}  {'Result':<8}  {'Classification':<14}  {'Seed file'}")
+    print("  " + "-" * 70)
+
+    results: list[dict] = []
+    any_fail = False
+
+    for idx, seed_file in enumerate(seed_files, 1):
+        config = load_config(args.config)
+        config = apply_cli_overrides(
+            config,
+            seed_file=seed_file,
+            source_path=args.source,
+            output_root=args.output,
+            no_llm=args.no_llm,
+        )
+
+        try:
+            bundle = run_pipeline(config, dry_run=dry_run)
+            # Read the audit classification from the emitted artifact
+            import json as _json
+            audit_result_path = bundle.audit_result
+            classification = "UNKNOWN"
+            if audit_result_path.exists():
+                classification = _json.loads(
+                    audit_result_path.read_text(encoding="utf-8")
+                ).get("classification", "UNKNOWN")
+            # In dry-run mode the Patcher is skipped so classification is NOOP — treat as OK.
+            ok = classification == "VALID" or (dry_run and classification == "NOOP")
+            status = "OK" if ok else "FAIL"
+            if not ok:
+                any_fail = True
+        except Exception as exc:
+            status = "ERROR"
+            classification = str(exc)[:60]
+            any_fail = True
+
+        print(f"  {idx:>3}  {status:<8}  {classification:<14}  {seed_file.name}")
+        results.append({"seed": seed_file.name, "status": status, "classification": classification})
+
+    # Summary
+    ok_count   = sum(1 for r in results if r["status"] == "OK")
+    fail_count = sum(1 for r in results if r["status"] in ("FAIL", "ERROR"))
+    print()
+    print(f"[insert-me] batch complete: {ok_count}/{total} OK, {fail_count}/{total} failed")
+    return 1 if any_fail else 0
 
 
 def _cmd_validate_bundle(args: argparse.Namespace) -> int:

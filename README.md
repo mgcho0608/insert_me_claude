@@ -10,7 +10,7 @@
 
 ---
 
-## Current Status — Phase 8 (reliability, reproducibility, and corpus-quality hardening)
+## Current Status — Phase 9 (corpus generation tooling and multi-sandbox expansion)
 
 | | |
 |---|---|
@@ -22,7 +22,7 @@
 | **`ground_truth.json` mutations** | Real record when mutation applied; `[]` in dry-run |
 | **`ground_truth.json` validation_passed** | `true` when Validator passes; `false` in dry-run |
 | **`bad/` `good/` source trees** | Written in real mode; empty dirs in dry-run |
-| **Mutation strategies** | `alloc_size_undercount` — `malloc(<expr>)` → `malloc((<expr>) - 1)` (CWE-122) · `insert_premature_free` — inserts `free(ptr);` before a pointer dereference (CWE-416) |
+| **Mutation strategies** | `alloc_size_undercount` — `malloc(<expr>)` → `malloc((<expr>) - 1)` (CWE-122) · `insert_premature_free` — inserts `free(ptr);` before a pointer dereference (CWE-416) · `insert_double_free` — inserts duplicate `free(ptr);` before an existing free (CWE-415) · `remove_free_call` — replaces `free(ptr);` with a memory-leak comment (CWE-401) |
 | **`validation_result.json`** | Real check results (5 checks) in real mode; `overall: SKIP` in dry-run |
 | **`audit_result.json`** | `VALID` (validator pass) · `INVALID` (fail) · `AMBIGUOUS` (skip+mutations) · `NOOP` (no mutations) |
 | **Evaluation strategy** | `exact` / `family` / `semantic` / `no_match` — per-mutation match against inserted ground truth |
@@ -72,7 +72,7 @@ For engineers picking this up for the first time inside an organisation:
 | | |
 |---|---|
 | **What it is** | A Python CLI that inserts one known vulnerability into a C/C++ source tree and produces a fully annotated, schema-validated output bundle. |
-| **Current maturity** | Phase 7B-prep — all four core pipeline stages + evaluator + deterministic heuristic adjudicator implemented and tested (~406 tests). Not production-hardened; alpha-quality. |
+| **Current maturity** | Phase 9 complete — all four core pipeline stages + evaluator + deterministic heuristic adjudicator + 4 mutation strategies (CWE-122/416/415/401) + 2 sandbox targets + corpus generation tooling implemented and tested (427 tests). Not production-hardened; alpha-quality. |
 | **Install path** | `pip install -e .` from source. No PyPI release exists yet. |
 | **Python versions** | 3.11, 3.12 — **CI-tested**. 3.10 — **statically reviewed only** (single shim: `tomllib` → `tomli`). No other version-specific features used. |
 | **Dependencies** | `jsonschema>=4.17` + `tomli>=1.2.0` on Python 3.10 only. No other mandatory runtime dependencies. |
@@ -81,15 +81,15 @@ For engineers picking this up for the first time inside an organisation:
 | **First command** | `pip install -e . && insert-me run --seed-file examples/seeds/cwe122_heap_overflow.json --source examples/demo/src` |
 
 **What to expect from a run today:**
-- One mutation applied to the source tree (`alloc_size_undercount` for CWE-122, `insert_premature_free` for CWE-416)
+- One mutation applied to the source tree (`alloc_size_undercount` for CWE-122, `insert_premature_free` for CWE-416, `insert_double_free` for CWE-415, `remove_free_call` for CWE-401)
 - Five deterministic rule-based plausibility checks
 - Five JSON artifacts: `patch_plan.json`, `validation_result.json`, `audit_result.json`, `ground_truth.json`, `audit.json`
 
 **What is NOT available yet:**
-- Additional mutation strategies (CWE-190) — Phase 4c
+- Additional mutation strategies (CWE-476, CWE-190) — planned; requires multi-line mutation support in Patcher
 - AST-based or compiler-backed patching/validation — future phases
 - Phase 7B: real LLM adjudicator (placeholder exists; `LLMAdjudicator.adjudicate()` raises `NotImplementedError`)
-- Batch corpus generation — Phase 9
+- `insert-me batch` CLI subcommand — scripts/generate_corpus.py covers batch use until Phase 9 CLI is complete
 
 ---
 
@@ -170,7 +170,7 @@ Example seed files are in `examples/seeds/`:
          │  patch_plan.json  ← patch_plan.schema.json
          ▼
   ┌─────────────┐
-  │   Patcher   │  ✓ Phase 4b — alloc_size_undercount (CWE-122) · insert_premature_free (CWE-416)
+  │   Patcher   │  ✓ Phase 8 — alloc_size_undercount (CWE-122) · insert_premature_free (CWE-416) · insert_double_free (CWE-415) · remove_free_call (CWE-401)
   └──────┬──────┘
          │  bad/  good/  source trees
          ▼
@@ -390,8 +390,14 @@ insert-me audit output/<run-id>/audit.json
 
 ## Sandbox Corpus and Quality Gate
 
-A 30-case accepted corpus is included under `examples/seeds/sandbox/` targeting
-the evaluation-only sandbox at `examples/sandbox_eval/src/`.
+Two sandbox targets are included with a combined 55-seed accepted corpus:
+
+| Target | Source | Seeds | Accept rate |
+|---|---|---|---|
+| `sandbox_eval` | `examples/sandbox_eval/src/` (6 files) | 40 (11 CWE-122 · 19 CWE-416 · 5 CWE-415 · 5 CWE-401) | 100% |
+| `target_b` | `examples/sandbox_targets/target_b/src/` (3 files) | 15 (4 CWE-122 · 5 CWE-416 · 3 CWE-415 · 3 CWE-401) | 100% |
+
+All 55 seeds reproduce byte-identically across 3 runs each (55/55 PASS).
 
 **Reproduce the full corpus from a fresh clone:**
 ```bash
@@ -402,7 +408,7 @@ python scripts/generate_corpus.py \
   --manifest    examples/corpus_manifest.json
 ```
 
-**Verify reproducibility (all seeds, 2 runs each):**
+**Verify reproducibility (all seeds, 3 runs each):**
 ```bash
 python scripts/check_reproducibility.py \
   --seeds-dir   examples/seeds/sandbox \

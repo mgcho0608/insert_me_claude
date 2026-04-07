@@ -5,9 +5,9 @@ The Patcher takes a PatchTargetList produced by the Seeder and applies
 line-level mutations to a copy of the source tree, producing the bad
 (vulnerable) and good (clean) trees side by side.
 
-Phase 4 / Phase 9 implementation scope
----------------------------------------
-Four mutation strategies are currently implemented:
+Phase 4 / Phase 8 / Phase 4c implementation scope
+--------------------------------------------------
+Five mutation strategies are currently implemented:
 
     alloc_size_undercount  (CWE-122)
         Transforms ``malloc(<expr>)`` → ``malloc((<expr>) - 1)``.
@@ -29,16 +29,28 @@ Four mutation strategies are currently implemented:
         Replaces a ``free(<ptr>);`` call with a comment, introducing a
         memory leak (missing release of memory after effective lifetime).
 
+    remove_null_guard  (CWE-476)
+        Removes a null-check guard (``if (!ptr) return;``) that precedes
+        a pointer dereference, allowing a NULL dereference when the caller
+        passes a null pointer.  The guard line is replaced with a comment.
+        This strategy uses the multi-line handler API because the guard
+        and the dereference are on different lines.
+
 Applied only to the first compatible target from the PatchTargetList
 (one mutation per run in this phase).
 
 Strategy extensibility
 -----------------------
-Additional strategies are registered in ``_STRATEGY_HANDLERS``.  Each
-handler is a callable that receives a raw source line and returns either:
+Single-line strategies are registered in ``_STRATEGY_HANDLERS``.  Each
+handler receives a raw source line and returns either:
     (mutated_line, original_fragment, mutated_fragment)
     (mutated_line, original_fragment, mutated_fragment, extra_dict)
 or None if the strategy cannot be safely applied to that line.
+
+Multi-line strategies are registered in ``_MULTILINE_STRATEGY_HANDLERS``.
+Each handler receives ``(lines, line_idx)`` and returns a
+``MultilineMutationResult`` (or None).  The handler may modify any line
+in the file, not just the target line.
 
 Design constraints
 ------------------
@@ -105,7 +117,7 @@ class PatchResult:
 # Strategy registry
 # ---------------------------------------------------------------------------
 
-# Handler signature: (source_line: str) → 3-tuple or 4-tuple (with optional
+# Single-line handler: (source_line: str) → 3-tuple or 4-tuple (with optional
 # extra metadata dict) or None when the strategy cannot be applied.
 _StrategyResult = tuple[str, str, str] | tuple[str, str, str, dict[str, Any]]
 _StrategyHandler = Callable[[str], _StrategyResult | None]
@@ -114,9 +126,62 @@ _STRATEGY_HANDLERS: dict[str, _StrategyHandler] = {}
 
 
 def _register(name: str) -> Callable[[_StrategyHandler], _StrategyHandler]:
-    """Decorator to register a mutation strategy handler by name."""
+    """Decorator to register a single-line mutation strategy handler by name."""
     def decorator(fn: _StrategyHandler) -> _StrategyHandler:
         _STRATEGY_HANDLERS[name] = fn
+        return fn
+    return decorator
+
+
+# ---------------------------------------------------------------------------
+# Multi-line strategy registry
+# ---------------------------------------------------------------------------
+
+@dataclass
+class MultilineMutationResult:
+    """
+    Result from a multi-line strategy handler.
+
+    Multi-line handlers may modify any line in the file, not just the
+    target line.  Modifications are expressed as a dict of line replacements
+    ``{line_idx: new_content}`` where line_idx is 0-based.
+
+    ``original_fragment`` and ``mutated_fragment`` describe the semantic
+    change for ground-truth and evaluation purposes.  ``mutated_fragment``
+    must be non-empty and present in the modified file so that the
+    ``bad_tree_changed`` validator check passes.
+    """
+
+    original_fragment: str
+    """Text of the primary changed fragment (e.g. the guard line content)."""
+
+    mutated_fragment: str
+    """Replacement text (e.g. a comment).  Must appear in the mutated file."""
+
+    line_replacements: dict[int, str] = field(default_factory=dict)
+    """
+    Map of {0-based line index → new line content (with trailing newline)}.
+    Lines not listed here are left unchanged.
+    """
+
+    extra: dict[str, Any] = field(default_factory=dict)
+    """Optional metadata for ground-truth generation (e.g. affected pointer)."""
+
+
+# Multi-line handler signature: (lines, line_idx) → MultilineMutationResult or None.
+_MultilineStrategyHandler = Callable[
+    [list[str], int], MultilineMutationResult | None
+]
+
+_MULTILINE_STRATEGY_HANDLERS: dict[str, _MultilineStrategyHandler] = {}
+
+
+def _register_multiline(
+    name: str,
+) -> Callable[[_MultilineStrategyHandler], _MultilineStrategyHandler]:
+    """Decorator to register a multi-line mutation strategy handler by name."""
+    def decorator(fn: _MultilineStrategyHandler) -> _MultilineStrategyHandler:
+        _MULTILINE_STRATEGY_HANDLERS[name] = fn
         return fn
     return decorator
 
@@ -279,6 +344,97 @@ def _mutate_remove_free_call(line: str) -> _StrategyResult | None:
 
 
 # ---------------------------------------------------------------------------
+# Strategy: remove_null_guard  (CWE-476, multi-line)
+# ---------------------------------------------------------------------------
+
+#: Matches a single-line null-check guard before a pointer dereference.
+#: Captures the guarded pointer name from three possible forms:
+#:   group(1): !ptr
+#:   group(2): ptr == NULL / ptr == nullptr / ptr == 0
+#:   group(3): NULL == ptr / nullptr == ptr / 0 == ptr
+_NULL_GUARD_RE: re.Pattern[str] = re.compile(
+    r"^\s*if\s*\(\s*"
+    r"(?:!(\w+)|(\w+)\s*==\s*(?:NULL|nullptr|0)|(?:NULL|nullptr|0)\s*==\s*(\w+))"
+    r"\s*\)"
+)
+
+#: How many lines above the target to scan for a null guard.
+_NULL_GUARD_LOOKBACK: int = 5
+
+
+def _extract_guarded_ptr(m: re.Match[str]) -> str:
+    """Return the pointer name captured by _NULL_GUARD_RE."""
+    return m.group(1) or m.group(2) or m.group(3) or ""
+
+
+@_register_multiline("remove_null_guard")
+def _mutate_remove_null_guard(
+    lines: list[str], line_idx: int
+) -> MultilineMutationResult | None:
+    """
+    Replace a null-check guard that precedes a pointer dereference with a comment.
+
+    Target line: a pointer dereference (``ptr->field`` or ``*ptr``).
+    Mutation: the guard line immediately above (within ``_NULL_GUARD_LOOKBACK``
+    lines) is replaced with ``/* CWE-476: null guard removed */``, leaving the
+    null pointer reachable at the dereference site.
+
+    Returns None when:
+    - No null-guard pattern is found in the preceding lines.
+    - The guard's pointer name does not match a pointer on the target line.
+    """
+    target_line = lines[line_idx]
+    target_ptr = _patcher_extract_pointer_name(target_line)
+    if target_ptr is None:
+        return None
+
+    search_start = max(0, line_idx - _NULL_GUARD_LOOKBACK)
+    guard_idx: int | None = None
+    guard_ptr: str = ""
+
+    for i in range(line_idx - 1, search_start - 1, -1):
+        candidate = lines[i]
+        # Skip blank lines and pure comments when scanning back
+        stripped = candidate.strip()
+        if not stripped or stripped.startswith("//") or stripped.startswith("/*"):
+            continue
+        m = _NULL_GUARD_RE.match(candidate)
+        if m:
+            guard_ptr = _extract_guarded_ptr(m)
+            guard_idx = i
+            break
+        # Stop if we hit a non-guard, non-blank code line above the deref
+        # (we only want a guard that immediately precedes the dereference).
+        break
+
+    if guard_idx is None:
+        return None
+
+    # Verify the guard is protecting the same pointer as the dereference.
+    if guard_ptr and target_ptr and guard_ptr != target_ptr:
+        return None
+
+    guard_line = lines[guard_idx]
+    stripped_guard = guard_line.lstrip()
+    indent = guard_line[: len(guard_line) - len(stripped_guard)]
+
+    original_fragment = guard_line.rstrip("\n").rstrip("\r")
+    mutated_fragment = f"/* CWE-476: null guard removed */"
+    replacement = f"{indent}{mutated_fragment}\n"
+
+    return MultilineMutationResult(
+        original_fragment=original_fragment,
+        mutated_fragment=mutated_fragment,
+        line_replacements={guard_idx: replacement},
+        extra={
+            "guard_line": guard_idx + 1,          # 1-based for readability
+            "deref_line": line_idx + 1,            # 1-based
+            "guarded_pointer": guard_ptr or target_ptr,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -437,13 +593,12 @@ class Patcher:
         """
         Apply a single mutation strategy at the given target location.
 
+        Tries multi-line handlers first (``_MULTILINE_STRATEGY_HANDLERS``),
+        then falls back to single-line handlers (``_STRATEGY_HANDLERS``).
+
         Returns the Mutation record if successful, None if the target must
         be skipped (unknown strategy, file not found, or unsafe line).
         """
-        handler = _STRATEGY_HANDLERS.get(strategy)
-        if handler is None:
-            return None  # strategy not yet implemented
-
         bad_file = bad_root / target.file
         if not bad_file.exists():
             return None
@@ -458,6 +613,39 @@ class Patcher:
 
         if line_idx < 0 or line_idx >= len(lines):
             return None
+
+        # ------------------------------------------------------------------
+        # Multi-line handler path
+        # ------------------------------------------------------------------
+        ml_handler = _MULTILINE_STRATEGY_HANDLERS.get(strategy)
+        if ml_handler is not None:
+            ml_result = ml_handler(lines, line_idx)
+            if ml_result is None:
+                return None
+
+            for idx, new_content in ml_result.line_replacements.items():
+                if 0 <= idx < len(lines):
+                    lines[idx] = new_content
+
+            try:
+                bad_file.write_text("".join(lines), encoding="utf-8")
+            except OSError:
+                return None
+
+            return Mutation(
+                target=target,
+                mutation_type=strategy,
+                original_fragment=ml_result.original_fragment,
+                mutated_fragment=ml_result.mutated_fragment,
+                extra=ml_result.extra,
+            )
+
+        # ------------------------------------------------------------------
+        # Single-line handler path
+        # ------------------------------------------------------------------
+        handler = _STRATEGY_HANDLERS.get(strategy)
+        if handler is None:
+            return None  # strategy not yet implemented
 
         original_line = lines[line_idx]
         handler_result = handler(original_line)

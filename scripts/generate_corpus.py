@@ -76,6 +76,7 @@ _KNOWN_STRATEGIES = frozenset({
     "insert_premature_free",
     "insert_double_free",
     "remove_free_call",
+    "remove_null_guard",
 })
 
 # Functions that appear in ≥ 3 already-accepted cases will trigger a note.

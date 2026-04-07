@@ -95,6 +95,12 @@ PATTERN_REGEXES: dict[str, re.Pattern[str]] = {
     "format_string": re.compile(
         r"\b(?:printf|fprintf|sprintf|snprintf|vprintf|vfprintf|vsprintf)\s*\("
     ),
+    # Null-check guard lines (CWE-476 — guard removal)
+    "null_guard": re.compile(
+        r"^\s*if\s*\(\s*"
+        r"(?:!\w+|\w+\s*==\s*(?:NULL|nullptr|0)|(?:NULL|nullptr|0)\s*==\s*\w+)"
+        r"\s*\)"
+    ),
     # Loop headers (for-loop off-by-one candidates)
     "loop_bound": re.compile(r"\bfor\s*\("),
     # Fallback: union of the most dangerous patterns
@@ -433,6 +439,29 @@ class Seeder:
                 ):
                     candidate.score = max(candidate.score - 0.35, 0.0)
 
+            # For null_guard: bonus when a pointer dereference of the guarded
+            # variable follows within _NULL_GUARD_LOOKFORWARD lines.
+            if self._pattern_type == "null_guard":
+                from insert_me.pipeline.patcher import (
+                    _NULL_GUARD_RE as _NG_RE,
+                    _extract_guarded_ptr as _eg_ptr,
+                )
+                ng_m = _NG_RE.match(line)
+                if ng_m:
+                    guarded_ptr = _eg_ptr(ng_m)
+                    candidate.context["guarded_pointer"] = guarded_ptr
+                    # Check if dereference of same pointer follows
+                    look_end = min(lineno + 5, len(lines))  # lineno is 1-based
+                    deref_pat = re.compile(
+                        rf"\b{re.escape(guarded_ptr)}\s*->"
+                        rf"|(?<![*\w])\*\s*{re.escape(guarded_ptr)}\b"
+                    ) if guarded_ptr else None
+                    if deref_pat:
+                        for j in range(lineno, look_end):  # lines[lineno] is next line
+                            if deref_pat.search(lines[j]):
+                                candidate.score = min(candidate.score + 0.25, 1.0)
+                                break
+
             # For free_call: penalise targets that are inside loop bodies or
             # conditional guard expressions.  These produce secondary flaws
             # (loop-multiplied free, or double-free in null-check error path).
@@ -587,6 +616,16 @@ class Seeder:
                 score += 0.15
             else:
                 score += 0.05
+
+        elif pt == "null_guard":
+            # Single-line guards (if (!ptr) return;) score higher than
+            # guards with complex bodies.
+            if re.search(r"\)\s*return\b[^;]*;", line):
+                score += 0.40   # immediate single-line return guard
+            elif re.search(r"\)\s*(?:goto\s+\w+\s*;|\{[^}]*\})", line):
+                score += 0.25   # goto or single-statement block
+            else:
+                score += 0.15   # multi-line body — harder to remove safely
 
         elif pt == "loop_bound":
             if re.search(r"\bfor\s*\([^;]*;[^;]*<=", line):
