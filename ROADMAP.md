@@ -463,6 +463,30 @@ constraints, and machine-readable shortfall diagnostics.
 
 ---
 
+## Phase 15.7 — Public Truth Closure + Canonical UX Closure + Documentation Drift Guardrails ✓ COMPLETE
+
+**Goal:** Make the repo's public truth, user experience, and documentation drift protections
+match the actually implemented product. No new features; no new mutation families.
+
+- [x] CLI module docstring: `"Canonical interface (primary)"` → `"Expert/manual seed-driven interface (single-case)"`
+- [x] CLI `_build_parser()` epilog: replaced single `"Canonical usage"` with three-pattern summary (recommended single-target, recommended portfolio, expert/manual)
+- [x] README phase marker: Phase 15 → Phase 15.7
+- [x] README test count: 711 → 712
+- [x] README internal Quick Reference: maturity text updated to Phase 15.7
+- [x] README "Try It Now": restructured — recommended single-target path first (`inspect-target` → `generate-corpus`), then portfolio, then expert/manual seed-file demo
+- [x] README Quick Start: Pattern order inverted — Pattern 2/3 (recommended) shown before Pattern 1 (expert/manual); labels added
+- [x] README "What is NOT available yet": added parallel execution gap, portfolio stability script gap, production codebase scope clarification, real LLM adjudicator status
+- [x] ARCHITECTURE.md: Phase 15.5 → Phase 15.7 in current status header; test count updated; `test_doc_drift.py` noted
+- [x] `tests/test_doc_drift.py`: 20 deterministic documentation drift checks — phase marker sync (README/ARCHITECTURE/ROADMAP), strategy count + admitted ID sync, CLI subcommand presence, recommended workflow presence, bundled example file existence, sandbox_targets.json path resolution
+- [x] 731 tests passing (712 pre-phase + 20 new doc-drift tests, 1 skipped unchanged)
+
+**Canonical workflow positions established:**
+- `run --seed-file` / `batch --seed-dir` → **expert/manual seed-driven**
+- `inspect-target` / `plan-corpus` / `generate-corpus` → **single-target target-aware**
+- `plan-portfolio` / `generate-portfolio` → **multi-target portfolio**
+
+---
+
 ## Explicitly Deferred (No Timeline)
 
 | Feature | Reason deferred |

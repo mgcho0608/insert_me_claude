@@ -47,8 +47,8 @@ insert_me/
 │   ├── sandbox_eval/src/            ← evaluation-only C source files (Sandbox Target A, 6 files)
 │   ├── sandbox_targets/target_b/src/ ← Sandbox Target B (3 files)
 │   └── seeds/
-│       ├── sandbox/                 ← 40 seed files for Sandbox Target A
-│       └── target_b/                ← 15 seed files for Sandbox Target B
+│       ├── sandbox/                 ← 56 seed files for Sandbox Target A
+│       └── target_b/                ← 20 seed files for Sandbox Target B
 ├── docs/
 │   ├── corpus_quality_gate.md  ← acceptance rubric
 │   ├── issue_fix_log.md        ← issues found and fixed during hardening
@@ -107,7 +107,7 @@ EOF
 
 ## 4. Running the Full Corpus Batch
 
-### 4.1 Run all 40 seeds (Sandbox Target A) with quality gate
+### 4.1 Run all 56 seeds (Sandbox Target A) with quality gate
 
 ```bash
 python scripts/generate_corpus.py \
@@ -117,7 +117,7 @@ python scripts/generate_corpus.py \
   --manifest    examples/corpus_manifest.json
 ```
 
-To run Sandbox Target B (15 seeds):
+To run Sandbox Target B (20 seeds):
 
 ```bash
 python scripts/generate_corpus.py \
@@ -364,8 +364,8 @@ python scripts/check_reproducibility.py \
 python -m pytest tests/ -q
 ```
 
-All commands should succeed with exit code 0. Combined accepted corpus: 55 cases
-(40 Target A + 15 Target B), 100% ACCEPT or ACCEPT_WITH_NOTES, 55/55 reproducibility PASS.
+All commands should succeed with exit code 0. Combined accepted corpus: 76 cases
+(56 Target A + 20 Target B), 100% ACCEPT or ACCEPT_WITH_NOTES, 76/76 reproducibility PASS.
 
 ---
 

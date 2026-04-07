@@ -10,12 +10,12 @@
 
 ---
 
-## Current Status — Phase 15 (multi-target portfolio orchestration + truth closure)
+## Current Status — Phase 15.7 (public truth closure + canonical UX closure + documentation drift guardrails)
 
 | | |
 |---|---|
-| **Phase** | 15 — multi-target portfolio orchestration + canonical interface truth sync |
-| **Tests** | 688 passing, 1 skipped |
+| **Phase** | 15.7 — public truth closure · canonical UX closure · documentation drift guardrails |
+| **Tests** | 731 passing, 1 skipped |
 | **Corpus-admitted strategies** | 6 (CWE-122/416/415/401/476/190) |
 | **Sandbox seeds** | 76 accepted (56 sandbox_eval + 20 target_b) — 100% reproducible |
 | **Mutation strategies** | `alloc_size_undercount` (CWE-122) · `insert_premature_free` (CWE-416) · `insert_double_free` (CWE-415) · `remove_free_call` (CWE-401) · `remove_null_guard` (CWE-476) · `remove_size_cast` (CWE-190) |
@@ -88,13 +88,13 @@ For engineers picking this up for the first time inside an organisation:
 | | |
 |---|---|
 | **What it is** | A Python CLI that inserts known vulnerabilities into C/C++ source trees and produces fully annotated, schema-validated output bundles — single-case, single-target batch, or multi-target portfolio. |
-| **Current maturity** | Phase 15 — multi-target portfolio orchestration. Full pipeline: 6 corpus-admitted mutation strategies (CWE-122/416/415/401/476/190), planning layer (TargetInspector/SeedSynthesizer/CorpusPlanner/PortfolioPlanner), all CLI subcommands incl. `plan-portfolio` + `generate-portfolio`, 15-entry strategy catalog (6 admitted / 1 planned / 8 candidate), 2 sandbox targets + local-target fixtures, portfolio artifacts (portfolio_plan.json, portfolio_index.json), 688 tests. Not production-hardened; alpha-quality. |
+| **Current maturity** | Phase 15.7 — public truth closure + canonical UX closure + documentation drift guardrails. Full pipeline: 6 corpus-admitted mutation strategies (CWE-122/416/415/401/476/190), planning layer (TargetInspector/SeedSynthesizer/CorpusPlanner/PortfolioPlanner), all CLI subcommands incl. `plan-portfolio` + `generate-portfolio`, 15-entry strategy catalog (6 admitted / 1 planned / 8 candidate), 2 sandbox targets + local-target fixtures, 4 portfolio JSON schemas (portfolio_plan/index/acceptance_summary/shortfall_report), 731 tests. Not production-hardened; alpha-quality. |
 | **Install path** | `pip install -e .` from source. No PyPI release exists yet. |
 | **Python versions** | 3.11, 3.12 — **CI-tested**. 3.10 — **statically reviewed only** (single shim: `tomllib` → `tomli`). No other version-specific features used. |
 | **Dependencies** | `jsonschema>=4.17` + `tomli>=1.2.0` on Python 3.10 only. No other mandatory runtime dependencies. |
 | **Network access** | None required for core operation. All schema validation ships with the package. |
 | **License** | **Undecided.** See `NOTICE.txt`. Internal/research use only. Do not redistribute without explicit permission. |
-| **First command** | `pip install -e . && insert-me run --seed-file examples/seeds/cwe122_heap_overflow.json --source examples/demo/src` |
+| **First command** | Single-case expert: `pip install -e . && insert-me run --seed-file examples/seeds/cwe122_heap_overflow.json --source examples/demo/src` — or for a count-driven corpus: `insert-me generate-corpus --source examples/sandbox_eval/src --count 10` — or for multi-target: `insert-me generate-portfolio --targets-file examples/targets/sandbox_targets.json --count 20` |
 
 **What to expect from a run today:**
 - One mutation applied to the source tree: any of the 6 corpus-admitted strategies (`alloc_size_undercount` CWE-122, `insert_premature_free` CWE-416, `insert_double_free` CWE-415, `remove_free_call` CWE-401, `remove_null_guard` CWE-476, `remove_size_cast` CWE-190)
@@ -102,9 +102,13 @@ For engineers picking this up for the first time inside an organisation:
 - Five JSON artifacts: `patch_plan.json`, `validation_result.json`, `audit_result.json`, `ground_truth.json`, `audit.json`
 
 **What is NOT available yet:**
-- Additional mutation strategies (CWE-787 Out-of-bounds Write) — planned; single remaining PLANNED entry in strategy catalog
-- AST-based or compiler-backed patching/validation — future phases
-- Phase 7B: real LLM adjudicator (placeholder exists; `LLMAdjudicator.adjudicate()` raises `NotImplementedError`)
+- Additional mutation strategies (CWE-787 Out-of-bounds Write) — the single remaining PLANNED entry; broader candidate families also deferred
+- AST-based or compiler-backed patching/validation — future phases; current analysis is lexical/regex only
+- Phase 7B: real LLM adjudicator — placeholder exists; `LLMAdjudicator.adjudicate()` raises `NotImplementedError`
+- Parallel execution — single-threaded only; `generate-corpus` and `generate-portfolio` execute cases sequentially
+- Portfolio reproducibility check script — `check_plan_stability.py` covers single-target fresh-plan stability; a `check_portfolio_stability.py` equivalent does not exist yet
+- Production codebase support — not a goal for this phase; evaluation-only toy/lab targets only
+- Real internal LLM adjudicator — heuristic offline adjudicator is the production default; LLM path deferred to Phase 7B
 
 ---
 
@@ -242,7 +246,7 @@ Example seed files are in `examples/seeds/`:
          |  patch_plan.json  <- patch_plan.schema.json
          v
   +-------------+
-  |   Patcher   |  Phase 14 -- 6 corpus-admitted strategies:
+  |   Patcher   |  Phase 15 -- 6 corpus-admitted strategies:
   +------+------+    alloc_size_undercount (CWE-122)
          |           insert_premature_free (CWE-416)
          |           insert_double_free    (CWE-415)
@@ -433,57 +437,90 @@ This means:
 
 ## Try It Now
 
-These commands work against the bundled demo fixture today.
+```bash
+pip install -e .
+```
+
+### Recommended: single-target corpus generation
+
+Inspect a source tree, then generate a count-driven corpus. All commands use bundled fixtures.
 
 ```bash
-# 1. Install (editable)
-pip install -e .
+# Step 1: preflight — see candidate density, suitability tier, concentration risk
+insert-me inspect-target --source examples/sandbox_eval/src
 
-# 2. Run against the demo fixture
+# Step 2: generate a 10-case corpus (plan + execute in one command)
+insert-me generate-corpus \
+    --source examples/sandbox_eval/src \
+    --count 10 \
+    --output-root corpus_out/
+```
+
+What you get in `corpus_out/`:
+- `corpus_index.json` — manifest with fingerprints
+- `acceptance_summary.json` — requested/planned/accepted/rejected counts
+- `shortfall_report.json` — machine-readable explanation of any gaps
+- `cases/<case-id>/` — per-case output bundles (bad/good pair + 5 JSON artifacts each)
+
+To replay without re-planning:
+```bash
+insert-me generate-corpus --from-plan corpus_out/_plan/ --output-root corpus_replay/
+```
+
+---
+
+### Recommended: multi-target portfolio generation
+
+Allocate a global count across multiple source trees with global diversity constraints.
+
+```bash
+insert-me generate-portfolio \
+    --targets-file examples/targets/sandbox_targets.json \
+    --count 20 \
+    --output-root portfolio_out/
+```
+
+What you get in `portfolio_out/`:
+- `portfolio_plan.json` — global allocation plan
+- `portfolio_index.json` — portfolio manifest + fingerprints
+- `portfolio_acceptance_summary.json` — counts by target and strategy
+- `portfolio_shortfall_report.json` — shortfall attribution
+- `targets/<name>/` — per-target corpus artifacts and case bundles
+
+---
+
+### Expert/manual: single seed against the demo fixture
+
+For one-off experiments with a hand-authored seed file.
+
+```bash
 insert-me run \
   --seed-file examples/seeds/cwe122_heap_overflow.json \
   --source examples/demo/src
 ```
 
-Example output:
-```
-[insert-me] starting pipeline
-  seed-file : examples/seeds/cwe122_heap_overflow.json
-  source    : examples/demo/src
-  output    : output
-[insert-me] bundle written to: output/9576dfc551a54e4c/
-  patch_plan.json       : output/9576dfc551a54e4c/patch_plan.json
-  validation_result.json: output/9576dfc551a54e4c/validation_result.json
-  audit_result.json     : output/9576dfc551a54e4c/audit_result.json
-  ground_truth.json     : output/9576dfc551a54e4c/ground_truth.json
-  audit.json            : output/9576dfc551a54e4c/audit.json
-```
+**What to expect (real mode — default):**
+- `patch_plan.json` — `status: "APPLIED"`, one target from `heap_buf.c`
+- `ground_truth.json` — one mutation record: `malloc(user_len * sizeof(char))` → `malloc((user_len * sizeof(char)) - 1)`, `validation_passed: true`
+- `bad/heap_buf.c` — mutated source (the vulnerability inserted)
+- `good/heap_buf.c` — byte-identical copy of the original
+- `validation_result.json` — `overall: "PASS"`, five rule-based checks all passing
+- `audit_result.json` — `classification: "VALID"` (Validator confirmed plausibility)
 
 ```bash
-# 3. Validate the bundle (replace 9576dfc551a54e4c with the run ID printed above)
+# Validate the bundle schema
 insert-me validate-bundle output/9576dfc551a54e4c/
 
-# 4. Inspect the audit record
+# Inspect the audit record
 insert-me audit output/9576dfc551a54e4c/audit.json
 ```
 
-**What to expect today (real mode -- default):**
-- `patch_plan.json` -- `status: "APPLIED"`, one target from `heap_buf.c`
-- `ground_truth.json` -- one mutation record: `malloc(user_len * sizeof(char))` → `malloc((user_len * sizeof(char)) - 1)`, `validation_passed: true`
-- `bad/heap_buf.c` -- mutated source (the vulnerability inserted)
-- `good/heap_buf.c` -- byte-identical copy of the original
-- `validation_result.json` -- `overall: "PASS"`, five rule-based checks all passing
-- `audit_result.json` -- `classification: "VALID"` (Validator confirmed plausibility)
-- `validate-bundle` exits 0 -- all artifacts are schema-valid
-
-To skip patching and emit plan-only artifacts:
+To emit plan-only artifacts without patching source files:
 ```bash
 insert-me run --seed-file examples/seeds/cwe122_heap_overflow.json \
               --source examples/demo/src \
               --dry-run
 ```
-Dry-run: `patch_plan.json` status is `PLANNED`, `ground_truth.json` mutations is `[]`,
-`audit_result.json` classification is `NOOP`, no source files are modified.
 
 ---
 
@@ -493,17 +530,17 @@ Dry-run: `patch_plan.json` status is `PLANNED`, `ground_truth.json` mutations is
 # Install (editable)
 pip install -e .
 
-# Pattern 1: one-off seed run
-insert-me run --seed-file examples/seeds/cwe122_heap_overflow.json \
-              --source /path/to/c-project
-
-# Pattern 2: target-aware corpus for one source tree
+# Pattern 2 (recommended for one target): target-aware corpus
 insert-me generate-corpus --source examples/sandbox_eval/src --count 20
 
-# Pattern 3: multi-target portfolio across two source trees
+# Pattern 3 (recommended for multiple targets): multi-target portfolio
 insert-me generate-portfolio \
     --targets-file examples/targets/sandbox_targets.json \
     --count 30
+
+# Pattern 1 (expert/manual): one-off seed run
+insert-me run --seed-file examples/seeds/cwe122_heap_overflow.json \
+              --source /path/to/c-project
 ```
 
 ---

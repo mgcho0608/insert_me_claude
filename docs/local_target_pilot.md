@@ -152,10 +152,10 @@ Key fields:
 | Field | What to set |
 |---|---|
 | `seed_id` | Unique identifier string (no spaces) |
-| `cwe_id` | `CWE-122`, `CWE-416`, `CWE-415`, or `CWE-401` (corpus-admitted strategies) |
-| `mutation_strategy` | `alloc_size_undercount`, `insert_premature_free`, `insert_double_free`, or `remove_free_call` |
+| `cwe_id` | `CWE-122`, `CWE-416`, `CWE-415`, `CWE-401`, `CWE-476`, or `CWE-190` (all corpus-admitted) |
+| `mutation_strategy` | `alloc_size_undercount`, `insert_premature_free`, `insert_double_free`, `remove_free_call`, `remove_null_guard`, or `remove_size_cast` |
 | `seed` | Integer — controls which candidate is selected; change this to explore different sites |
-| `target_pattern.pattern_type` | `malloc_call` (CWE-122), `pointer_deref` (CWE-416), `free_call` (CWE-415/401), `null_guard` (CWE-476) |
+| `target_pattern.pattern_type` | `malloc_call` (CWE-122), `pointer_deref` (CWE-416), `free_call` (CWE-415/401), `null_guard` (CWE-476), `malloc_size_cast` (CWE-190) |
 
 ---
 
@@ -524,7 +524,7 @@ inspect-target
 |---|---|---|
 | Reproducibility verification | Formally verified (55/55 PASS, 3 runs each) | User's responsibility via `check_reproducibility.py` |
 | Quality gate | Full quality gate run, documented | User applies same gate; results are local |
-| Corpus admission | Formally corpus-admitted (5 strategies, 63 seeds) | Not part of the bundled accepted corpus |
+| Corpus admission | Formally corpus-admitted (6 strategies, 76 seeds) | Not part of the bundled accepted corpus |
 | Seed files | Committed in `examples/seeds/` | User-managed; not committed to this repo |
 | Suitability confirmation | Pre-verified | Run `inspect-target` before each new target |
 
@@ -561,6 +561,7 @@ shortfall: all strategies LIMITED, can only plan 8-9 cases at count=15.
 | `insert_double_free` (CWE-415) | `free(ptr)` calls with simple pointer arguments |
 | `remove_free_call` (CWE-401) | `free(ptr)` calls (same as CWE-415 sites) |
 | `remove_null_guard` (CWE-476) | `if (!ptr)` or `if (ptr == NULL)` guards followed by `ptr->field` within 4 lines |
+| `remove_size_cast` (CWE-190) | `malloc((size_t)EXPR * sizeof(T))` patterns — requires explicit `(size_t)` cast at arg start |
 
 ### 10.3 Predictors of NOOP at execution time
 

@@ -14,12 +14,12 @@ validate-bundle   Validate the schema conformance of an existing output bundle.
 audit             Pretty-print the audit record from an output bundle.
 evaluate          Evaluate a detector report against an insert_me output bundle.
 
-Canonical interface (primary)
-------------------------------
+Expert/manual seed-driven interface (single-case)
+--------------------------------------------------
     insert-me run --seed-file PATH --source PATH [--output PATH] [--config PATH] [--no-llm] [--dry-run]
 
-Batch interface
----------------
+Expert/manual batch interface
+------------------------------
     insert-me batch --seed-dir PATH --source PATH [--output PATH] [--config PATH] [--no-llm] [--dry-run]
 
 Preflight suitability check
@@ -63,7 +63,12 @@ def _build_parser() -> argparse.ArgumentParser:
         description="Deterministic seeded vulnerability generation for C/C++.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
-            "Canonical usage:\n"
+            "Recommended (single-target corpus):\n"
+            "  insert-me inspect-target --source /path/to/c-project\n"
+            "  insert-me generate-corpus --source /path/to/c-project --count 20\n\n"
+            "Recommended (multi-target portfolio):\n"
+            "  insert-me generate-portfolio --targets-file targets.json --count 40\n\n"
+            "Expert/manual (single seed):\n"
             "  insert-me run --seed-file examples/seeds/cwe122_heap_overflow.json\n"
             "                --source /path/to/project\n\n"
             "Legacy usage (backward-compatible):\n"
