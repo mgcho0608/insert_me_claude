@@ -3,14 +3,16 @@ CLI entrypoint for insert_me.
 
 Commands
 --------
-run             Run the vulnerability insertion pipeline for a given seed file + source tree.
-batch           Run the pipeline for every seed file in a directory.
-inspect-target  Preflight suitability check for a C/C++ source tree (no mutation applied).
-plan-corpus     Target-aware corpus planning: synthesise seeds for a requested count.
-generate-corpus Plan + execute the full corpus pipeline toward a requested count.
-validate-bundle Validate the schema conformance of an existing output bundle.
-audit           Pretty-print the audit record from an output bundle.
-evaluate        Evaluate a detector report against an insert_me output bundle.
+run               Run the vulnerability insertion pipeline for a given seed file + source tree.
+batch             Run the pipeline for every seed file in a directory.
+inspect-target    Preflight suitability check for a C/C++ source tree (no mutation applied).
+plan-corpus       Target-aware corpus planning: synthesise seeds for a requested count.
+generate-corpus   Plan + execute the full corpus pipeline toward a requested count.
+plan-portfolio    Multi-target corpus planning across a list of targets.
+generate-portfolio Plan + execute a multi-target corpus across a list of targets.
+validate-bundle   Validate the schema conformance of an existing output bundle.
+audit             Pretty-print the audit record from an output bundle.
+evaluate          Evaluate a detector report against an insert_me output bundle.
 
 Canonical interface (primary)
 ------------------------------
@@ -28,6 +30,12 @@ Count-driven corpus planning
 -----------------------------
     insert-me plan-corpus --source PATH --count N [--output-dir DIR] [options]
     insert-me generate-corpus --source PATH --count N [--output-root DIR] [options]
+
+Multi-target portfolio planning
+--------------------------------
+    insert-me plan-portfolio --targets-file TARGETS.json --count N [--output-dir DIR] [options]
+    insert-me generate-portfolio --targets-file TARGETS.json --count N [--output-root DIR] [options]
+    insert-me generate-portfolio --from-plan portfolio_plan.json [--output-root DIR] [options]
 
 Legacy interface (backward-compatible fallback)
 -----------------------------------------------
@@ -429,6 +437,169 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_planning_args(gen_p)
     gen_p.set_defaults(func=_cmd_generate_corpus)
+
+    # -----------------------------------------------------------------------
+    # plan-portfolio
+    # -----------------------------------------------------------------------
+    def _add_portfolio_args(p: argparse.ArgumentParser) -> None:
+        """Shared portfolio constraint arguments."""
+        p.add_argument(
+            "--max-per-target",
+            type=int,
+            default=20,
+            metavar="N",
+            help="Hard limit on cases from any single target (default: 20).",
+        )
+        p.add_argument(
+            "--max-per-target-fraction",
+            type=float,
+            default=0.6,
+            metavar="F",
+            help="Warn if any target accounts for >F fraction of total cases (default: 0.6).",
+        )
+        p.add_argument(
+            "--max-per-strategy",
+            type=int,
+            default=20,
+            metavar="N",
+            help="Hard limit on cases of any single strategy across all targets (default: 20).",
+        )
+        p.add_argument(
+            "--max-per-file",
+            type=int,
+            default=5,
+            metavar="N",
+            help="Max cases per source file within each target (default: 5).",
+        )
+        p.add_argument(
+            "--max-per-function",
+            type=int,
+            default=2,
+            metavar="N",
+            help="Max cases per function within each target (default: 2).",
+        )
+        p.add_argument(
+            "--strict-quality",
+            action="store_true",
+            help="Skip LIMITED strategies; only use VIABLE ones.",
+        )
+
+    pplan_p = subparsers.add_parser(
+        "plan-portfolio",
+        help="Multi-target corpus planning: allocate cases across a list of targets.",
+        description=(
+            "Inspect each target listed in --targets-file, compute effective capacity,\n"
+            "allocate the requested global count proportionally, and synthesise seed\n"
+            "files for each target.\n\n"
+            "Outputs (written to --output-dir):\n"
+            "  portfolio_plan.json          -- global allocation plan\n"
+            "  targets/<name>/_plan/        -- per-target corpus_plan.json + seeds/\n\n"
+            "The plan is deterministic: same targets-file + same count + same options\n"
+            "=> same portfolio_plan.json and per-target seed files.\n\n"
+            "Example:\n"
+            "  insert-me plan-portfolio \\\n"
+            "    --targets-file examples/targets/sandbox_targets.json --count 30\n"
+            "  insert-me plan-portfolio \\\n"
+            "    --targets-file targets.json --count 50 \\\n"
+            "    --output-dir portfolio_plan/ --max-per-target 15"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    pplan_p.add_argument(
+        "--targets-file",
+        type=Path,
+        required=True,
+        metavar="PATH",
+        help="Path to targets JSON file (see examples/targets/sandbox_targets.json).",
+    )
+    pplan_p.add_argument(
+        "--count",
+        type=int,
+        required=True,
+        metavar="N",
+        help="Global target number of corpus cases.",
+    )
+    pplan_p.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help="Directory to write portfolio_plan.json and per-target plans (default: ./portfolio_plan/).",
+    )
+    _add_portfolio_args(pplan_p)
+    pplan_p.set_defaults(func=_cmd_plan_portfolio)
+
+    # -----------------------------------------------------------------------
+    # generate-portfolio
+    # -----------------------------------------------------------------------
+    pgen_p = subparsers.add_parser(
+        "generate-portfolio",
+        help="Plan + execute a multi-target corpus pipeline.",
+        description=(
+            "Full count-driven multi-target corpus generation:\n"
+            "  1. Inspect each target and allocate globally (plan-portfolio)\n"
+            "  2. Execute the pipeline for every planned case (batch per target)\n"
+            "  3. Write per-target diagnostics + global portfolio artifacts\n\n"
+            "Accepts --from-plan to replay an existing portfolio_plan.json without\n"
+            "re-planning (re-executes the same cases in the same order).\n\n"
+            "Outputs (written to --output-root):\n"
+            "  portfolio_plan.json             -- global allocation plan\n"
+            "  portfolio_index.json            -- corpus manifest + fingerprints\n"
+            "  portfolio_acceptance_summary.json\n"
+            "  portfolio_shortfall_report.json\n"
+            "  targets/<name>/                 -- per-target corpus artifacts\n\n"
+            "Example:\n"
+            "  insert-me generate-portfolio \\\n"
+            "    --targets-file examples/targets/sandbox_targets.json --count 30\n"
+            "  insert-me generate-portfolio --from-plan portfolio_out/portfolio_plan.json\n"
+            "    --output-root portfolio_replay/"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    pgen_p.add_argument(
+        "--targets-file",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help="Path to targets JSON file. Required unless --from-plan is given.",
+    )
+    pgen_p.add_argument(
+        "--count",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Global target number of corpus cases. Required unless --from-plan is given.",
+    )
+    pgen_p.add_argument(
+        "--from-plan",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help=(
+            "Replay an existing portfolio plan. PATH may be portfolio_plan.json "
+            "or the directory containing it. Skips re-planning; re-executes the "
+            "same cases in the same order."
+        ),
+    )
+    pgen_p.add_argument(
+        "--output-root",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help="Root directory for plan and generated bundles (default: ./portfolio_out/).",
+    )
+    pgen_p.add_argument(
+        "--no-llm",
+        action="store_true",
+        help="Disable LLM adapter.",
+    )
+    pgen_p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Plan only; do not execute the pipeline.",
+    )
+    _add_portfolio_args(pgen_p)
+    pgen_p.set_defaults(func=_cmd_generate_portfolio)
 
     # -----------------------------------------------------------------------
     # validate-bundle
@@ -1974,6 +2145,608 @@ def _write_generation_diagnostics(
     }
     (output_root / "generation_diagnostics.json").write_text(
         _json.dumps(diag, indent=2), encoding="utf-8"
+    )
+
+
+# ---------------------------------------------------------------------------
+# plan-portfolio / generate-portfolio helpers
+# ---------------------------------------------------------------------------
+
+def _build_portfolio_constraints(args: argparse.Namespace):
+    """Build PortfolioConstraints from CLI args."""
+    from insert_me.planning.portfolio import PortfolioConstraints
+    return PortfolioConstraints(
+        max_per_target=args.max_per_target,
+        max_per_target_fraction=args.max_per_target_fraction,
+        max_per_strategy_global=args.max_per_strategy,
+        max_per_file=args.max_per_file,
+        max_per_function=args.max_per_function,
+        strict_quality=args.strict_quality,
+    )
+
+
+def _cmd_plan_portfolio(args: argparse.Namespace) -> int:
+    import json as _json
+    from insert_me.planning.portfolio import (
+        PortfolioPlanner, load_targets_file,
+    )
+
+    targets_file: Path = args.targets_file
+    if not targets_file.exists():
+        print(f"[insert-me] error: --targets-file not found: {targets_file}", file=sys.stderr)
+        return 1
+
+    try:
+        targets = load_targets_file(targets_file)
+    except (ValueError, KeyError) as exc:
+        print(f"[insert-me] error: invalid targets file: {exc}", file=sys.stderr)
+        return 1
+
+    if not targets:
+        print("[insert-me] error: targets file lists no targets.", file=sys.stderr)
+        return 1
+
+    output_dir: Path = args.output_dir or (Path.cwd() / "portfolio_plan")
+    constraints = _build_portfolio_constraints(args)
+
+    print(f"[insert-me] planning {args.count} cases across {len(targets)} target(s) ...")
+    for t in targets:
+        print(f"  target: {t.name}  ->  {t.path}")
+
+    planner = PortfolioPlanner(
+        targets=targets,
+        requested_count=args.count,
+        constraints=constraints,
+    )
+    portfolio_plan, per_target_plans = planner.plan()
+
+    # Print summary
+    print(f"\n  requested  : {portfolio_plan.requested_count}")
+    print(f"  planned    : {portfolio_plan.planned_count}")
+    print(f"  projected  : {portfolio_plan.projected_accepted_count} (after quality gate)")
+    print()
+    print("  allocation by target:")
+    by_target: dict[str, int] = {}
+    for e in portfolio_plan.entries:
+        by_target[e.target_name] = by_target.get(e.target_name, 0) + 1
+    for name, cnt in sorted(by_target.items()):
+        print(f"    {name:<30} {cnt:>4}")
+    print()
+    print("  allocation by strategy:")
+    for strat, cnt in sorted(portfolio_plan.global_strategy_allocation.items()):
+        print(f"    {strat:<30} {cnt:>4}")
+    print()
+
+    if portfolio_plan.blockers:
+        print("  BLOCKERS:")
+        for b in portfolio_plan.blockers:
+            print(f"    - {b}")
+        print()
+
+    if portfolio_plan.warnings:
+        print("  warnings:")
+        for w in portfolio_plan.warnings:
+            print(f"    - {w}")
+        print()
+
+    shortfall = portfolio_plan.shortfall
+    if shortfall.get("count", 0) > 0:
+        print(f"  shortfall: {shortfall['count']} case(s) not planned")
+        for cat, cnt in shortfall.get("categories", {}).items():
+            print(f"    {cat}: {cnt}")
+        print()
+
+    if portfolio_plan.planned_count > 0:
+        portfolio_plan.write(output_dir, per_target_plans)
+        print(f"[insert-me] portfolio plan written to: {output_dir / 'portfolio_plan.json'}")
+        print(f"            per-target plans:          {output_dir / 'targets'}/")
+    else:
+        print("[insert-me] no cases planned -- nothing written.", file=sys.stderr)
+
+    return 1 if portfolio_plan.blockers else 0
+
+
+def _cmd_generate_portfolio(args: argparse.Namespace) -> int:
+    """Plan + execute (or replay): build a multi-target corpus portfolio."""
+    import json as _json
+    from insert_me.planning.portfolio import (
+        PortfolioPlan, load_targets_file,
+    )
+
+    dry_run: bool = args.dry_run
+    from_plan: Path | None = getattr(args, "from_plan", None)
+
+    # ------------------------------------------------------------------
+    # Mode A: Replay from existing portfolio plan
+    # ------------------------------------------------------------------
+    if from_plan is not None:
+        return _cmd_generate_portfolio_replay(args, from_plan, dry_run)
+
+    # ------------------------------------------------------------------
+    # Mode B: Fresh plan + execute
+    # ------------------------------------------------------------------
+    targets_file: Path | None = args.targets_file
+    count: int | None = args.count
+
+    if targets_file is None:
+        print("[insert-me] error: --targets-file is required unless --from-plan is given.", file=sys.stderr)
+        return 1
+    if count is None:
+        print("[insert-me] error: --count is required unless --from-plan is given.", file=sys.stderr)
+        return 1
+    if not targets_file.exists():
+        print(f"[insert-me] error: --targets-file not found: {targets_file}", file=sys.stderr)
+        return 1
+
+    try:
+        targets = load_targets_file(targets_file)
+    except (ValueError, KeyError) as exc:
+        print(f"[insert-me] error: invalid targets file: {exc}", file=sys.stderr)
+        return 1
+
+    if not targets:
+        print("[insert-me] error: targets file lists no targets.", file=sys.stderr)
+        return 1
+
+    output_root: Path = args.output_root or (Path.cwd() / "portfolio_out")
+    plan_dir = output_root / "_plan"
+    constraints = _build_portfolio_constraints(args)
+
+    from insert_me.planning.portfolio import PortfolioPlanner
+
+    print(f"[insert-me] [1/2] planning {count} cases across {len(targets)} target(s) ...")
+    planner = PortfolioPlanner(
+        targets=targets,
+        requested_count=count,
+        constraints=constraints,
+    )
+    portfolio_plan, per_target_plans = planner.plan()
+
+    print(f"  planned {portfolio_plan.planned_count}/{portfolio_plan.requested_count} cases "
+          f"(projected accepted: {portfolio_plan.projected_accepted_count})")
+
+    if portfolio_plan.blockers:
+        for b in portfolio_plan.blockers:
+            print(f"  BLOCKER: {b}", file=sys.stderr)
+        return 1
+
+    if portfolio_plan.planned_count == 0:
+        print("[insert-me] no cases planned -- nothing to execute.", file=sys.stderr)
+        return 1
+
+    portfolio_plan.write(plan_dir, per_target_plans)
+    print(f"  plan written to: {plan_dir}")
+
+    plan_file = plan_dir / "portfolio_plan.json"
+
+    if dry_run:
+        print("[insert-me] --dry-run: skipping execution.")
+        _write_portfolio_acceptance_summary(output_root, portfolio_plan, {})
+        _write_portfolio_shortfall_report(output_root, portfolio_plan, {})
+        _write_portfolio_index(output_root, portfolio_plan, plan_file, {}, "dry-run")
+        return 0
+
+    # --- Phase 2: Execute ---
+    print(f"\n[insert-me] [2/2] executing {portfolio_plan.planned_count} cases ...")
+    all_outcomes = _execute_portfolio_cases(args, portfolio_plan, plan_dir, output_root)
+    return _finish_generate_portfolio(output_root, portfolio_plan, all_outcomes, "generate", plan_file)
+
+
+def _cmd_generate_portfolio_replay(
+    args: argparse.Namespace,
+    from_plan: Path,
+    dry_run: bool,
+) -> int:
+    """Replay an existing portfolio plan: skip re-planning, re-execute cases."""
+    import json as _json
+    from insert_me.planning.portfolio import PortfolioPlan
+
+    # Resolve the plan file
+    if from_plan.is_dir():
+        plan_file = from_plan / "portfolio_plan.json"
+    else:
+        plan_file = from_plan
+    if not plan_file.exists():
+        print(f"[insert-me] error: portfolio_plan.json not found: {plan_file}", file=sys.stderr)
+        return 1
+
+    plan_data = _json.loads(plan_file.read_text(encoding="utf-8"))
+    portfolio_plan = PortfolioPlan.from_dict(plan_data)
+    plan_dir = plan_file.parent
+
+    output_root: Path = args.output_root or (Path.cwd() / "portfolio_out_replay")
+
+    print(f"[insert-me] [replay] loading portfolio plan from: {plan_file}")
+    print(f"  {portfolio_plan.planned_count} cases, requested {portfolio_plan.requested_count}")
+
+    if dry_run:
+        print("[insert-me] --dry-run: plan loaded, skipping execution.")
+        _write_portfolio_acceptance_summary(output_root, portfolio_plan, {})
+        _write_portfolio_shortfall_report(output_root, portfolio_plan, {})
+        _write_portfolio_index(output_root, portfolio_plan, plan_file, {}, "dry-run-replay")
+        return 0
+
+    print(f"\n[insert-me] [replay] executing {portfolio_plan.planned_count} cases ...")
+    all_outcomes = _execute_portfolio_cases(args, portfolio_plan, plan_dir, output_root)
+    return _finish_generate_portfolio(output_root, portfolio_plan, all_outcomes, "replay", plan_file)
+
+
+def _execute_portfolio_cases(
+    args: argparse.Namespace,
+    portfolio_plan,
+    plan_dir: Path,
+    output_root: Path,
+) -> dict[str, dict]:
+    """
+    Execute all cases in a portfolio plan.
+
+    Returns per-case outcomes keyed by case_id.  Also runs _finish_generate_corpus
+    for each target so that per-target corpus artifacts are written.
+    """
+    import json as _json
+    from insert_me.planning.corpus_planner import CorpusPlan
+
+    # Group entries by target_name for per-target batch execution
+    from collections import defaultdict
+    entries_by_target: dict[str, list] = defaultdict(list)
+    for entry in portfolio_plan.entries:
+        entries_by_target[entry.target_name].append(entry)
+
+    # Build a lightweight CorpusPlan stub per target from the sub-plan files
+    all_outcomes: dict[str, dict] = {}
+
+    for ts in portfolio_plan.target_summaries:
+        target_name = ts.name
+        target_source = Path(ts.path)
+        target_entries = entries_by_target.get(target_name, [])
+
+        target_out = output_root / "targets" / target_name
+        target_plan_dir = plan_dir / "targets" / target_name / "_plan"
+        sub_plan_file = target_plan_dir / "corpus_plan.json"
+
+        print(f"\n  [target: {target_name}] {len(target_entries)} case(s)")
+
+        if not sub_plan_file.exists():
+            print(f"  WARNING: sub-plan not found at {sub_plan_file} -- skipping target", file=sys.stderr)
+            for entry in target_entries:
+                all_outcomes[entry.case_id] = {
+                    "strategy": entry.strategy,
+                    "target_file": entry.target_file,
+                    "target_name": target_name,
+                    "classification": "ERROR",
+                    "error": f"sub-plan missing: {sub_plan_file}",
+                }
+            continue
+
+        # Load the per-target CorpusPlan
+        try:
+            plan_data = _json.loads(sub_plan_file.read_text(encoding="utf-8"))
+            corpus_plan = CorpusPlan.from_dict(plan_data)
+        except Exception as exc:
+            print(f"  WARNING: failed to load sub-plan {sub_plan_file}: {exc}", file=sys.stderr)
+            for entry in target_entries:
+                all_outcomes[entry.case_id] = {
+                    "strategy": entry.strategy,
+                    "target_file": entry.target_file,
+                    "target_name": target_name,
+                    "classification": "ERROR",
+                    "error": str(exc),
+                }
+            continue
+
+        # Execute cases for this target
+        case_outcomes = _execute_plan_cases(args, corpus_plan, target_plan_dir, target_source, target_out)
+
+        # Tag outcomes with target_name and merge
+        for case_id, outcome in case_outcomes.items():
+            outcome["target_name"] = target_name
+            all_outcomes[case_id] = outcome
+
+        # Write per-target corpus artifacts
+        _finish_generate_corpus(target_out, corpus_plan, case_outcomes, "portfolio", sub_plan_file)
+
+    return all_outcomes
+
+
+def _finish_generate_portfolio(
+    output_root: Path,
+    portfolio_plan,
+    all_outcomes: dict[str, dict],
+    run_mode: str,
+    plan_file: Path,
+) -> int:
+    """Write portfolio-level artifacts and print summary. Returns exit code."""
+    accepted = sum(1 for o in all_outcomes.values() if o.get("classification") == "VALID")
+    rejected = sum(
+        1 for o in all_outcomes.values()
+        if o.get("classification") not in ("VALID", "ERROR", "UNKNOWN")
+        and not o.get("error")
+    )
+    errors = sum(1 for o in all_outcomes.values() if o.get("error") is not None)
+    total = len(all_outcomes)
+
+    print(f"\n  requested  : {portfolio_plan.requested_count}")
+    print(f"  planned    : {portfolio_plan.planned_count}")
+    print(f"  executed   : {total}")
+    print(f"  accepted   : {accepted}")
+    print(f"  rejected   : {rejected}")
+    if errors:
+        print(f"  errors     : {errors}")
+    print(f"\n[insert-me] portfolio written to: {output_root}")
+
+    _write_portfolio_acceptance_summary(output_root, portfolio_plan, all_outcomes)
+    _write_portfolio_shortfall_report(output_root, portfolio_plan, all_outcomes)
+    _write_portfolio_index(output_root, portfolio_plan, plan_file, all_outcomes, run_mode)
+
+    print(f"  portfolio_acceptance_summary.json : {output_root / 'portfolio_acceptance_summary.json'}")
+    print(f"  portfolio_shortfall_report.json   : {output_root / 'portfolio_shortfall_report.json'}")
+    print(f"  portfolio_index.json              : {output_root / 'portfolio_index.json'}")
+
+    return 0 if errors == 0 else 1
+
+
+def _write_portfolio_acceptance_summary(
+    output_root: Path,
+    portfolio_plan,
+    all_outcomes: dict[str, dict],
+) -> None:
+    """Write portfolio_acceptance_summary.json with per-target and per-strategy breakdowns."""
+    import json as _json
+
+    accepted = sum(1 for o in all_outcomes.values() if o.get("classification") == "VALID" and not o.get("error"))
+    rejected = sum(
+        1 for o in all_outcomes.values()
+        if o.get("classification") not in ("VALID", "ERROR", "UNKNOWN") and not o.get("error")
+    )
+    errors = sum(1 for o in all_outcomes.values() if o.get("error") is not None)
+
+    by_target: dict[str, dict] = {}
+    for outcome in all_outcomes.values():
+        tname = outcome.get("target_name", "unknown")
+        if tname not in by_target:
+            by_target[tname] = {"accepted": 0, "rejected": 0, "error": 0}
+        if outcome.get("error"):
+            by_target[tname]["error"] += 1
+        elif outcome.get("classification") == "VALID":
+            by_target[tname]["accepted"] += 1
+        else:
+            by_target[tname]["rejected"] += 1
+
+    by_strategy: dict[str, dict] = {}
+    for outcome in all_outcomes.values():
+        s = outcome.get("strategy", "unknown")
+        if s not in by_strategy:
+            by_strategy[s] = {"accepted": 0, "rejected": 0, "error": 0}
+        if outcome.get("error"):
+            by_strategy[s]["error"] += 1
+        elif outcome.get("classification") == "VALID":
+            by_strategy[s]["accepted"] += 1
+        else:
+            by_strategy[s]["rejected"] += 1
+
+    shortfall_amount = max(0, portfolio_plan.requested_count - accepted)
+
+    summary = {
+        "schema_version": "1.0",
+        "schema": "portfolio_acceptance_summary",
+        "portfolio_id": portfolio_plan.portfolio_id,
+        "targets_hash": portfolio_plan.targets_hash,
+        "requested_count": portfolio_plan.requested_count,
+        "planned_count": portfolio_plan.planned_count,
+        "projected_accepted_count": portfolio_plan.projected_accepted_count,
+        "attempted_count": len(all_outcomes),
+        "accepted_count": accepted,
+        "rejected_count": rejected,
+        "error_count": errors,
+        "requested_count_met": accepted >= portfolio_plan.requested_count,
+        "shortfall_amount": shortfall_amount,
+        "honest": shortfall_amount > 0,
+        "shortfall_categories": portfolio_plan.shortfall.get("categories", {}),
+        "global_strategy_allocation": portfolio_plan.global_strategy_allocation,
+        "by_target": by_target,
+        "by_strategy": by_strategy,
+    }
+    output_root.mkdir(parents=True, exist_ok=True)
+    (output_root / "portfolio_acceptance_summary.json").write_text(
+        _json.dumps(summary, indent=2), encoding="utf-8"
+    )
+
+
+def _write_portfolio_shortfall_report(
+    output_root: Path,
+    portfolio_plan,
+    all_outcomes: dict[str, dict],
+) -> None:
+    """Write portfolio_shortfall_report.json with plan + execution shortfall breakdown."""
+    import json as _json
+
+    accepted = sum(
+        1 for o in all_outcomes.values()
+        if o.get("classification") == "VALID" and not o.get("error")
+    )
+    plan_shortfall = max(0, portfolio_plan.requested_count - portfolio_plan.planned_count)
+    exec_shortfall = max(0, portfolio_plan.planned_count - accepted)
+    total_shortfall = max(0, portfolio_plan.requested_count - accepted)
+
+    # Execution-level categories
+    exec_cats: dict[str, int] = {}
+    for outcome in all_outcomes.values():
+        cl = outcome.get("classification", "UNKNOWN")
+        err = outcome.get("error")
+        if err:
+            exec_cats["pipeline_error"] = exec_cats.get("pipeline_error", 0) + 1
+        elif cl == "NOOP":
+            exec_cats["patcher_noop"] = exec_cats.get("patcher_noop", 0) + 1
+        elif cl == "INVALID":
+            exec_cats["audit_invalid"] = exec_cats.get("audit_invalid", 0) + 1
+        elif cl == "AMBIGUOUS":
+            exec_cats["audit_ambiguous"] = exec_cats.get("audit_ambiguous", 0) + 1
+        elif cl not in ("VALID", "UNKNOWN"):
+            exec_cats["unknown"] = exec_cats.get("unknown", 0) + 1
+
+    # Per-target shortfall
+    by_target_shortfall: dict[str, dict] = {}
+    for ts in portfolio_plan.target_summaries:
+        tname = ts.name
+        t_outcomes = {k: v for k, v in all_outcomes.items() if v.get("target_name") == tname}
+        t_accepted = sum(1 for o in t_outcomes.values() if o.get("classification") == "VALID" and not o.get("error"))
+        by_target_shortfall[tname] = {
+            "allocated": ts.allocated_count,
+            "planned": ts.planned_count,
+            "accepted": t_accepted,
+            "shortfall": max(0, ts.allocated_count - t_accepted),
+        }
+
+    plan_cats = portfolio_plan.shortfall.get("categories", {})
+    parts = []
+    if plan_shortfall > 0:
+        causes = ", ".join(plan_cats.keys()) or "none identified"
+        parts.append(
+            f"Plan shortfall: {plan_shortfall} case(s) not planned (causes: {causes})"
+        )
+    if exec_shortfall > 0:
+        causes = ", ".join(exec_cats.keys()) or "none identified"
+        parts.append(
+            f"Execution shortfall: {exec_shortfall} case(s) planned but not accepted (causes: {causes})"
+        )
+    if not parts:
+        parts.append(
+            f"Requested count ({portfolio_plan.requested_count}) was achieved "
+            f"with {accepted} accepted case(s)."
+        )
+    explanation = ". ".join(parts) + "."
+
+    report = {
+        "schema_version": "1.0",
+        "schema": "portfolio_shortfall_report",
+        "portfolio_id": portfolio_plan.portfolio_id,
+        "requested_count": portfolio_plan.requested_count,
+        "planned_count": portfolio_plan.planned_count,
+        "attempted_count": len(all_outcomes),
+        "accepted_count": accepted,
+        "requested_count_met": accepted >= portfolio_plan.requested_count,
+        "shortfall_amount": total_shortfall,
+        "plan_shortfall": {
+            "amount": plan_shortfall,
+            "categories": plan_cats,
+        },
+        "execution_shortfall": {
+            "amount": exec_shortfall,
+            "categories": exec_cats,
+        },
+        "by_target_shortfall": by_target_shortfall,
+        "shortfall_explanation": explanation,
+    }
+    output_root.mkdir(parents=True, exist_ok=True)
+    (output_root / "portfolio_shortfall_report.json").write_text(
+        _json.dumps(report, indent=2), encoding="utf-8"
+    )
+
+
+def _write_portfolio_index(
+    output_root: Path,
+    portfolio_plan,
+    plan_file: Path,
+    all_outcomes: dict[str, dict],
+    run_mode: str,
+) -> None:
+    """Write portfolio_index.json — machine-readable portfolio manifest."""
+    import json as _json
+    import hashlib
+
+    accepted = sum(
+        1 for o in all_outcomes.values()
+        if o.get("classification") == "VALID" and not o.get("error")
+    )
+    rejected = sum(
+        1 for o in all_outcomes.values()
+        if o.get("classification") not in ("VALID", "ERROR", "UNKNOWN") and not o.get("error")
+    )
+    errors = sum(1 for o in all_outcomes.values() if o.get("error") is not None)
+
+    # Portfolio fingerprint (from plan; stable even across replay runs)
+    portfolio_fingerprint = portfolio_plan.fingerprint
+
+    # Acceptance fingerprint (post-execution)
+    accepted_ids = sorted(
+        k for k, v in all_outcomes.items()
+        if v.get("classification") == "VALID" and not v.get("error")
+    )
+    acceptance_fingerprint = hashlib.sha256(
+        _json.dumps(accepted_ids).encode()
+    ).hexdigest()[:16]
+
+    # Per-target summary
+    per_target: dict[str, dict] = {}
+    for ts in portfolio_plan.target_summaries:
+        tname = ts.name
+        t_outcomes = {k: v for k, v in all_outcomes.items() if v.get("target_name") == tname}
+        t_accepted = sum(1 for o in t_outcomes.values() if o.get("classification") == "VALID" and not o.get("error"))
+        per_target[tname] = {
+            "path": ts.path,
+            "allocated_count": ts.allocated_count,
+            "planned_count": ts.planned_count,
+            "attempted_count": len(t_outcomes),
+            "accepted_count": t_accepted,
+            "corpus_index": str(
+                output_root / "targets" / tname / "corpus_index.json"
+            ),
+        }
+
+    # Per-strategy summary
+    per_strategy: dict[str, dict] = {}
+    for outcome in all_outcomes.values():
+        s = outcome.get("strategy", "unknown")
+        if s not in per_strategy:
+            per_strategy[s] = {"attempted": 0, "accepted": 0}
+        per_strategy[s]["attempted"] += 1
+        if outcome.get("classification") == "VALID" and not outcome.get("error"):
+            per_strategy[s]["accepted"] += 1
+
+    replay_cmd = (
+        f"insert-me generate-portfolio --from-plan {plan_file} "
+        f"--output-root {output_root}"
+    )
+
+    index = {
+        "schema_version": "1.0",
+        "schema": "portfolio_index",
+        "run_mode": run_mode,
+        "portfolio_id": portfolio_plan.portfolio_id,
+        "targets_hash": portfolio_plan.targets_hash,
+        "counts": {
+            "requested": portfolio_plan.requested_count,
+            "planned": portfolio_plan.planned_count,
+            "attempted": len(all_outcomes),
+            "accepted": accepted,
+            "rejected": rejected,
+            "errors": errors,
+        },
+        "fingerprints": {
+            "portfolio_fingerprint": portfolio_fingerprint,
+            "acceptance_fingerprint": acceptance_fingerprint,
+        },
+        "per_target": per_target,
+        "per_strategy": per_strategy,
+        "artifacts": {
+            "portfolio_plan": str(plan_file),
+            "portfolio_acceptance_summary": str(output_root / "portfolio_acceptance_summary.json"),
+            "portfolio_shortfall_report": str(output_root / "portfolio_shortfall_report.json"),
+            "portfolio_index": str(output_root / "portfolio_index.json"),
+            "targets_dir": str(output_root / "targets"),
+        },
+        "reproducibility": {
+            "deterministic": True,
+            "replay_command": replay_cmd,
+            "note": (
+                "Same targets-file + same count + same constraints => same portfolio_plan.json. "
+                "Use --from-plan to replay this run exactly."
+            ),
+        },
+    }
+    output_root.mkdir(parents=True, exist_ok=True)
+    (output_root / "portfolio_index.json").write_text(
+        _json.dumps(index, indent=2), encoding="utf-8"
     )
 
 

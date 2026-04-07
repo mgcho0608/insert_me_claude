@@ -235,6 +235,7 @@ _STRATEGY_PATTERN_TYPE: dict[str, str] = {
     "insert_double_free":    "free_call",
     "remove_free_call":      "free_call",
     "remove_null_guard":     "null_guard",
+    "remove_size_cast":      "malloc_size_cast",
 }
 
 # Quality gate pass rate priors (validator + auditor acceptance probability,
@@ -246,6 +247,7 @@ _STRATEGY_PASS_RATE: dict[str, float] = {
     "insert_double_free":    0.90,
     "remove_free_call":      0.90,
     "remove_null_guard":     1.00,
+    "remove_size_cast":      0.875,
 }
 
 
@@ -273,10 +275,12 @@ class CorpusPlanner:
         source_root: Path,
         requested_count: int,
         constraints: PlanConstraints | None = None,
+        case_id_prefix: str = "plan",
     ) -> None:
         self._source_root = source_root
         self._requested = requested_count
         self._constraints = constraints or PlanConstraints()
+        self._case_id_prefix = case_id_prefix
 
     def plan(self) -> CorpusPlan:
         """Run inspection, allocation, and synthesis.  Returns CorpusPlan."""
@@ -356,7 +360,7 @@ class CorpusPlanner:
                 pattern_type=pattern_type,
                 requested_count=count,
                 seen_targets=seen_targets,
-                case_id_prefix="plan",
+                case_id_prefix=self._case_id_prefix,
                 case_id_start=case_counter,
             )
             if result.warning:

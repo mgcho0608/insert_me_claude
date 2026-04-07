@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0",
+  "description": "Bundled evaluation targets for insert_me portfolio testing. Paths are relative to this file.",
+  "targets": [
+    {
+      "name": "sandbox_eval",
+      "path": "../sandbox_eval/src",
+      "description": "Primary sandbox evaluation target (6 C source files, ~200 candidate sites)."
+    },
+    {
+      "name": "target_b",
+      "path": "../sandbox_targets/target_b/src",
+      "description": "Secondary sandbox target with different data-structure patterns (3 C source files)."
+    }
+  ]
+}

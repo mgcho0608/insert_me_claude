@@ -426,6 +426,43 @@ add `malloc_size_cast` pattern type to seeder/schema, and truth-sync all docs.
 
 ---
 
+## Phase 15 — Multi-Target Corpus Orchestration + Canonical Interface Truth Sync ✓ COMPLETE
+
+**Goal:** Add a portfolio planning layer that allocates a global case count across multiple
+evaluation-only targets, with deterministic proportional allocation, global diversity
+constraints, and machine-readable shortfall diagnostics.
+
+- [x] `src/insert_me/planning/portfolio.py` — `PortfolioPlanner`, `PortfolioPlan`, `PortfolioConstraints`, `PortfolioTarget`, `PortfolioEntry`, `PortfolioTargetSummary`, `load_targets_file`
+- [x] `CorpusPlanner.__init__` — new `case_id_prefix` parameter for globally unique case IDs
+- [x] `corpus_planner.py` `_STRATEGY_PATTERN_TYPE` + `_STRATEGY_PASS_RATE` include `remove_size_cast`
+- [x] Shortfall category constants: `CAT_TARGET_CAPACITY`, `CAT_STRATEGY_BLOCKED`, `CAT_DIVERSITY_TARGET`, `CAT_DIVERSITY_STRATEGY`, `CAT_NO_VIABLE_TARGETS`, `CAT_EXPERIMENTAL`, `CAT_SWEEP_EXHAUSTED`
+- [x] Proportional allocation: floor-integer distribution, remainder by highest fractional part (deterministic)
+- [x] Global greedy selection: sorted by (suitability_weight DESC, score DESC, target_name ASC, strategy ASC, seed_integer ASC)
+- [x] Portfolio fingerprint: sha256[:16] of canonical sorted entries
+- [x] `PortfolioPlan.write(output_dir, per_target_plans)` — writes portfolio_plan.json + per-target sub-plans under targets/<name>/_plan/
+- [x] CLI `plan-portfolio` subcommand: `--targets-file`, `--count`, `--output-dir`, portfolio constraint flags
+- [x] CLI `generate-portfolio` subcommand: fresh mode + `--from-plan` replay mode; writes all portfolio artifacts
+- [x] Portfolio artifacts: `portfolio_plan.json`, `portfolio_index.json`, `portfolio_acceptance_summary.json`, `portfolio_shortfall_report.json`
+- [x] Per-target artifacts: reuses `_finish_generate_corpus` per target (corpus_index.json, acceptance_summary.json, shortfall_report.json)
+- [x] `schemas/targets.schema.json` — JSON schema for targets files
+- [x] `examples/targets/sandbox_targets.json` — bundled two-target example
+- [x] `src/insert_me/planning/__init__.py` — exports portfolio public API
+- [x] `tests/test_portfolio.py` — 51 tests covering constraints, determinism, allocation, shortfall, diversity limits, roundtrip, CLI smoke
+- [x] CLI docstring and module-level comments truth-synced
+- [x] 688 tests passing (637 + 51 new)
+
+**Allocation algorithm:**
+- VIABLE strategies: full file-capped capacity; LIMITED: 0.5x ceil; BLOCKED: 0
+- Sub-allocations: floor-proportional + remainder by highest fractional part, then highest capacity, then name
+- Global limits: `max_per_target` (hard), `max_per_strategy_global` (hard), fraction warnings (soft)
+- Case IDs: globally unique across targets (prefix = sanitised target name)
+
+**Reproducibility:**
+- Same targets-file + same count + same constraints => byte-identical portfolio_plan.json
+- `--from-plan` replay re-executes same cases in same order
+
+---
+
 ## Explicitly Deferred (No Timeline)
 
 | Feature | Reason deferred |

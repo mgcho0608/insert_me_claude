@@ -1,6 +1,6 @@
 # Reproducibility Runbook — insert_me Corpus Generation
 
-> **Phase:** 9 — planning layer complete  
+> **Phase:** 15 — multi-target portfolio orchestration  
 > **Audience:** Engineers reproducing or extending the sandbox corpus, or using the
 > planning layer on a local evaluation-only target project.
 >
@@ -527,3 +527,96 @@ This is verified by `check_plan_stability.py` and `TestFreshPlanReproducibility`
 
 **Supported pilot targets** (user-provided local projects) are expected to be plan-stable
 but reproducibility is not formally pre-verified. Use `check_plan_stability.py` to check.
+
+---
+
+## Multi-Target Portfolio Reproducibility (Phase 15)
+
+Portfolio planning allocates a global count across multiple targets.  The same guarantee
+applies: same inputs => same `portfolio_plan.json` (byte-identical).
+
+### Portfolio determinism guarantee
+
+```
+Same targets-file + same --count + same constraint flags
+=> same portfolio_plan.json
+=> same portfolio_fingerprint
+=> same per-target sub-plans (corpus_plan.json)
+=> same per-target seed files
+```
+
+### Run a portfolio plan
+
+```bash
+# Plan only (no execution)
+insert-me plan-portfolio \
+    --targets-file examples/targets/sandbox_targets.json \
+    --count 20 \
+    --output-dir portfolio_plan/
+
+# Verify plan is deterministic (run twice)
+insert-me plan-portfolio \
+    --targets-file examples/targets/sandbox_targets.json \
+    --count 20 --output-dir run1/
+insert-me plan-portfolio \
+    --targets-file examples/targets/sandbox_targets.json \
+    --count 20 --output-dir run2/
+
+# fingerprint fields should be identical:
+python -c "
+import json
+from pathlib import Path
+d1 = json.loads(Path('run1/portfolio_plan.json').read_text())
+d2 = json.loads(Path('run2/portfolio_plan.json').read_text())
+assert d1['fingerprint'] == d2['fingerprint'], 'fingerprint mismatch'
+print('OK: fingerprints match:', d1['fingerprint'])
+"
+```
+
+### Full generation with portfolio artifacts
+
+```bash
+insert-me generate-portfolio \
+    --targets-file examples/targets/sandbox_targets.json \
+    --count 20 \
+    --output-root portfolio_out/ \
+    --no-llm
+```
+
+Produces:
+```
+portfolio_out/
+  portfolio_plan.json                 -- global allocation plan
+  portfolio_index.json                -- corpus manifest + fingerprints
+  portfolio_acceptance_summary.json   -- requested/planned/accepted breakdown
+  portfolio_shortfall_report.json     -- plan + execution shortfall attribution
+  _plan/                              -- plan-phase sub-plans
+  targets/
+    sandbox_eval/                     -- per-target corpus artifacts + bundles
+    target_b/
+```
+
+### Portfolio replay
+
+```bash
+insert-me generate-portfolio \
+    --from-plan portfolio_out/_plan/portfolio_plan.json \
+    --output-root portfolio_replay/ \
+    --no-llm
+```
+
+The replay skips re-planning and re-executes the exact same cases.
+`portfolio_index.json` `run_mode` will be `"replay"`.
+
+### Shortfall categories (machine-readable)
+
+| Category key | Meaning |
+|---|---|
+| `target_capacity_limit` | Target's effective capacity < allocated sub-count |
+| `strategy_blocked_no_candidates` | Strategy has zero candidates on a target |
+| `global_diversity_constraint_per_target` | Cases dropped by max_per_target limit |
+| `global_diversity_constraint_per_strategy` | Cases dropped by max_per_strategy_global limit |
+| `no_viable_targets` | All targets returned zero effective capacity |
+| `experimental_strategy_excluded` | Experimental strategies excluded from corpus |
+| `sweep_exhausted` | All candidates consumed; count still short |
+
