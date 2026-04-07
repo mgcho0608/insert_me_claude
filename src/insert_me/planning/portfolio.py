@@ -893,7 +893,7 @@ def _make_target_summaries(
             effective_capacity=caps.get(name, 0),
             allocated_count=allocations.get(name, 0),
             planned_count=tp.planned_count if tp else 0,
-            suitability=insp.to_dict()["strategies"]
+            suitability={s: stats.suitability for s, stats in insp.strategies.items()}
                         if insp else {},
             viable_strategies=insp.viable_strategies if insp else [],
             limited_strategies=insp.limited_strategies if insp else [],

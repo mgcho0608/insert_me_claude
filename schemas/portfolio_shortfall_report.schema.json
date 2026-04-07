@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "portfolio_shortfall_report.schema.json",
+  "title": "PortfolioShortfallReport",
+  "description": "Portfolio shortfall report: unified plan + execution shortfall attribution with per-target breakdown.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "schema",
+    "portfolio_id",
+    "requested_count",
+    "planned_count",
+    "attempted_count",
+    "accepted_count",
+    "requested_count_met",
+    "shortfall_amount",
+    "plan_shortfall",
+    "execution_shortfall",
+    "by_target_shortfall",
+    "shortfall_explanation"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "schema": { "type": "string", "const": "portfolio_shortfall_report" },
+    "portfolio_id": { "type": "string" },
+    "requested_count": { "type": "integer", "minimum": 0 },
+    "planned_count": { "type": "integer", "minimum": 0 },
+    "attempted_count": { "type": "integer", "minimum": 0 },
+    "accepted_count": { "type": "integer", "minimum": 0 },
+    "requested_count_met": { "type": "boolean" },
+    "shortfall_amount": { "type": "integer", "minimum": 0 },
+    "plan_shortfall": {
+      "type": "object",
+      "required": ["amount", "categories"],
+      "additionalProperties": false,
+      "properties": {
+        "amount": { "type": "integer", "minimum": 0 },
+        "categories": { "type": "object", "additionalProperties": { "type": "integer" } }
+      }
+    },
+    "execution_shortfall": {
+      "type": "object",
+      "required": ["amount", "categories"],
+      "additionalProperties": false,
+      "properties": {
+        "amount": { "type": "integer", "minimum": 0 },
+        "categories": { "type": "object", "additionalProperties": { "type": "integer" } }
+      }
+    },
+    "by_target_shortfall": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["allocated", "planned", "accepted", "shortfall"],
+        "additionalProperties": false,
+        "properties": {
+          "allocated": { "type": "integer", "minimum": 0 },
+          "planned": { "type": "integer", "minimum": 0 },
+          "accepted": { "type": "integer", "minimum": 0 },
+          "shortfall": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "shortfall_explanation": {
+      "type": "string",
+      "description": "Human-readable explanation of total shortfall (plan + execution)."
+    }
+  }
+}

@@ -13,25 +13,28 @@ regardless of which optional components are active.
 
 ## Current Implementation Status
 
-**Phase 14 complete.**
+**Phase 15 complete.**
 Full pipeline operational: 6 corpus-admitted mutation strategies (CWE-122/416/415/401/476/190),
-multi-line patcher infrastructure, `insert-me batch` · `insert-me inspect-target`
-· `insert-me plan-corpus` · `insert-me generate-corpus` (incl. `--from-plan` replay) CLIs,
-2 sandbox targets, 55-seed accepted corpus (100% ACCEPT), corpus_index.json with fingerprints,
-`scripts/check_plan_stability.py` for fresh-plan reproducibility verification.
-637 tests passing.
+multi-line patcher infrastructure, all CLI subcommands including `insert-me plan-portfolio` and
+`insert-me generate-portfolio` (multi-target corpus orchestration), 2 sandbox targets,
+76-seed accepted corpus (100% reproducible), portfolio artifacts (portfolio_plan.json,
+portfolio_index.json, portfolio_acceptance_summary.json, portfolio_shortfall_report.json),
+corpus_index.json with fingerprints, `scripts/check_plan_stability.py` for fresh-plan
+reproducibility verification.
+688 tests passing.
 
 | Pipeline stage | Status | Notes |
 |---|---|---|
-| Seeder | **Complete** (Phase 3, hardened Phase 8/14) | 12 pattern types incl. `null_guard`, `malloc_size_cast`; free_call/loop-body/sub-malloc scoring penalties |
+| Seeder | **Complete** (Phase 3, hardened Phase 8/14) | 13 pattern types incl. `null_guard`, `malloc_size_cast`; free_call/loop-body/sub-malloc scoring penalties |
 | Patcher | **Phase 4b/8/4c/10/14** | 6 corpus-admitted strategies (CWE-122/416/415/401/476/190); multi-line handler infrastructure in place |
 | Validator | **Complete** (Phase 5) | Five deterministic checks; no compiler required |
 | Auditor | **Complete** (Phase 6) | Deterministic slice; writes ground_truth, audit, audit_result |
 | Evaluator | **Complete** (Phase 7A) | Optional separate step; compares detector reports against ground truth |
 | Adjudicator | **Phase 7B-prep** | `HeuristicAdjudicator` (offline default) · `DisabledAdjudicator` · `LLMAdjudicator` placeholder |
 | LLM Adapter | Interface only | `NoOpAdapter` always available; LLM enrichment (labels.json) deferred to Phase 7B |
-| Corpus tooling | **Phase 8/9/10/11/12/13/14** | `scripts/generate_corpus.py` · `scripts/check_reproducibility.py` · `scripts/check_plan_stability.py` (Phase 13) · `insert-me batch` · `insert-me inspect-target` · `insert-me plan-corpus` · `insert-me generate-corpus` (incl. `--from-plan` replay) · `examples/corpus_manifest.json` · `docs/local_target_pilot.md` |
-| Planning layer | **Phase 9/11/12** | `src/insert_me/planning/` -- `TargetInspector`, `SeedSynthesizer`, `CorpusPlanner` (incl. `from_dict()` for replay); count-driven; deterministic; suitability tiers VIABLE/LIMITED/BLOCKED; patcher viability verification |
+| Corpus tooling | **Phase 8–15** | `scripts/generate_corpus.py` · `scripts/check_reproducibility.py` · `scripts/check_plan_stability.py` · `insert-me batch` · `insert-me inspect-target` · `insert-me plan-corpus` · `insert-me generate-corpus` (incl. `--from-plan` replay) · `corpus_index.json` with fingerprints |
+| Planning layer (single-target) | **Phase 9/11/12** | `src/insert_me/planning/` -- `TargetInspector`, `SeedSynthesizer`, `CorpusPlanner` (incl. `from_dict()` for replay); count-driven; deterministic; suitability tiers VIABLE/LIMITED/BLOCKED |
+| Portfolio layer (multi-target) | **Phase 15** | `src/insert_me/planning/portfolio.py` -- `PortfolioPlanner`, `PortfolioPlan`, `PortfolioConstraints`, `load_targets_file`; proportional allocation; global diversity constraints; `insert-me plan-portfolio` · `insert-me generate-portfolio` (incl. `--from-plan` replay) |
 
 The pipeline orchestrator (`pipeline/__init__.py`) coordinates all four stages.
 Each stage's `run()` method is implemented and called in sequence.
@@ -284,22 +287,23 @@ This also means:
 ```
 src/insert_me/
 ├── __init__.py          # Package version, public re-exports
-├── cli.py               # CLI entrypoint — run/batch/inspect-target/plan-corpus/generate-corpus/validate-bundle/audit/evaluate
+├── cli.py               # CLI entrypoint — run/batch/inspect-target/plan-corpus/generate-corpus/plan-portfolio/generate-portfolio/validate-bundle/audit/evaluate
 ├── config.py            # Config loader + dataclass (TOML + CLI overrides)
 ├── schema.py            # Schema loader, artifact validation, validate_bundle()
 ├── artifacts.py         # BundlePaths, run ID derivation, write_json_artifact
 ├── pipeline/
 │   ├── __init__.py      # Orchestrator — run_pipeline() [Phases 3–6 wired]
 │   ├── seeder.py        # Seeder, PatchTarget, PatchTargetList  [Phase 3: COMPLETE]
-│   ├── patcher.py       # Patcher, Mutation, PatchResult, MultilineMutationResult [Phase 4b/8/4c: 5 strategies]
+│   ├── patcher.py       # Patcher, Mutation, PatchResult, MultilineMutationResult [Phase 4b/8/4c/14: 6 strategies]
 │   ├── validator.py     # Validator, ValidationVerdict           [Phase 5: COMPLETE]
 │   ├── auditor.py       # Auditor, GroundTruthRecord, AuditRecord [Phase 6: COMPLETE]
 │   └── evaluator.py     # shim — re-exports from evaluation/    [backward compat]
 ├── planning/
-│   ├── __init__.py      # Public API re-exports (CorpusPlanner, TargetInspector, SeedSynthesizer, …)
+│   ├── __init__.py      # Public API re-exports (CorpusPlanner, TargetInspector, PortfolioPlanner, …)
 │   ├── inspector.py     # TargetInspector — suitability scan; VIABLE/LIMITED/BLOCKED tiers [Phase 9]
 │   ├── seed_synthesis.py # SeedSynthesizer — deterministic seed-integer sweep [Phase 9]
-│   └── corpus_planner.py # CorpusPlanner — allocation, plan generation, write() [Phase 9]
+│   ├── corpus_planner.py # CorpusPlanner — single-target allocation, plan generation, write() [Phase 9]
+│   └── portfolio.py     # PortfolioPlanner, PortfolioPlan, PortfolioConstraints, load_targets_file [Phase 15]
 ├── evaluation/
 │   ├── __init__.py      # Public API re-exports
 │   ├── evaluator.py     # Evaluator, MatchRecord, EvaluationResult [Phase 7A]
@@ -344,8 +348,65 @@ Schema versions are carried in every artifact under `"schema_version"`.
 | `match_result.schema.json` | Per-mutation match evaluation (Evaluator output) |
 | `coverage_result.schema.json` | Coverage summary statistics (Evaluator output) |
 | `adjudication_result.schema.json` | Adjudicator verdicts for semantic matches (heuristic or LLM; optional) |
+| `corpus_plan.schema.json` | Single-target corpus plan allocation |
+| `targets.schema.json` | Portfolio targets file (input to plan-portfolio/generate-portfolio) |
+| `portfolio_plan.schema.json` | Global portfolio allocation plan |
+| `portfolio_index.schema.json` | Portfolio manifest + fingerprints |
+| `portfolio_acceptance_summary.schema.json` | Portfolio acceptance counts by target and strategy |
+| `portfolio_shortfall_report.schema.json` | Portfolio shortfall attribution (plan + execution) |
 
 Schema loading, resolution (`.schema.json` vs `.json`), and validation are centralised in
 `src/insert_me/schema.py`. Use the `SCHEMA_*` constants — never hardcode schema names.
 
 See `docs/artifact_contracts.md` for the full artifact specification.
+
+---
+
+## Portfolio Orchestration Layer (Phase 15)
+
+The portfolio layer sits above the single-target planning layer and coordinates
+corpus generation across multiple evaluation-only C/C++ source trees.
+
+```
+targets.json
+    |
+    v
+PortfolioPlanner.plan()
+    |
+    +-- Inspect each target (TargetInspector)
+    |   => effective capacity (VIABLE=full, LIMITED=half, BLOCKED=0)
+    |
+    +-- Allocate globally (proportional to capacity)
+    |   => floor-integer distribution + remainder by highest fractional part
+    |
+    +-- Plan each sub-allocation (CorpusPlanner per target)
+    |   => case_id_prefix = sanitised target name (globally unique IDs)
+    |
+    +-- Global greedy selection
+    |   sort: (-suitability_weight, -score, target_name, strategy, seed_integer)
+    |   limits: max_per_target (hard), max_per_strategy_global (hard)
+    |   warnings: max_per_target_fraction (soft), max_per_strategy_fraction (soft)
+    |
+    +-- Shortfall diagnostics
+    |   machine-readable categories: target_capacity_limit, strategy_blocked,
+    |   global_diversity_constraint_*, no_viable_targets, sweep_exhausted
+    |
+    v
+PortfolioPlan + per_target_plans (dict[str, CorpusPlan])
+    |
+    v
+generate-portfolio CLI
+    |
+    +-- write portfolio_plan.json + per-target sub-plans
+    +-- execute pipeline per target (reuses _execute_plan_cases)
+    +-- _finish_generate_corpus per target (per-target corpus artifacts)
+    +-- write portfolio_index.json
+    +-- write portfolio_acceptance_summary.json
+    +-- write portfolio_shortfall_report.json
+```
+
+**Reproducibility guarantee:** Same targets-file + same `--count` + same constraints =>
+byte-identical `portfolio_plan.json` and `portfolio_fingerprint`.
+
+**Replay:** `insert-me generate-portfolio --from-plan portfolio_plan.json` re-executes
+the same cases in the same order without re-planning.

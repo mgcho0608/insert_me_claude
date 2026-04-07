@@ -1,0 +1,120 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "portfolio_plan.schema.json",
+  "title": "PortfolioPlan",
+  "description": "Output of insert-me plan-portfolio: a deterministic multi-target corpus allocation plan.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "schema",
+    "portfolio_id",
+    "targets_hash",
+    "requested_count",
+    "planned_count",
+    "projected_accepted_count",
+    "constraints",
+    "target_summaries",
+    "entries",
+    "global_strategy_allocation",
+    "allocation_summary",
+    "shortfall",
+    "fingerprint",
+    "warnings",
+    "blockers"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "schema": { "type": "string", "const": "portfolio_plan" },
+    "portfolio_id": { "type": "string", "description": "16-char hex fingerprint of this plan (same as fingerprint field)." },
+    "targets_hash": { "type": "string", "description": "16-char hex SHA-256 of sorted (name, abs_path) pairs — stable identifier for the targets-file." },
+    "requested_count": { "type": "integer", "minimum": 1 },
+    "planned_count": { "type": "integer", "minimum": 0 },
+    "projected_accepted_count": { "type": "integer", "minimum": 0 },
+    "constraints": {
+      "type": "object",
+      "required": ["max_per_target", "max_per_target_fraction", "max_per_strategy_global", "max_per_strategy_fraction", "max_per_file", "max_per_function", "min_candidate_score", "strict_quality"],
+      "additionalProperties": false,
+      "properties": {
+        "max_per_target": { "type": "integer", "minimum": 1 },
+        "max_per_target_fraction": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "max_per_strategy_global": { "type": "integer", "minimum": 1 },
+        "max_per_strategy_fraction": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "max_per_file": { "type": "integer", "minimum": 1 },
+        "max_per_function": { "type": "integer", "minimum": 1 },
+        "min_candidate_score": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "strict_quality": { "type": "boolean" }
+      }
+    },
+    "target_summaries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "path", "source_hash", "effective_capacity", "allocated_count", "planned_count", "suitability", "viable_strategies", "limited_strategies", "blocked_strategies", "sub_plan_path", "blockers", "warnings"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "path": { "type": "string" },
+          "source_hash": { "type": "string" },
+          "effective_capacity": { "type": "integer", "minimum": 0 },
+          "allocated_count": { "type": "integer", "minimum": 0 },
+          "planned_count": { "type": "integer", "minimum": 0 },
+          "suitability": { "type": "object", "additionalProperties": { "type": "string" } },
+          "viable_strategies": { "type": "array", "items": { "type": "string" } },
+          "limited_strategies": { "type": "array", "items": { "type": "string" } },
+          "blocked_strategies": { "type": "array", "items": { "type": "string" } },
+          "sub_plan_path": { "type": "string" },
+          "blockers": { "type": "array", "items": { "type": "string" } },
+          "warnings": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["case_id", "strategy", "cwe_id", "seed_integer", "target_name", "target_path", "target_file", "target_line", "function_name", "candidate_score", "confidence"],
+        "additionalProperties": false,
+        "properties": {
+          "case_id": { "type": "string" },
+          "strategy": { "type": "string" },
+          "cwe_id": { "type": "string" },
+          "seed_integer": { "type": "integer" },
+          "target_name": { "type": "string" },
+          "target_path": { "type": "string" },
+          "target_file": { "type": "string" },
+          "target_line": { "type": "integer", "minimum": 1 },
+          "function_name": { "type": "string" },
+          "candidate_score": { "type": "number" },
+          "confidence": { "type": "string", "enum": ["high", "medium", "low"] }
+        }
+      }
+    },
+    "global_strategy_allocation": {
+      "type": "object",
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    },
+    "allocation_summary": {
+      "type": "object",
+      "required": ["by_strategy", "by_target"],
+      "additionalProperties": false,
+      "properties": {
+        "by_strategy": { "type": "object", "additionalProperties": { "type": "integer" } },
+        "by_target": { "type": "object", "additionalProperties": { "type": "integer" } }
+      }
+    },
+    "shortfall": {
+      "type": "object",
+      "required": ["count", "categories", "notes"],
+      "additionalProperties": false,
+      "properties": {
+        "count": { "type": "integer", "minimum": 0 },
+        "categories": { "type": "object", "additionalProperties": { "type": "integer" } },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "fingerprint": { "type": "string", "description": "16-char hex SHA-256 of canonical sorted entries." },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "blockers": { "type": "array", "items": { "type": "string" } }
+  }
+}

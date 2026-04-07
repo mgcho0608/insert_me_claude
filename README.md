@@ -10,20 +10,19 @@
 
 ---
 
-## Current Status — Phase 14 (strategy breadth expansion + corpus artifact hardening)
+## Current Status — Phase 15 (multi-target portfolio orchestration + truth closure)
 
 | | |
 |---|---|
-| **Canonical interface** | `insert-me run --seed-file PATH --source PATH` |
+| **Phase** | 15 — multi-target portfolio orchestration + canonical interface truth sync |
+| **Tests** | 688 passing, 1 skipped |
+| **Corpus-admitted strategies** | 6 (CWE-122/416/415/401/476/190) |
+| **Sandbox seeds** | 76 accepted (56 sandbox_eval + 20 target_b) — 100% reproducible |
+| **Mutation strategies** | `alloc_size_undercount` (CWE-122) · `insert_premature_free` (CWE-416) · `insert_double_free` (CWE-415) · `remove_free_call` (CWE-401) · `remove_null_guard` (CWE-476) · `remove_size_cast` (CWE-190) |
 | **Default mode** | Real patching + validation + audit |
 | **Dry-run mode** | `--dry-run` flag — all artifacts emitted, no source modifications |
 | **Artifacts emitted** | All 5 core artifacts, schema-validated on every run |
 | **`patch_plan.json` status** | `APPLIED` (mutation applied) · `PLANNED` (dry-run/no compatible target) · `PENDING` (no C/C++ sources found) |
-| **`ground_truth.json` mutations** | Real record when mutation applied; `[]` in dry-run |
-| **`ground_truth.json` validation_passed** | `true` when Validator passes; `false` in dry-run |
-| **`bad/` `good/` source trees** | Written in real mode; empty dirs in dry-run |
-| **Mutation strategies** | `alloc_size_undercount` (CWE-122) · `insert_premature_free` (CWE-416) · `insert_double_free` (CWE-415) · `remove_free_call` (CWE-401) · `remove_null_guard` (CWE-476) · `remove_size_cast` (CWE-190) — **all 6 corpus-admitted** |
-| **`validation_result.json`** | Real check results (5 checks) in real mode; `overall: SKIP` in dry-run |
 | **`audit_result.json`** | `VALID` (validator pass) · `INVALID` (fail) · `AMBIGUOUS` (skip+mutations) · `NOOP` (no mutations) |
 | **Evaluation strategy** | `exact` / `family` / `semantic` / `no_match` — per-mutation match against inserted ground truth |
 | **Adjudicator** | `HeuristicAdjudicator` (default, offline) · `DisabledAdjudicator` · `LLMAdjudicator` (Phase 7B placeholder) |
@@ -51,6 +50,10 @@ Given a local evaluation-only C/C++ target project and a requested count (e.g. 3
    (Seeder → Patcher → Validator → Auditor → quality gate); produces accepted/rejected
    summaries.
 
+4. **Orchestrates across multiple targets** — distributes a global count across a list of
+   C/C++ source trees, applies global diversity constraints, and produces a unified portfolio
+   plan with per-target sub-plans and portfolio-level diagnostics.
+
 Each executed case produces:
 
 - **Bad/good source pairs** — the original (good) and the mutated (bad) version.
@@ -62,10 +65,6 @@ Each executed case produces:
 The primary use case is generating labelled corpora for vulnerability research, detector
 benchmarking, and security tooling evaluation — without relying on manual seed authoring,
 LLMs, compilers, or real CVEs.
-
-**The seed-file / seed-dir workflow still exists and is fully supported.** insert_me is
-moving toward target-aware corpus planning but does not remove the seed-file interface.
-The general workflow is: `inspect target → plan corpus → generate/evaluate corpus`.
 
 ---
 
@@ -88,8 +87,8 @@ For engineers picking this up for the first time inside an organisation:
 
 | | |
 |---|---|
-| **What it is** | A Python CLI that inserts one known vulnerability into a C/C++ source tree and produces a fully annotated, schema-validated output bundle. |
-| **Current maturity** | Phase 14 — strategy breadth expansion + corpus artifact hardening. Full pipeline: 6 corpus-admitted mutation strategies (CWE-122/416/415/401/476/190), planning layer (TargetInspector/SeedSynthesizer/CorpusPlanner), `plan-corpus` + `generate-corpus` + `generate-corpus --from-plan` CLI, 15-entry strategy catalog (6 admitted / 1 planned / 8 candidate), 2 sandbox targets + local-target fixtures, `corpus_index.json` with fingerprints, `check_plan_stability.py`, 637 tests. Not production-hardened; alpha-quality. |
+| **What it is** | A Python CLI that inserts known vulnerabilities into C/C++ source trees and produces fully annotated, schema-validated output bundles — single-case, single-target batch, or multi-target portfolio. |
+| **Current maturity** | Phase 15 — multi-target portfolio orchestration. Full pipeline: 6 corpus-admitted mutation strategies (CWE-122/416/415/401/476/190), planning layer (TargetInspector/SeedSynthesizer/CorpusPlanner/PortfolioPlanner), all CLI subcommands incl. `plan-portfolio` + `generate-portfolio`, 15-entry strategy catalog (6 admitted / 1 planned / 8 candidate), 2 sandbox targets + local-target fixtures, portfolio artifacts (portfolio_plan.json, portfolio_index.json), 688 tests. Not production-hardened; alpha-quality. |
 | **Install path** | `pip install -e .` from source. No PyPI release exists yet. |
 | **Python versions** | 3.11, 3.12 — **CI-tested**. 3.10 — **statically reviewed only** (single shim: `tomllib` → `tomli`). No other version-specific features used. |
 | **Dependencies** | `jsonschema>=4.17` + `tomli>=1.2.0` on Python 3.10 only. No other mandatory runtime dependencies. |
@@ -103,7 +102,7 @@ For engineers picking this up for the first time inside an organisation:
 - Five JSON artifacts: `patch_plan.json`, `validation_result.json`, `audit_result.json`, `ground_truth.json`, `audit.json`
 
 **What is NOT available yet:**
-- Additional mutation strategies (CWE-190, CWE-787) — planned; CWE-190 blocker resolved (multi-line handler exists); needs implementation
+- Additional mutation strategies (CWE-787 Out-of-bounds Write) — planned; single remaining PLANNED entry in strategy catalog
 - AST-based or compiler-backed patching/validation — future phases
 - Phase 7B: real LLM adjudicator (placeholder exists; `LLMAdjudicator.adjudicate()` raises `NotImplementedError`)
 
@@ -122,26 +121,20 @@ For engineers picking this up for the first time inside an organisation:
 
 ## Canonical Interface
 
+Three usage patterns are supported, in order of increasing scope:
+
+### Pattern 1 — Single-case seeded experiment (expert / manual)
+
+For one-off experiments with a hand-authored seed file. Lowest overhead; full control.
+
 ```bash
-# Primary interface (recommended)
+# Run one seed against a source tree
 insert-me run --seed-file examples/seeds/cwe122_heap_overflow.json \
               --source /path/to/c-project
 
-# Batch run — every .json seed file in a directory
+# Batch: every .json seed file in a directory
 insert-me batch --seed-dir examples/seeds/sandbox \
                 --source /path/to/c-project
-
-# Preflight suitability check — inspect a source tree before running seeds
-insert-me inspect-target --source /path/to/c-project
-
-# Target-aware corpus planning — synthesise a deterministic plan toward N cases
-insert-me plan-corpus --source /path/to/c-project --count 30 --output-dir corpus_plan/
-
-# Plan + execute — plan then run the full pipeline for each case
-insert-me generate-corpus --source /path/to/c-project --count 30 --output-root corpus_out/
-
-# Replay — re-execute a saved plan without re-planning
-insert-me generate-corpus --from-plan corpus_out/_plan/ --output-root corpus_out_replay/
 
 # Validate a completed output bundle
 insert-me validate-bundle output/<run-id>/
@@ -150,16 +143,49 @@ insert-me validate-bundle output/<run-id>/
 insert-me audit output/<run-id>/audit.json
 
 # Evaluate a detector report against the inserted ground truth
-# Default: HeuristicAdjudicator runs offline for semantic matches
 insert-me evaluate --bundle output/<run-id>/ \
                    --tool-report report.json \
                    --tool cppcheck \
                    [--adjudicator heuristic|disabled]
 ```
 
-The `--seed-file` argument takes a seed JSON file (see `seed.schema.json` and `examples/seeds/`).
-The seed file encodes the seed integer, CWE class, mutation strategy, and target constraints in
-one versioned, schema-validated artifact.
+### Pattern 2 — Single-target target-aware corpus generation (recommended for one target)
+
+Inspect a source tree, plan a corpus toward a count, and execute it. Honest shortfall
+reporting if the target cannot supply the requested count.
+
+```bash
+# Preflight: suitability check before planning
+insert-me inspect-target --source /path/to/c-project
+
+# Plan only (no execution) — produces corpus_plan.json + seeds/
+insert-me plan-corpus --source /path/to/c-project --count 30 --output-dir corpus_plan/
+
+# Plan + execute — full pipeline for each planned case
+insert-me generate-corpus --source /path/to/c-project --count 30 --output-root corpus_out/
+
+# Replay a saved plan without re-planning
+insert-me generate-corpus --from-plan corpus_out/_plan/ --output-root corpus_out_replay/
+```
+
+### Pattern 3 — Multi-target portfolio generation (recommended for multiple targets)
+
+Allocate a global count across multiple source trees, apply global diversity constraints,
+and produce a unified portfolio with per-target sub-plans and portfolio-level diagnostics.
+
+```bash
+# Plan only — produces portfolio_plan.json + per-target sub-plans
+insert-me plan-portfolio --targets-file examples/targets/sandbox_targets.json \
+                         --count 30 --output-dir portfolio_plan/
+
+# Plan + execute — full pipeline across all targets
+insert-me generate-portfolio --targets-file examples/targets/sandbox_targets.json \
+                              --count 30 --output-root portfolio_out/
+
+# Replay a saved portfolio plan without re-planning
+insert-me generate-portfolio --from-plan portfolio_out/_plan/portfolio_plan.json \
+                              --output-root portfolio_replay/
+```
 
 ### Legacy interface (backward-compatible)
 
@@ -169,6 +195,20 @@ insert-me run --seed 42 --spec specs/cwe-122.toml --source /path/to/project
 
 The `--seed INT --spec PATH` form is kept for backward compatibility. For new runs,
 prefer `--seed-file PATH`. The two forms are mutually exclusive.
+
+---
+
+## When to use which pattern
+
+| Use case | Recommended pattern |
+|---|---|
+| One-off / manual experiment with known seed | Pattern 1 (`run --seed-file`) |
+| Batch against existing hand-authored seeds | Pattern 1 (`batch --seed-dir`) |
+| Count-driven corpus for one target | Pattern 2 (`generate-corpus`) |
+| Reproducible replay of a single-target corpus | Pattern 2 (`generate-corpus --from-plan`) |
+| Multi-target corpus with global count | Pattern 3 (`generate-portfolio`) |
+| Reproducible replay of a portfolio | Pattern 3 (`generate-portfolio --from-plan`) |
+| Checking target suitability before committing | Pattern 2/3 (`inspect-target`) |
 
 ---
 
@@ -193,51 +233,55 @@ Example seed files are in `examples/seeds/`:
 ## Pipeline Workflow
 
 ```
-[seed.json]          ← seed.schema.json (canonical input)
-       │
-       ▼
-  ┌─────────────┐
-  │   Seeder    │  ✓ Implemented — lexical source scan → ranked PatchTargetList
-  └──────┬──────┘
-         │  patch_plan.json  ← patch_plan.schema.json
-         ▼
-  ┌─────────────┐
-  │   Patcher   │  ✓ Phase 14 — alloc_size_undercount (CWE-122) · insert_premature_free (CWE-416) · insert_double_free (CWE-415) · remove_free_call (CWE-401) · remove_null_guard (CWE-476) · remove_size_cast (CWE-190)
-  └──────┬──────┘
-         │  bad/  good/  source trees
-         ▼
-  ┌─────────────────┐
-  │    Validator    │  ✓ Phase 5 — five deterministic rule-based checks
-  └──────┬──────────┘
-         │  validation_result.json  ← validation_result.schema.json
-         ▼
-  ┌─────────────┐
-  │   Auditor   │  ✓ Phase 6 — ground truth, provenance, classification
-  └──────┬──────┘
-         │  audit_result.json  ground_truth.json  audit.json
-         ▼
+[seed.json]          <- seed.schema.json (canonical input)
+       |
+       v
+  +-------------+
+  |   Seeder    |  Implemented -- lexical source scan -> ranked PatchTargetList
+  +------+------+
+         |  patch_plan.json  <- patch_plan.schema.json
+         v
+  +-------------+
+  |   Patcher   |  Phase 14 -- 6 corpus-admitted strategies:
+  +------+------+    alloc_size_undercount (CWE-122)
+         |           insert_premature_free (CWE-416)
+         |           insert_double_free    (CWE-415)
+         |           remove_free_call      (CWE-401)
+         |           remove_null_guard     (CWE-476)
+         |           remove_size_cast      (CWE-190)
+         v
+  +-----------------+
+  |    Validator    |  Phase 5 -- five deterministic rule-based checks
+  +------+----------+
+         |  validation_result.json  <- validation_result.schema.json
+         v
+  +-------------+
+  |   Auditor   |  Phase 6 -- ground truth, provenance, classification
+  +------+------+
+         |  audit_result.json  ground_truth.json  audit.json
+         v
   [output bundle]
     bad/  good/  + all JSON artifacts above
-         │
-         │  (optional, separate step)
-         ▼
-  ┌─────────────┐
-  │  Evaluator  │  ✓ Phase 7A — match detector report against ground truth
-  └──────┬──────┘    (insert-me evaluate --bundle ... --tool-report ...)
-         │  match_result.json  coverage_result.json
-         ▼
-  ┌───────────────────┐
-  │  Adjudicator      │  ✓ Phase 7B-prep — resolves semantic matches offline
-  └──────┬────────────┘    HeuristicAdjudicator (default) · DisabledAdjudicator
-         │  adjudication_result.json  (written only when verdicts exist)
-         ▼
+         |
+         |  (optional, separate step)
+         v
+  +-------------+
+  |  Evaluator  |  Phase 7A -- match detector report against ground truth
+  +------+------+    (insert-me evaluate --bundle ... --tool-report ...)
+         |  match_result.json  coverage_result.json
+         v
+  +-------------------+
+  |  Adjudicator      |  Phase 7B-prep -- resolves semantic matches offline
+  +------+------------+    HeuristicAdjudicator (default) / DisabledAdjudicator
+         |  adjudication_result.json
+         v
   [evaluation artifacts]
 ```
 
 An optional LLM adapter may be invoked after the Auditor for label enrichment (`labels.json`, Phase 7B).
-The adjudicator boundary is now hardened: `AdjudicatorBase` ABC accepts `HeuristicAdjudicator` (offline default),
-`DisabledAdjudicator`, or a future `LLMAdjudicator`. These are side-channels — they do not modify
-any deterministic artifact.
+The adjudicator boundary is hardened: `AdjudicatorBase` ABC accepts `HeuristicAdjudicator` (offline
+default), `DisabledAdjudicator`, or a future `LLMAdjudicator`. These are side-channels — they do not
+modify any deterministic artifact.
 
 ---
 
@@ -260,6 +304,7 @@ scores candidates with strategy-specific rules (base score 0.4, capped at 1.0).
 | `loop_bound` | `for (...)` headers | Extra score for `<=` condition (off-by-one) |
 | `pointer_deref` | `*ptr`, `ptr->field` | Arrow operator scores higher |
 | `null_guard` | `if (!ptr) return;`, `if (ptr == NULL) ...` | CWE-476 guard-removal pattern; +0.40 for single-line return guard |
+| `malloc_size_cast` | `malloc((size_t)EXPR * sizeof(T))` | CWE-190 cast-removal pattern; +0.35 score boost |
 | `custom` | Union of all dangerous patterns | Fallback for novel CWEs |
 
 Deterministic ordering: score descending → (file, line) ascending → seed-integer shuffle
@@ -292,19 +337,53 @@ For each run, `insert_me` produces an **output bundle** under `output/<run-id>/`
 
 ```
 output/
-└── <run-id>/
-    ├── bad/                      Mutated source tree (vulnerability inserted)
-    ├── good/                     Original source tree (clean copy)
-    ├── patch_plan.json           Planned transformations (schema: patch_plan)
-    ├── validation_result.json    Plausibility verdict (schema: validation_result)
-    ├── audit_result.json         Classification (schema: audit_result)
-    ├── ground_truth.json         Mutation annotation (schema: vuln_spec)
-    ├── audit.json                Provenance record (schema: audit_record)
-    └── labels.json               (optional) LLM-enriched semantic labels
++-- <run-id>/
+    +-- bad/                      Mutated source tree (vulnerability inserted)
+    +-- good/                     Original source tree (clean copy)
+    +-- patch_plan.json           Planned transformations (schema: patch_plan)
+    +-- validation_result.json    Plausibility verdict (schema: validation_result)
+    +-- audit_result.json         Classification (schema: audit_result)
+    +-- ground_truth.json         Mutation annotation (schema: vuln_spec)
+    +-- audit.json                Provenance record (schema: audit_record)
+    +-- labels.json               (optional) LLM-enriched semantic labels
+```
+
+For **corpus generation** (`generate-corpus`), additional artifacts are written to the output root:
+
+```
+corpus_out/
++-- _plan/
+|   +-- corpus_plan.json          Plan allocation and per-case details
+|   +-- seeds/                    Synthesised seed files (one per planned case)
++-- cases/                        Per-case output bundles (one subdirectory per case)
++-- corpus_index.json             Corpus manifest with fingerprints
++-- acceptance_summary.json       Requested/planned/accepted/rejected counts
++-- shortfall_report.json         Plan + execution shortfall attribution
++-- generation_diagnostics.json   Per-category failure attribution
+```
+
+For **portfolio generation** (`generate-portfolio`), portfolio-level artifacts wrap the per-target view:
+
+```
+portfolio_out/
++-- portfolio_plan.json                  Global allocation plan (schema: portfolio_plan)
++-- portfolio_index.json                 Portfolio manifest + fingerprints (schema: portfolio_index)
++-- portfolio_acceptance_summary.json    Global requested/planned/accepted (schema: portfolio_acceptance_summary)
++-- portfolio_shortfall_report.json      Global shortfall attribution (schema: portfolio_shortfall_report)
++-- _plan/
+|   +-- portfolio_plan.json              Plan used for replay
+|   +-- targets/
+|       +-- <name>/_plan/corpus_plan.json + seeds/
++-- targets/
+    +-- <name>/
+        +-- corpus_index.json            Per-target corpus manifest
+        +-- acceptance_summary.json      Per-target acceptance counts
+        +-- shortfall_report.json        Per-target shortfall
+        +-- cases/                       Per-target case bundles
 ```
 
 All schemas are bundled and versioned. No network access needed for validation.
-Run `insert-me validate-bundle output/<run-id>/` to verify any bundle.
+Run `insert-me validate-bundle output/<run-id>/` to verify any single-case bundle.
 
 ---
 
@@ -316,17 +395,23 @@ See `docs/artifact_contracts.md` for the full specification.
 | Schema file | Artifact | Stage |
 |---|---|---|
 | `seed.schema.json` | Seed definition | **Input** |
+| `targets.schema.json` | Portfolio targets file | **Input** |
 | `patch_plan.schema.json` | Planned transformations | Seeder output |
 | `validation_result.schema.json` | Plausibility verdict | Validator output |
 | `audit_result.schema.json` | Classification (VALID/NOOP/AMBIGUOUS/INVALID) | Auditor output |
 | `vuln_spec.json` | Ground truth annotation | Auditor structural output |
 | `audit_record.json` | Provenance record | Auditor provenance output |
+| `corpus_plan.schema.json` | Corpus plan allocation | Planning layer output |
+| `portfolio_plan.schema.json` | Portfolio global plan | Portfolio layer output |
+| `portfolio_index.schema.json` | Portfolio manifest + fingerprints | Portfolio layer output |
+| `portfolio_acceptance_summary.schema.json` | Portfolio acceptance counts | Portfolio layer output |
+| `portfolio_shortfall_report.schema.json` | Portfolio shortfall attribution | Portfolio layer output |
 
 ---
 
 ## Deterministic-First Philosophy
 
-The entire core pipeline — seed expansion, vulnerability selection, AST-level patching, ground
+The entire core pipeline — seed expansion, vulnerability selection, patching, ground
 truth generation, and audit logging — is **fully deterministic given a seed file and a source tree**.
 
 LLM assistance is confined to a **narrow, optional adapter layer** used only for:
@@ -382,14 +467,14 @@ insert-me validate-bundle output/9576dfc551a54e4c/
 insert-me audit output/9576dfc551a54e4c/audit.json
 ```
 
-**What to expect today (real mode — default):**
-- `patch_plan.json` — `status: "APPLIED"`, one target from `heap_buf.c`
-- `ground_truth.json` — one mutation record: `malloc(user_len * sizeof(char))` → `malloc((user_len * sizeof(char)) - 1)`, `validation_passed: true`
-- `bad/heap_buf.c` — mutated source (the vulnerability inserted)
-- `good/heap_buf.c` — byte-identical copy of the original
-- `validation_result.json` — `overall: "PASS"`, five rule-based checks all passing
-- `audit_result.json` — `classification: "VALID"` (Validator confirmed plausibility)
-- `validate-bundle` exits 0 — all artifacts are schema-valid
+**What to expect today (real mode -- default):**
+- `patch_plan.json` -- `status: "APPLIED"`, one target from `heap_buf.c`
+- `ground_truth.json` -- one mutation record: `malloc(user_len * sizeof(char))` → `malloc((user_len * sizeof(char)) - 1)`, `validation_passed: true`
+- `bad/heap_buf.c` -- mutated source (the vulnerability inserted)
+- `good/heap_buf.c` -- byte-identical copy of the original
+- `validation_result.json` -- `overall: "PASS"`, five rule-based checks all passing
+- `audit_result.json` -- `classification: "VALID"` (Validator confirmed plausibility)
+- `validate-bundle` exits 0 -- all artifacts are schema-valid
 
 To skip patching and emit plan-only artifacts:
 ```bash
@@ -408,31 +493,35 @@ Dry-run: `patch_plan.json` status is `PLANNED`, `ground_truth.json` mutations is
 # Install (editable)
 pip install -e .
 
-# Run with a seed file against any C/C++ source tree
+# Pattern 1: one-off seed run
 insert-me run --seed-file examples/seeds/cwe122_heap_overflow.json \
               --source /path/to/c-project
 
-# Validate a completed output bundle
-insert-me validate-bundle output/<run-id>/
+# Pattern 2: target-aware corpus for one source tree
+insert-me generate-corpus --source examples/sandbox_eval/src --count 20
 
-# Show audit record
-insert-me audit output/<run-id>/audit.json
+# Pattern 3: multi-target portfolio across two source trees
+insert-me generate-portfolio \
+    --targets-file examples/targets/sandbox_targets.json \
+    --count 30
 ```
 
 ---
 
 ## Sandbox Corpus and Quality Gate
 
-Two sandbox targets are included with a combined 55-seed accepted corpus (4 corpus-admitted strategies only):
+Two sandbox targets are included with a combined 76-seed accepted corpus:
 
-| Target | Source | Seeds | Accept rate |
-|---|---|---|---|
-| `sandbox_eval` | `examples/sandbox_eval/src/` (6 files) | 40 (11 CWE-122 · 19 CWE-416 · 5 CWE-415 · 5 CWE-401) | 100% |
-| `target_b` | `examples/sandbox_targets/target_b/src/` (3 files) | 15 (4 CWE-122 · 5 CWE-416 · 3 CWE-415 · 3 CWE-401) | 100% |
+| Target | Source | Seeds | Strategies | Accept rate |
+|---|---|---|---|---|
+| `sandbox_eval` | `examples/sandbox_eval/src/` (6 files) | 56 (11 CWE-122 · 19 CWE-416 · 5 CWE-415 · 5 CWE-401 · 8 CWE-476 · 8 CWE-190) | 6 | 100% (CWE-190: 87.5% VALID, 1 correct NOOP) |
+| `target_b` | `examples/sandbox_targets/target_b/src/` (3 files) | 20 (4 CWE-122 · 5 CWE-416 · 3 CWE-415 · 3 CWE-401 · 5 CWE-476) | 5 | 100% |
 
-All 55 seeds reproduce byte-identically across 3 runs each (55/55 PASS).
+All 76 seeds reproduce byte-identically across 3 runs each (76/76 PASS).
 
-**CWE-476 (`remove_null_guard`) is corpus-admitted** as of Phase 10. The dual-mode handler supports both single-line inline guards (`if (!ptr) return;`) and multi-line guard forms. 8 CWE-476 sandbox seeds are in `examples/seeds/sandbox/` with 8/8 VALID quality gate. Validated VIABLE on both sandbox_eval and target_b (5/5 VALID). See `docs/strategy_catalog.md`.
+**CWE-476 (`remove_null_guard`) is corpus-admitted** as of Phase 10. The dual-mode handler supports both single-line inline guards (`if (!ptr) return;`) and multi-line guard forms. 8 CWE-476 sandbox seeds with 8/8 VALID; 5 target_b seeds with 5/5 VALID.
+
+**CWE-190 (`remove_size_cast`) is corpus-admitted** as of Phase 14. Removes `(size_t)` cast from `malloc((size_t)EXPR * sizeof(T))`. 7/8 VALID (87.5%); 1 correct NOOP (double-cast line, conservatively skipped).
 
 **Reproduce the full corpus from a fresh clone:**
 ```bash
@@ -473,10 +562,20 @@ insert-me run --seed-file examples/seeds/sandbox/cwe416_sb_001.json \
               --source /path/to/local/toy_project
 ```
 
-**Step 3: Run a small batch**
+**Step 3: Run a small batch or generate a full corpus**
 ```bash
-insert-me batch --seed-dir my_seeds/ \
-                --source /path/to/local/toy_project
+# Small batch
+insert-me batch --seed-dir my_seeds/ --source /path/to/local/toy_project
+
+# Full corpus (target-aware planning + execution)
+insert-me generate-corpus --source /path/to/local/toy_project --count 20
+```
+
+**Step 4: Or use portfolio generation for multiple targets**
+```bash
+insert-me generate-portfolio \
+    --targets-file my_targets.json \
+    --count 40
 ```
 
 See `docs/local_target_pilot.md` for the full workflow including quality review,
@@ -490,6 +589,50 @@ targets with no `malloc`/`free` patterns. See `docs/local_target_pilot.md §1.2`
 
 ---
 
+## Portfolio Generation (Multi-Target)
+
+Portfolio generation allocates a global count across multiple C/C++ source trees,
+applies global diversity constraints, and produces unified portfolio-level artifacts
+alongside per-target corpus outputs.
+
+**Targets file format** (`examples/targets/sandbox_targets.json`):
+```json
+{
+  "schema_version": "1.0",
+  "targets": [
+    {"name": "sandbox_eval", "path": "../sandbox_eval/src"},
+    {"name": "target_b",     "path": "../sandbox_targets/target_b/src"}
+  ]
+}
+```
+
+**Portfolio artifacts produced:**
+
+| Artifact | Description |
+|---|---|
+| `portfolio_plan.json` | Global allocation plan with per-target summaries and entries |
+| `portfolio_index.json` | Corpus manifest, fingerprints, per-target/per-strategy breakdowns |
+| `portfolio_acceptance_summary.json` | Requested/planned/accepted counts, by_target, by_strategy |
+| `portfolio_shortfall_report.json` | Machine-readable shortfall attribution (plan + execution) |
+
+**Portfolio shortfall categories:**
+
+| Category key | Meaning |
+|---|---|
+| `target_capacity_limit` | Target's effective candidate capacity < allocated sub-count |
+| `strategy_blocked_no_candidates` | Strategy has zero candidates on a target |
+| `global_diversity_constraint_per_target` | Cases dropped by `max_per_target` limit |
+| `global_diversity_constraint_per_strategy` | Cases dropped by `max_per_strategy_global` limit |
+| `no_viable_targets` | All targets returned zero effective capacity |
+| `experimental_strategy_excluded` | Experimental strategies excluded from corpus |
+| `sweep_exhausted` | All candidates consumed; count still short |
+
+**Reproducibility guarantee:**
+Same targets-file + same `--count` + same constraint flags => same `portfolio_plan.json` (byte-identical).
+Use `--from-plan portfolio_plan.json` to replay a portfolio without re-planning.
+
+---
+
 ## Portability
 
 `insert_me` is designed to be dropped into restricted enterprise environments:
@@ -497,7 +640,7 @@ targets with no `malloc`/`free` patterns. See `docs/local_target_pilot.md §1.2`
 - **No mandatory cloud calls.** All LLM calls are behind an optional adapter interface.
 - **No mandatory internet access.** All schema validation and rule sets ship with the package.
 - **Minimal dependencies.** Core pipeline uses Python stdlib + `jsonschema` (+ `tomli` on Python 3.10). See `pyproject.toml`.
-- **Python 3.10–3.12.** No Python 3.11-specific features beyond `tomllib`, which is shimmed automatically.
+- **Python 3.10--3.12.** No Python 3.11-specific features beyond `tomllib`, which is shimmed automatically.
 - **Configurable via files.** All behaviour is driven by `config/` TOML files.
 - **Self-contained output.** Output bundles carry everything needed for downstream tools.
 
@@ -512,4 +655,4 @@ No registration, no keys, no outbound calls required for core operation.
 
 See `NOTICE.txt` at the repository root for the full rights statement and a list of third-party dependency licenses.
 
-A formal license has not yet been chosen. The `pyproject.toml` reflects this as `"Proprietary — license TBD. Internal/research use only."` and `NOTICE.txt` is bundled into any distribution until a decision is made.
+A formal license has not yet been chosen. The `pyproject.toml` reflects this as `"Proprietary -- license TBD. Internal/research use only."` and `NOTICE.txt` is bundled into any distribution until a decision is made.

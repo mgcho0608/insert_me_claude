@@ -1,0 +1,100 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "portfolio_index.schema.json",
+  "title": "PortfolioIndex",
+  "description": "Machine-readable corpus manifest for a generate-portfolio run. Includes fingerprints, per-target and per-strategy breakdowns, and reproducibility metadata.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "schema",
+    "run_mode",
+    "portfolio_id",
+    "targets_hash",
+    "counts",
+    "fingerprints",
+    "per_target",
+    "per_strategy",
+    "artifacts",
+    "reproducibility"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "schema": { "type": "string", "const": "portfolio_index" },
+    "run_mode": { "type": "string", "enum": ["generate", "replay", "dry-run", "dry-run-replay", "portfolio"] },
+    "portfolio_id": { "type": "string" },
+    "targets_hash": { "type": "string" },
+    "counts": {
+      "type": "object",
+      "required": ["requested", "planned", "attempted", "accepted", "rejected", "errors"],
+      "additionalProperties": false,
+      "properties": {
+        "requested": { "type": "integer", "minimum": 0 },
+        "planned": { "type": "integer", "minimum": 0 },
+        "attempted": { "type": "integer", "minimum": 0 },
+        "accepted": { "type": "integer", "minimum": 0 },
+        "rejected": { "type": "integer", "minimum": 0 },
+        "errors": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "fingerprints": {
+      "type": "object",
+      "required": ["portfolio_fingerprint", "acceptance_fingerprint"],
+      "additionalProperties": false,
+      "properties": {
+        "portfolio_fingerprint": { "type": "string", "description": "16-char hex SHA-256 of the portfolio plan entries (stable, semantic)." },
+        "acceptance_fingerprint": { "type": "string", "description": "16-char hex SHA-256 of sorted accepted case_ids (post-execution)." }
+      }
+    },
+    "per_target": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["path", "allocated_count", "planned_count", "attempted_count", "accepted_count", "corpus_index"],
+        "additionalProperties": false,
+        "properties": {
+          "path": { "type": "string" },
+          "allocated_count": { "type": "integer", "minimum": 0 },
+          "planned_count": { "type": "integer", "minimum": 0 },
+          "attempted_count": { "type": "integer", "minimum": 0 },
+          "accepted_count": { "type": "integer", "minimum": 0 },
+          "corpus_index": { "type": "string", "description": "Path to the per-target corpus_index.json." }
+        }
+      }
+    },
+    "per_strategy": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["attempted", "accepted"],
+        "additionalProperties": false,
+        "properties": {
+          "attempted": { "type": "integer", "minimum": 0 },
+          "accepted": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "required": ["portfolio_plan", "portfolio_acceptance_summary", "portfolio_shortfall_report", "portfolio_index", "targets_dir"],
+      "additionalProperties": false,
+      "properties": {
+        "portfolio_plan": { "type": "string" },
+        "portfolio_acceptance_summary": { "type": "string" },
+        "portfolio_shortfall_report": { "type": "string" },
+        "portfolio_index": { "type": "string" },
+        "targets_dir": { "type": "string" }
+      }
+    },
+    "reproducibility": {
+      "type": "object",
+      "required": ["deterministic", "replay_command", "note"],
+      "additionalProperties": false,
+      "properties": {
+        "deterministic": { "type": "boolean" },
+        "replay_command": { "type": "string" },
+        "note": { "type": "string" }
+      }
+    }
+  }
+}

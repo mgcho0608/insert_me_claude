@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "portfolio_acceptance_summary.schema.json",
+  "title": "PortfolioAcceptanceSummary",
+  "description": "Portfolio-level acceptance summary: global requested/planned/accepted counts with per-target and per-strategy breakdowns.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "schema",
+    "portfolio_id",
+    "targets_hash",
+    "requested_count",
+    "planned_count",
+    "projected_accepted_count",
+    "attempted_count",
+    "accepted_count",
+    "rejected_count",
+    "error_count",
+    "requested_count_met",
+    "shortfall_amount",
+    "honest",
+    "shortfall_categories",
+    "global_strategy_allocation",
+    "by_target",
+    "by_strategy"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "schema": { "type": "string", "const": "portfolio_acceptance_summary" },
+    "portfolio_id": { "type": "string" },
+    "targets_hash": { "type": "string" },
+    "requested_count": { "type": "integer", "minimum": 0 },
+    "planned_count": { "type": "integer", "minimum": 0 },
+    "projected_accepted_count": { "type": "integer", "minimum": 0 },
+    "attempted_count": { "type": "integer", "minimum": 0 },
+    "accepted_count": { "type": "integer", "minimum": 0 },
+    "rejected_count": { "type": "integer", "minimum": 0 },
+    "error_count": { "type": "integer", "minimum": 0 },
+    "requested_count_met": { "type": "boolean" },
+    "shortfall_amount": { "type": "integer", "minimum": 0 },
+    "honest": { "type": "boolean", "description": "True if accepted_count < requested_count." },
+    "shortfall_categories": {
+      "type": "object",
+      "additionalProperties": { "type": "integer" },
+      "description": "Machine-readable shortfall attribution categories and counts."
+    },
+    "global_strategy_allocation": {
+      "type": "object",
+      "additionalProperties": { "type": "integer" }
+    },
+    "by_target": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["accepted", "rejected", "error"],
+        "additionalProperties": false,
+        "properties": {
+          "accepted": { "type": "integer", "minimum": 0 },
+          "rejected": { "type": "integer", "minimum": 0 },
+          "error": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "by_strategy": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["accepted", "rejected", "error"],
+        "additionalProperties": false,
+        "properties": {
+          "accepted": { "type": "integer", "minimum": 0 },
+          "rejected": { "type": "integer", "minimum": 0 },
+          "error": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  }
+}

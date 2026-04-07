@@ -51,6 +51,14 @@ SCHEMA_MATCH_RESULT = "match_result"
 SCHEMA_COVERAGE_RESULT = "coverage_result"
 SCHEMA_ADJUDICATION_RESULT = "adjudication_result"
 
+# Planning + portfolio schemas (Phase 9/15)
+SCHEMA_CORPUS_PLAN = "corpus_plan"
+SCHEMA_TARGETS = "targets"
+SCHEMA_PORTFOLIO_PLAN = "portfolio_plan"
+SCHEMA_PORTFOLIO_INDEX = "portfolio_index"
+SCHEMA_PORTFOLIO_ACCEPTANCE_SUMMARY = "portfolio_acceptance_summary"
+SCHEMA_PORTFOLIO_SHORTFALL_REPORT = "portfolio_shortfall_report"
+
 # Ordered resolution priority: .schema.json tried first, then .json
 _SUFFIXES = [".schema.json", ".json"]
 

@@ -1,6 +1,6 @@
 # insert_me Strategy Catalog
 
-> **Phase 12 — replay + multi-target validation complete**  
+> **Phase 15 — multi-target portfolio orchestration + truth closure**  
 > **Machine-readable form:** `config/strategy_catalog.json` (schema: `schemas/strategy_catalog.schema.json`)
 
 This document lists all mutation strategies that insert_me knows about, with their
@@ -11,11 +11,11 @@ coverage anchors.
 
 | Maturity | Count | Strategy IDs |
 |---|---|---|
-| IMPLEMENTED_AND_CORPUS_ADMITTED | 5 | alloc_size_undercount, insert_premature_free, insert_double_free, remove_free_call, remove_null_guard |
-| PLANNED | 2 | CWE-190, CWE-787 |
+| IMPLEMENTED_AND_CORPUS_ADMITTED | 6 | alloc_size_undercount, insert_premature_free, insert_double_free, remove_free_call, remove_null_guard, remove_size_cast |
+| PLANNED | 1 | CWE-787 |
 | CANDIDATE | 8 | CWE-125, CWE-134, CWE-121, CWE-369, CWE-680, CWE-131, CWE-252, CWE-120 |
 
-The **planning layer** (`insert-me plan-corpus`, `insert-me generate-corpus`) uses only
+The **planning layer** (`insert-me plan-corpus`, `insert-me generate-corpus`, `insert-me plan-portfolio`, `insert-me generate-portfolio`) uses only
 `IMPLEMENTED_AND_CORPUS_ADMITTED` strategies by default. All other entries are planning-layer BLOCKED.
 
 ---
@@ -134,22 +134,26 @@ Corpus cases: **8** (sandbox_eval seeds)
 
 ---
 
-## Planned Strategies
-
 ### CWE-190 — Integer Overflow or Wraparound
-**Strategy:** *(not yet named)*  
-**Pattern type:** `malloc_call`  
-**Maturity:** PLANNED  
+**Strategy:** `remove_size_cast`  
+**Pattern type:** `malloc_size_cast`  
+**Maturity:** IMPLEMENTED_AND_CORPUS_ADMITTED  
+**Suitable for planning:** YES  
 **Juliet anchor:** `CWE190_Integer_Overflow__*`
 
-Remove the overflow check (e.g., `if (n > MAX) return;`) that precedes a
-multiplication-based `malloc(n * sizeof(T))`. The resulting allocation is undersized
-when `n` overflows.
+Removes the `(size_t)` cast from `malloc((size_t)EXPR * sizeof(T))`, enabling integer
+overflow in the size arithmetic when `EXPR` is large. Conservative single-line handler:
+exactly one `(size_t)` cast at the start of the malloc argument; double-cast lines are
+correctly skipped (NOOP — expected behaviour).
 
-**Infrastructure ready:** Multi-line handler infrastructure (`MultilineMutationResult`,
-`_MULTILINE_STRATEGY_HANDLERS`) is in place. Implementation follows the CWE-476 pattern.
+Quality gate pass rate: **87.5%** (7/8 sandbox seeds VALID; 1 correct NOOP on double-cast line)  
+Unique VALID targets: htable.c:176, htable.c:148, graph.c:90, list.c:193  
+Note: `remove_size_cast` is primarily applicable to sandbox_eval; target_b and
+moderate/minimal local fixtures have no `(size_t)`-cast malloc lines.
 
 ---
+
+## Planned Strategies
 
 ### CWE-787 — Out-of-bounds Write
 **Strategy:** *(not yet named)*  
@@ -190,8 +194,8 @@ These strategies are in the catalog for planning-space coverage; none are implem
 | `insert_premature_free` | CWE-416 | IMPLEMENTED_AND_CORPUS_ADMITTED | VIABLE | 24 (19 + 5 target_b) |
 | `insert_double_free` | CWE-415 | IMPLEMENTED_AND_CORPUS_ADMITTED | VIABLE | 13 (10 + 3 target_b) |
 | `remove_free_call` | CWE-401 | IMPLEMENTED_AND_CORPUS_ADMITTED | VIABLE | 13 (10 + 3 target_b) |
-| `remove_null_guard` | CWE-476 | IMPLEMENTED_AND_CORPUS_ADMITTED | VIABLE | 8 (sandbox_eval) + 5/5 VALID on target_b |
-| *(planned)* | CWE-190 | PLANNED | BLOCKED | 0 |
+| `remove_null_guard` | CWE-476 | IMPLEMENTED_AND_CORPUS_ADMITTED | VIABLE | 8 sandbox_eval + 5 target_b |
+| `remove_size_cast` | CWE-190 | IMPLEMENTED_AND_CORPUS_ADMITTED | VIABLE | 7/8 VALID (1 correct NOOP; sandbox_eval only) |
 | *(planned)* | CWE-787 | PLANNED | BLOCKED | 0 |
 | *(candidate x 8)* | CWE-125/134/121/369/680/131/252/120 | CANDIDATE | BLOCKED | 0 |
 
@@ -199,15 +203,17 @@ These strategies are in the catalog for planning-space coverage; none are implem
 
 ## Honest Assessment: Sustainable Case Count
 
-With 5 implemented corpus-admitted strategies across 2 sandbox targets:
+With 6 implemented corpus-admitted strategies across 2 sandbox targets:
 
-- **sandbox_eval** (6 C files, ~750 LOC): 40 high-quality cases, **100% ACCEPT**
-- **target_b** (3 C files, ~600 LOC): 15 high-quality cases, **100% ACCEPT** (2 ACCEPT_WITH_NOTES)
+- **sandbox_eval** (6 C files, ~750 LOC): 56 seeds → 55 high-quality accepted cases (CWE-190: 7 VALID + 1 correct NOOP)
+- **target_b** (3 C files, ~600 LOC): 20 seeds → 20 high-quality accepted cases (**100% ACCEPT**)
 
-**Sustainable corpus size at current quality:** ~50–55 cases.
+**Total sandbox accepted corpus: 76 seeds, ~75 unique accepted cases.**
+
+**Sustainable corpus size at current quality:** ~65–75 cases per typical 2-target portfolio.
 
 Each new well-structured 3–6 file C target contributes ~10–20 cases via the planning layer.
-The planning layer (`plan-corpus`) computes this honestly: if only K < N accepted
+The planning layer (`plan-corpus`, `plan-portfolio`) computes this honestly: if only K < N accepted
 cases are achievable it says so explicitly rather than generating low-quality cases
 to pad the count.
 

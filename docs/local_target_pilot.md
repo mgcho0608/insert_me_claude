@@ -1,11 +1,13 @@
 # Local Target Pilot Guide — insert_me
 
-> **Phase:** 11 — Local-Target Corpus Realization + Shortfall Diagnostics Hardening
+> **Phase:** 15 — multi-target portfolio orchestration
 > **Audience:** Engineers who want to use insert_me on a local, user-provided
-> evaluation-only C/C++ project rather than the bundled sandbox targets.
+> evaluation-only C/C++ project rather than the bundled sandbox targets, or
+> across a portfolio of multiple targets.
 >
 > This guide covers the full workflow: preflight inspection, count-driven corpus
-> generation, honest shortfall diagnostics, and the criteria for a "good" target.
+> generation, honest shortfall diagnostics, multi-target portfolio generation,
+> and the criteria for a "good" target.
 
 ---
 

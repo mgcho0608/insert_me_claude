@@ -1,8 +1,8 @@
 # Corpus Quality Gate — insert_me
 
-> **Version:** 1.2  
-> **Phase:** 9 — planning layer complete  
-> **Applies to:** Seeded cases generated from evaluation-only targets (sandbox and local)
+> **Version:** 1.3  
+> **Phase:** 15 — multi-target portfolio orchestration  
+> **Applies to:** Seeded cases generated from evaluation-only targets (sandbox, local, and portfolio)
 
 This document defines the formal acceptance rubric for every case in the insert_me corpus.  
 It governs whether a generated case is **ACCEPT**, **ACCEPT_WITH_NOTES**, **REVISE**, or **REJECT**.
