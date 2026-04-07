@@ -395,6 +395,37 @@ All deterministic artifacts are byte-identical in both modes.
 
 ---
 
+## Phase 14 — Strategy Breadth Expansion + Corpus Artifact Hardening ✓ COMPLETE
+
+**Goal:** Add CWE-190 as a 6th corpus-capable strategy, register target_b CWE-476 seeds,
+add `malloc_size_cast` pattern type to seeder/schema, and truth-sync all docs.
+
+- [x] `remove_size_cast` strategy (CWE-190): single-line handler in `patcher.py`; removes `(size_t)` cast from `malloc((size_t)EXPR * sizeof(T))` → `malloc(EXPR * sizeof(T))` enabling integer overflow in size arithmetic
+- [x] Conservative constraints: exactly one `(size_t)` cast, at start of arg expression; double-cast lines (graph.c:186) correctly skipped
+- [x] `malloc_size_cast` pattern type added to `seeder.py` `PATTERN_REGEXES`; scoring: +0.35 → score 0.75 for all `(size_t)`-cast malloc lines
+- [x] `seed.schema.json` updated: `malloc_size_cast` added to `pattern_type` enum
+- [x] `inspector.py` `PLANNING_STRATEGIES` extended with `remove_size_cast` (CWE-190, corpus_admitted=True)
+- [x] `seed_synthesis.py` `_CWE_VULNERABILITY_CLASS` extended with CWE-190
+- [x] 8 sandbox seed files: `examples/seeds/sandbox/cwe190_sb_001.json` – `cwe190_sb_008.json` (seeds 1–8)
+- [x] Quality gate: 7/8 VALID (87.5%); 1 NOOP (seed 5 → graph.c:186, double-cast, correctly skipped)
+- [x] Unique VALID targets: htable.c:176, htable.c:148, graph.c:90, list.c:193
+- [x] 5 target_b CWE-476 seed files: `examples/seeds/target_b/cwe476_tb_001.json` – `cwe476_tb_005.json`
+- [x] target_b CWE-476 quality gate: 5/5 VALID (dynarray.c:154, strmap.c:76, dynarray.c:32, bstree.c:195, strmap.c:92)
+- [x] `config/strategy_catalog.json` updated: catalog_version → phase-14, CWE-190 entry promoted to IMPLEMENTED_AND_CORPUS_ADMITTED (7 admitted entries now 6 + 1 CWE-190)
+- [x] `tests/test_patcher_cwe190.py` (28 tests): handler unit tests, Patcher.run() end-to-end, seeder pattern/scoring, inspector registration
+- [x] `tests/test_planning.py` count updated: `test_catalog_has_5_corpus_admitted` → `test_catalog_has_6_corpus_admitted`
+- [x] README.md, ARCHITECTURE.md, ROADMAP.md truth-synced to Phase 14
+- [x] `docs/repro_matrix.md` updated with CWE-190 and target_b CWE-476 quality gate results
+- [x] 637 tests passing
+
+**Key design decisions:**
+- Used new `malloc_size_cast` pattern type (not reusing `malloc_call`) to avoid changing scoring for existing strategies
+- Conservative handler: skips multi-cast lines; only matches cast at arg start
+- corpus_admitted=True justified by 87.5% VALID rate; NOOP is expected/correct behavior on double-cast lines
+- target_b CWE-476 seeds added as registered files (not just validated pilots)
+
+---
+
 ## Explicitly Deferred (No Timeline)
 
 | Feature | Reason deferred |

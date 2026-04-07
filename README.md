@@ -10,7 +10,7 @@
 
 ---
 
-## Current Status — Phase 13 (fresh-plan reproducibility + plan stability closure)
+## Current Status — Phase 14 (strategy breadth expansion + corpus artifact hardening)
 
 | | |
 |---|---|
@@ -22,7 +22,7 @@
 | **`ground_truth.json` mutations** | Real record when mutation applied; `[]` in dry-run |
 | **`ground_truth.json` validation_passed** | `true` when Validator passes; `false` in dry-run |
 | **`bad/` `good/` source trees** | Written in real mode; empty dirs in dry-run |
-| **Mutation strategies** | `alloc_size_undercount` (CWE-122) · `insert_premature_free` (CWE-416) · `insert_double_free` (CWE-415) · `remove_free_call` (CWE-401) · `remove_null_guard` (CWE-476) — **all 5 corpus-admitted** |
+| **Mutation strategies** | `alloc_size_undercount` (CWE-122) · `insert_premature_free` (CWE-416) · `insert_double_free` (CWE-415) · `remove_free_call` (CWE-401) · `remove_null_guard` (CWE-476) · `remove_size_cast` (CWE-190) — **all 6 corpus-admitted** |
 | **`validation_result.json`** | Real check results (5 checks) in real mode; `overall: SKIP` in dry-run |
 | **`audit_result.json`** | `VALID` (validator pass) · `INVALID` (fail) · `AMBIGUOUS` (skip+mutations) · `NOOP` (no mutations) |
 | **Evaluation strategy** | `exact` / `family` / `semantic` / `no_match` — per-mutation match against inserted ground truth |
@@ -89,7 +89,7 @@ For engineers picking this up for the first time inside an organisation:
 | | |
 |---|---|
 | **What it is** | A Python CLI that inserts one known vulnerability into a C/C++ source tree and produces a fully annotated, schema-validated output bundle. |
-| **Current maturity** | Phase 13 — fresh-plan reproducibility closure. Full pipeline: 5 corpus-admitted mutation strategies (CWE-122/416/415/401/476), planning layer (TargetInspector/SeedSynthesizer/CorpusPlanner), `plan-corpus` + `generate-corpus` + `generate-corpus --from-plan` CLI, 15-entry strategy catalog (5 admitted / 2 planned / 8 candidate), 2 sandbox targets + local-target fixtures, `corpus_index.json` with fingerprints, `check_plan_stability.py`, 609 tests. Not production-hardened; alpha-quality. |
+| **Current maturity** | Phase 14 — strategy breadth expansion + corpus artifact hardening. Full pipeline: 6 corpus-admitted mutation strategies (CWE-122/416/415/401/476/190), planning layer (TargetInspector/SeedSynthesizer/CorpusPlanner), `plan-corpus` + `generate-corpus` + `generate-corpus --from-plan` CLI, 15-entry strategy catalog (6 admitted / 1 planned / 8 candidate), 2 sandbox targets + local-target fixtures, `corpus_index.json` with fingerprints, `check_plan_stability.py`, 637 tests. Not production-hardened; alpha-quality. |
 | **Install path** | `pip install -e .` from source. No PyPI release exists yet. |
 | **Python versions** | 3.11, 3.12 — **CI-tested**. 3.10 — **statically reviewed only** (single shim: `tomllib` → `tomli`). No other version-specific features used. |
 | **Dependencies** | `jsonschema>=4.17` + `tomli>=1.2.0` on Python 3.10 only. No other mandatory runtime dependencies. |
@@ -98,7 +98,7 @@ For engineers picking this up for the first time inside an organisation:
 | **First command** | `pip install -e . && insert-me run --seed-file examples/seeds/cwe122_heap_overflow.json --source examples/demo/src` |
 
 **What to expect from a run today:**
-- One mutation applied to the source tree: any of the 5 corpus-admitted strategies (`alloc_size_undercount` CWE-122, `insert_premature_free` CWE-416, `insert_double_free` CWE-415, `remove_free_call` CWE-401, `remove_null_guard` CWE-476)
+- One mutation applied to the source tree: any of the 6 corpus-admitted strategies (`alloc_size_undercount` CWE-122, `insert_premature_free` CWE-416, `insert_double_free` CWE-415, `remove_free_call` CWE-401, `remove_null_guard` CWE-476, `remove_size_cast` CWE-190)
 - Five deterministic rule-based plausibility checks
 - Five JSON artifacts: `patch_plan.json`, `validation_result.json`, `audit_result.json`, `ground_truth.json`, `audit.json`
 
@@ -202,7 +202,7 @@ Example seed files are in `examples/seeds/`:
          │  patch_plan.json  ← patch_plan.schema.json
          ▼
   ┌─────────────┐
-  │   Patcher   │  ✓ Phase 8/4c — alloc_size_undercount (CWE-122) · insert_premature_free (CWE-416) · insert_double_free (CWE-415) · remove_free_call (CWE-401) · remove_null_guard (CWE-476, experimental)
+  │   Patcher   │  ✓ Phase 14 — alloc_size_undercount (CWE-122) · insert_premature_free (CWE-416) · insert_double_free (CWE-415) · remove_free_call (CWE-401) · remove_null_guard (CWE-476) · remove_size_cast (CWE-190)
   └──────┬──────┘
          │  bad/  good/  source trees
          ▼

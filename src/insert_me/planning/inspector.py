@@ -33,11 +33,12 @@ from typing import Any
 
 #: (strategy_name, cwe_id, pattern_type, corpus_admitted)
 PLANNING_STRATEGIES: tuple[tuple[str, str, str, bool], ...] = (
-    ("alloc_size_undercount", "CWE-122", "malloc_call",   True),
-    ("insert_premature_free", "CWE-416", "pointer_deref", True),
-    ("insert_double_free",    "CWE-415", "free_call",     True),
-    ("remove_free_call",      "CWE-401", "free_call",     True),
-    ("remove_null_guard",     "CWE-476", "null_guard",    True),
+    ("alloc_size_undercount", "CWE-122", "malloc_call",      True),
+    ("insert_premature_free", "CWE-416", "pointer_deref",    True),
+    ("insert_double_free",    "CWE-415", "free_call",        True),
+    ("remove_free_call",      "CWE-401", "free_call",        True),
+    ("remove_null_guard",     "CWE-476", "null_guard",       True),
+    ("remove_size_cast",      "CWE-190", "malloc_size_cast", True),
 )
 
 #: Strategy suitability tiers.

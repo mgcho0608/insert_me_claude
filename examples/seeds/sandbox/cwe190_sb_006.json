@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "seed_id": "cwe190-sandbox-size-cast-006",
+  "seed": 6,
+  "cwe_id": "CWE-190",
+  "vulnerability_class": "Integer Overflow or Wraparound",
+  "description": "Remove a (size_t) cast from a malloc() size expression. Without the cast, the multiplication is performed in int (or unsigned int), which can overflow before being widened to size_t, causing the allocation to be undersized.",
+  "mutation_strategy": "remove_size_cast",
+  "target_pattern": {
+    "pattern_type": "malloc_size_cast",
+    "require_function_scope": true,
+    "min_candidate_score": 0.7
+  },
+  "source_constraints": {
+    "file_patterns": ["*.c", "*.cpp"],
+    "exclude_patterns": ["*test*", "*_test.*", "*mock*", "*stub*"],
+    "max_targets": 1
+  },
+  "metadata": {
+    "tags": ["integer-overflow", "size-cast", "malloc", "sandbox-eval"],
+    "difficulty": "medium",
+    "notes": "Targets a malloc((size_t)EXPR * sizeof(T)) call in sandbox_eval. Removing (size_t) makes the multiplication susceptible to signed integer overflow.",
+    "references": ["https://cwe.mitre.org/data/definitions/190.html"]
+  }
+}

@@ -81,11 +81,11 @@ The following fields are compared across runs (from `ground_truth.json` and `aud
 
 ---
 
-## Matrix: target_b (15 seeds)
+## Matrix: target_b (20 seeds)
 
 **Source root:** `examples/sandbox_targets/target_b/src`  
 **Seeds directory:** `examples/seeds/target_b`  
-**Run date:** 2026-04-06  
+**Run date:** 2026-04-07  
 **Runs:** 3  
 
 | Seed | Strategy | CWE | Result |
@@ -105,20 +105,51 @@ The following fields are compared across runs (from `ground_truth.json` and `aud
 | cwe416_tb_003 | insert_premature_free | CWE-416 | PASS |
 | cwe416_tb_004 | insert_premature_free | CWE-416 | PASS |
 | cwe416_tb_005 | insert_premature_free | CWE-416 | PASS |
+| cwe476_tb_001 | remove_null_guard | CWE-476 | PASS |
+| cwe476_tb_002 | remove_null_guard | CWE-476 | PASS |
+| cwe476_tb_003 | remove_null_guard | CWE-476 | PASS |
+| cwe476_tb_004 | remove_null_guard | CWE-476 | PASS |
+| cwe476_tb_005 | remove_null_guard | CWE-476 | PASS |
 
-**Summary: 15 / 15 PASS**
+**Summary: 20 / 20 PASS**
 
 ---
 
-## Combined Totals
+## Combined Totals (seed-level)
 
 | Target | Seeds | PASS | FAIL | Pass Rate |
 |---|---|---|---|---|
 | sandbox_eval | 40 | 40 | 0 | 100% |
-| target_b | 15 | 15 | 0 | 100% |
-| **Total** | **55** | **55** | **0** | **100%** |
+| target_b | 20 | 20 | 0 | 100% |
+| **Total** | **60** | **60** | **0** | **100%** |
 
-All 55 seed/target combinations reproduce identically across 3 independent runs.
+All 60 seed/target combinations reproduce identically across 3 independent runs.
+
+---
+
+## CWE-190 Quality Gate (Phase 14)
+
+**Source root:** `examples/sandbox_eval/src`  
+**Seeds directory:** `examples/seeds/sandbox/cwe190_sb_001.json` – `cwe190_sb_008.json`  
+**Run date:** 2026-04-07  
+**Strategy:** `remove_size_cast` (CWE-190)
+
+| Seed | Target | Result | Notes |
+|---|---|---|---|
+| cwe190_sb_001 | htable.c:176 | VALID | `malloc(new_n_buckets * sizeof(HTEntry *))` |
+| cwe190_sb_002 | htable.c:148 | VALID | `malloc(src->n_buckets * sizeof(HTEntry *))` |
+| cwe190_sb_003 | graph.c:90 | VALID | `malloc(initial_capacity * sizeof(Vertex *))` |
+| cwe190_sb_004 | list.c:193 | VALID | `malloc(count * sizeof(ListNode))` |
+| cwe190_sb_005 | graph.c:186 | NOOP | Double `(size_t)` cast — correctly skipped by conservative constraint |
+| cwe190_sb_006 | htable.c:148 | VALID | Duplicate target of seed 2 |
+| cwe190_sb_007 | list.c:193 | VALID | Duplicate target of seed 4 |
+| cwe190_sb_008 | list.c:193 | VALID | Duplicate target of seed 4 |
+
+**Summary: 7/8 VALID (87.5%), 1 NOOP (expected — double-cast line)**  
+**Unique VALID targets: 4** (htable.c:176, htable.c:148, graph.c:90, list.c:193)
+
+**Corpus admission decision: IMPLEMENTED_AND_CORPUS_ADMITTED**  
+Rationale: 87.5% VALID rate exceeds 80% threshold; NOOP on seed 5 is correct and expected behaviour (double `(size_t)` cast, conservative skip). Note: `remove_size_cast` is primarily applicable to sandbox_eval; target_b/moderate/minimal have no `(size_t)`-cast malloc lines.
 
 ---
 

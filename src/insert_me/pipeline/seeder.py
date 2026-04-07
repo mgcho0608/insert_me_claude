@@ -95,6 +95,8 @@ PATTERN_REGEXES: dict[str, re.Pattern[str]] = {
     "format_string": re.compile(
         r"\b(?:printf|fprintf|sprintf|snprintf|vprintf|vfprintf|vsprintf)\s*\("
     ),
+    # malloc() with an explicit (size_t) cast in the argument (CWE-190 target)
+    "malloc_size_cast": re.compile(r"\bmalloc\s*\(\s*\(size_t\)"),
     # Null-check guard lines (CWE-476 — guard removal)
     "null_guard": re.compile(
         r"^\s*if\s*\(\s*"
@@ -571,6 +573,10 @@ class Seeder:
                 score += 0.15
             else:
                 score += 0.05
+
+        elif pt == "malloc_size_cast":
+            # All (size_t)-cast malloc lines are strong CWE-190 candidates
+            score += 0.35
 
         elif pt in ("calloc_call", "realloc_call"):
             score += 0.25

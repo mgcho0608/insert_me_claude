@@ -58,6 +58,7 @@
           "description": "Primary pattern type the Seeder uses to identify candidates.",
           "enum": [
             "malloc_call",
+            "malloc_size_cast",
             "calloc_call",
             "realloc_call",
             "free_call",

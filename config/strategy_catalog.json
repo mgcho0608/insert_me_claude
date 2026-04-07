@@ -1,6 +1,6 @@
 {
   "schema_version": "2.0",
-  "catalog_version": "phase-12",
+  "catalog_version": "phase-14",
   "description": "insert_me mutation strategy catalog. Each entry describes one CWE family, its current implementation maturity, Juliet-derived rationale, and planning-layer suitability metadata.",
   "maturity_levels": {
     "IMPLEMENTED_AND_CORPUS_ADMITTED": "Implemented in patcher.py, has sandbox seeds, quality gate pass rate >= 80%, reproducibility 100%, corpus-admitted. Suitable for planning layer.",
@@ -121,22 +121,27 @@
       "notes": "Corpus-admitted in Phase 10. Dual-mode handler: primary mode targets guard lines (Seeder null_guard pattern); backward-compat mode targets deref lines. 8 sandbox seeds, 8/8 VALID quality gate. Phase 12: validated VIABLE on target_b (bstree.c, dynarray.c, strmap.c) with 5/5 VALID."
     },
     {
-      "strategy_id": null,
+      "strategy_id": "remove_size_cast",
       "cwe_id": "CWE-190",
       "cwe_name": "Integer Overflow or Wraparound",
       "vulnerability_class": "Numeric Error",
-      "maturity": "PLANNED",
-      "pattern_type": "malloc_call",
-      "suitable_for_planning": false,
-      "description": "Remove the overflow check (e.g., if (n > MAX) return;) that precedes a multiplication-based malloc(n * sizeof(T)). The resulting allocation is undersized when n overflows.",
-      "juliet_rationale": "Mirrors Juliet CWE190 patterns: integer arithmetic overflows feeding a size calculation.",
-      "source_pattern": "malloc(n * sizeof(T)) with a preceding guard like if (n > MAX) return;",
-      "sink_pattern": "The malloc call itself, when the guard is removed and n can wrap",
+      "maturity": "IMPLEMENTED_AND_CORPUS_ADMITTED",
+      "pattern_type": "malloc_size_cast",
+      "suitable_for_planning": true,
+      "description": "Removes a (size_t) cast from malloc((size_t)<expr> * sizeof(T)), leaving the size arithmetic in the type of <expr> (typically int). If <expr> overflows before widening to size_t, the allocation receives a small or negative-wrapped byte count -- an undersized heap buffer.",
+      "juliet_rationale": "Mirrors Juliet CWE190 patterns: integer arithmetic overflows feeding a size calculation. (size_t) casts are the canonical defensive pattern that prevents overflow; removing them is the minimal-mutation equivalent.",
+      "source_pattern": "malloc((size_t)EXPR * sizeof(T)) with exactly one (size_t) cast at the start of the argument expression",
+      "sink_pattern": "Any write through the allocation that exceeds the (now potentially undersized) buffer when EXPR overflows",
       "juliet_coverage": "CWE190_Integer_Overflow__*",
       "deterministic": true,
-      "quality_gate_pass_rate": null,
-      "corpus_cases": 0,
-      "notes": "Multi-line blocker resolved (handler infrastructure in place). Implementation follows remove_null_guard pattern."
+      "quality_gate_pass_rate": 0.875,
+      "corpus_cases": 8,
+      "common_failure_modes": [
+        "Double (size_t) cast: malloc((size_t)n * (size_t)n * sizeof(int)) -- conservative constraint skips these (NOOP), handled correctly",
+        "Cast not at start of arg: malloc(n + (size_t)extra) -- handler correctly returns None",
+        "Limited target diversity: sandbox_eval has 9 valid candidates but many seeds shuffle to the same 3-4 lines"
+      ],
+      "notes": "Corpus-admitted in Phase 14. Single-line handler in patcher.py. New pattern_type malloc_size_cast added to seeder.py and seed.schema.json. 8 sandbox seeds, 7/8 VALID quality gate (87.5%). 1 NOOP: seed 5 targets graph.c:186 which has two (size_t) casts (correctly skipped). Primarily applicable to sandbox_eval; target_b/moderate/minimal have no (size_t)-cast malloc lines."
     },
     {
       "strategy_id": null,

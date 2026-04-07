@@ -19,14 +19,16 @@
     "insert_premature_free": 0,
     "insert_double_free": 0,
     "remove_free_call": 0,
-    "remove_null_guard": 0
+    "remove_null_guard": 0,
+    "remove_size_cast": 0
   },
   "suitability": {
     "alloc_size_undercount": "VIABLE",
     "insert_premature_free": "VIABLE",
     "insert_double_free": "VIABLE",
     "remove_free_call": "VIABLE",
-    "remove_null_guard": "VIABLE"
+    "remove_null_guard": "VIABLE",
+    "remove_size_cast": "VIABLE"
   },
   "cases": [
     {

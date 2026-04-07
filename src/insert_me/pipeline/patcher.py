@@ -344,6 +344,64 @@ def _mutate_remove_free_call(line: str) -> _StrategyResult | None:
 
 
 # ---------------------------------------------------------------------------
+# Strategy: remove_size_cast  (CWE-190)
+# ---------------------------------------------------------------------------
+
+#: Matches a ``(size_t)`` cast (with optional trailing whitespace) for removal.
+_SIZE_CAST_RE: re.Pattern[str] = re.compile(r"\(size_t\)\s*")
+
+
+@_register("remove_size_cast")
+def _mutate_remove_size_cast(line: str) -> _StrategyResult | None:
+    """
+    Remove a ``(size_t)`` cast from ``malloc((size_t)<expr> * sizeof(T))``,
+    creating a potential integer-overflow vulnerability (CWE-190).
+
+    When the cast is present, the multiplication is performed in ``size_t``
+    (unsigned, pointer-width).  After removal, the computation uses the type
+    of ``<expr>`` (typically ``int``), which can overflow before the result
+    is widened, causing the allocation to receive a much smaller byte count
+    than the caller expects.
+
+    Conservative constraints:
+    - Only matches when the malloc arg contains exactly one ``(size_t)`` cast.
+    - That cast must appear at the start of the arg expression (immediately
+      after the opening parenthesis of malloc, ignoring whitespace).
+
+    Returns ``(mutated_line, original_fragment, mutated_fragment)``, or None when:
+    - No ``malloc()`` call is found on the line.
+    - The malloc arg has no ``(size_t)`` cast, or has more than one.
+    - The cast is not at the start of the arg expression.
+    """
+    if "malloc" not in line or "(size_t)" not in line:
+        return None
+
+    loc = _find_malloc_call(line)
+    if loc is None:
+        return None
+
+    call_start, call_end, arg_text = loc
+    if not arg_text:
+        return None
+
+    # Conservative: exactly one (size_t) cast, positioned at the arg start
+    if arg_text.count("(size_t)") != 1:
+        return None
+    if not arg_text.lstrip().startswith("(size_t)"):
+        return None
+
+    # Remove the leading (size_t) cast (and any whitespace that followed it)
+    new_arg = _SIZE_CAST_RE.sub("", arg_text, count=1).lstrip()
+    if not new_arg:
+        return None
+
+    original_fragment = line[call_start:call_end].rstrip("\n")
+    mutated_fragment = f"malloc({new_arg})"
+    mutated_line = line[:call_start] + mutated_fragment + line[call_end:]
+    return (mutated_line, original_fragment, mutated_fragment)
+
+
+# ---------------------------------------------------------------------------
 # Strategy: remove_null_guard  (CWE-476, multi-line)
 # ---------------------------------------------------------------------------
 

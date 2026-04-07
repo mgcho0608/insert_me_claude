@@ -42,6 +42,7 @@ MAX_SWEEP_ABS: int = 2000
 #: CWE ID → vulnerability class name (required by seed.schema.json).
 _CWE_VULNERABILITY_CLASS: dict[str, str] = {
     "CWE-122": "Heap-based Buffer Overflow",
+    "CWE-190": "Integer Overflow or Wraparound",
     "CWE-401": "Missing Release of Memory after Effective Lifetime",
     "CWE-415": "Double Free",
     "CWE-416": "Use After Free",

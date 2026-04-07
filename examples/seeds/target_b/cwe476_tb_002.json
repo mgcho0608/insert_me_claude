@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "seed_id": "cwe476-target-b-null-guard-002",
+  "seed": 2,
+  "cwe_id": "CWE-476",
+  "vulnerability_class": "NULL Pointer Dereference",
+  "description": "Remove a null-check guard in target_b. Leaving the subsequent pointer dereference reachable with a potentially-NULL pointer.",
+  "mutation_strategy": "remove_null_guard",
+  "target_pattern": {
+    "pattern_type": "null_guard",
+    "require_function_scope": true,
+    "min_candidate_score": 0.7
+  },
+  "source_constraints": {
+    "file_patterns": ["*.c", "*.cpp"],
+    "exclude_patterns": ["*test*", "*_test.*", "*mock*", "*stub*"],
+    "max_targets": 1
+  },
+  "metadata": {
+    "tags": ["null-deref", "guard-removal", "target-b"],
+    "difficulty": "easy",
+    "notes": "Targets a null-guard in target_b (bstree.c, dynarray.c, or strmap.c). Validated VALID in Phase 14 quality gate.",
+    "references": ["https://cwe.mitre.org/data/definitions/476.html"]
+  }
+}

@@ -655,14 +655,14 @@ class TestStrategyCatalogSchema:
             f"Expected >= 10 strategy entries, got {len(catalog['strategies'])}"
         )
 
-    def test_catalog_has_5_corpus_admitted(self):
+    def test_catalog_has_6_corpus_admitted(self):
         root = Path(__file__).parent.parent
         catalog = json.loads((root / "config" / "strategy_catalog.json").read_text(encoding="utf-8"))
         admitted = [
             s for s in catalog["strategies"]
             if s["maturity"] == "IMPLEMENTED_AND_CORPUS_ADMITTED"
         ]
-        assert len(admitted) == 5, f"Expected 5 corpus-admitted, got {len(admitted)}"
+        assert len(admitted) == 6, f"Expected 6 corpus-admitted, got {len(admitted)}"
 
     def test_catalog_admitted_strategies_have_corpus_cases(self):
         root = Path(__file__).parent.parent
