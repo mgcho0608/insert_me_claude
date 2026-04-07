@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "requested_count": 15,
+  "planned_count": 8,
+  "attempted_count": 8,
+  "accepted_count": 8,
+  "requested_count_met": false,
+  "shortfall_amount": 7,
+  "plan_shortfall": {
+    "amount": 7,
+    "categories": {
+      "strategy_limited_few_candidates": 5,
+      "concentration_limits": 4
+    }
+  },
+  "execution_shortfall": {
+    "amount": 0,
+    "categories": {}
+  },
+  "shortfall_explanation": "Plan shortfall: 7 case(s) not planned (causes: strategy_limited_few_candidates, concentration_limits).",
+  "plan_path": "_tmp_phase11_minimal\\_plan\\corpus_plan.json"
+}

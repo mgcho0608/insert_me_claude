@@ -843,3 +843,216 @@ class TestLocalTargetFixtures:
         assert (tmp_path / "corpus_plan.json").exists()
         seed_files = list((tmp_path / "seeds").glob("*.json"))
         assert len(seed_files) == plan.planned_count
+
+
+# ---------------------------------------------------------------------------
+# SynthesizedCase.to_seed_dict() schema conformance
+# ---------------------------------------------------------------------------
+
+
+class TestSynthesizedCaseSeedDict:
+    """to_seed_dict() must produce schema-valid seed JSON."""
+
+    def test_has_vulnerability_class(self):
+        from insert_me.planning.seed_synthesis import SynthesizedCase
+        sc = SynthesizedCase(
+            case_id="cwe122_test_001",
+            strategy="alloc_size_undercount",
+            cwe_id="CWE-122",
+            seed_integer=1,
+            target_file="foo.c",
+            target_line=10,
+            function_name="test_fn",
+            candidate_score=0.75,
+            pattern_type="malloc_call",
+        )
+        d = sc.to_seed_dict()
+        assert "vulnerability_class" in d
+        assert d["vulnerability_class"] == "Heap-based Buffer Overflow"
+
+    def test_vulnerability_class_all_cwe_ids(self):
+        from insert_me.planning.seed_synthesis import SynthesizedCase, _CWE_VULNERABILITY_CLASS
+        from insert_me.planning.inspector import PLANNING_STRATEGIES
+        for strategy_name, cwe_id, pattern_type, _ in PLANNING_STRATEGIES:
+            assert cwe_id in _CWE_VULNERABILITY_CLASS, (
+                f"Missing vulnerability_class for {cwe_id}"
+            )
+
+    def test_seed_dict_validates_against_schema(self):
+        import jsonschema
+        from insert_me.planning.seed_synthesis import SynthesizedCase
+        root = Path(__file__).parent.parent
+        schema_path = root / "schemas" / "seed.schema.json"
+        if not schema_path.exists():
+            pytest.skip("seed schema not found")
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        sc = SynthesizedCase(
+            case_id="cwe416_test_001",
+            strategy="insert_premature_free",
+            cwe_id="CWE-416",
+            seed_integer=5,
+            target_file="list.c",
+            target_line=42,
+            function_name="list_insert",
+            candidate_score=0.80,
+            pattern_type="pointer_deref",
+        )
+        d = sc.to_seed_dict(source_root="/some/path")
+        jsonschema.validate(instance=d, schema=schema)
+
+    def test_patcher_verification_filters_noop_candidates(self):
+        """SeedSynthesizer with verify_patcher=True should skip NOOP targets."""
+        if not MODERATE_TARGET.exists():
+            pytest.skip("moderate target not found")
+        from insert_me.planning.seed_synthesis import SeedSynthesizer, SweepConstraints
+        # Two runs: one with verify_patcher=True, one with False
+        # With True, all synthesized cases should produce non-NOOP mutations
+        c_on = SweepConstraints(max_per_file=3, verify_patcher=True)
+        synth = SeedSynthesizer(MODERATE_TARGET, c_on)
+        result_on = synth.synthesize_for_strategy(
+            strategy="remove_null_guard",
+            cwe_id="CWE-476",
+            pattern_type="null_guard",
+            requested_count=5,
+            seen_targets=set(),
+        )
+        # All accepted cases must pass the patcher check
+        from insert_me.planning.seed_synthesis import _verify_patcher_will_mutate
+        for sc in result_on.cases:
+            ok = _verify_patcher_will_mutate(
+                "remove_null_guard", MODERATE_TARGET, sc.target_file, sc.target_line
+            )
+            assert ok, f"Case {sc.case_id} ({sc.target_file}:{sc.target_line}) fails patcher verification"
+
+
+# ---------------------------------------------------------------------------
+# E2E generate-corpus on local fixtures
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateCorpusLocalE2E:
+    """E2E tests: generate-corpus on local target fixtures via CLI subprocess."""
+
+    def _run_generate(self, source, output_root, count, extra_args=()):
+        cmd = [
+            sys.executable, "-m", "insert_me.cli",
+            "generate-corpus",
+            "--source", str(source),
+            "--count", str(count),
+            "--output-root", str(output_root),
+            "--no-llm",
+        ] + list(extra_args)
+        return subprocess.run(
+            cmd, capture_output=True, text=True,
+            cwd=str(Path(__file__).parent.parent),
+            timeout=300,
+        )
+
+    def test_moderate_generate_exits_zero(self, tmp_path):
+        """generate-corpus on moderate fixture should exit 0 for count=5."""
+        if not MODERATE_TARGET.exists():
+            pytest.skip("moderate target not found")
+        r = self._run_generate(MODERATE_TARGET, tmp_path, 5)
+        assert r.returncode == 0, f"stderr:\n{r.stderr}\nstdout:\n{r.stdout}"
+
+    def test_moderate_generate_acceptance_summary_fields(self, tmp_path):
+        """acceptance_summary.json must contain all required fields."""
+        if not MODERATE_TARGET.exists():
+            pytest.skip("moderate target not found")
+        r = self._run_generate(MODERATE_TARGET, tmp_path, 5)
+        assert r.returncode in (0, 1), f"stderr: {r.stderr}"
+        summary_path = tmp_path / "acceptance_summary.json"
+        assert summary_path.exists(), "acceptance_summary.json not written"
+        d = json.loads(summary_path.read_text(encoding="utf-8"))
+        for field in (
+            "requested_count", "planned_count", "accepted_count",
+            "requested_count_met", "shortfall_amount", "honest",
+            "by_strategy", "by_file",
+        ):
+            assert field in d, f"Missing field: {field}"
+        assert d["requested_count"] == 5
+
+    def test_moderate_generate_shortfall_report_written(self, tmp_path):
+        """shortfall_report.json must be written after execution."""
+        if not MODERATE_TARGET.exists():
+            pytest.skip("moderate target not found")
+        r = self._run_generate(MODERATE_TARGET, tmp_path, 5)
+        assert r.returncode in (0, 1)
+        assert (tmp_path / "shortfall_report.json").exists(), (
+            "shortfall_report.json not written"
+        )
+        d = json.loads((tmp_path / "shortfall_report.json").read_text(encoding="utf-8"))
+        for field in (
+            "requested_count", "planned_count", "accepted_count",
+            "requested_count_met", "shortfall_amount",
+            "plan_shortfall", "execution_shortfall", "shortfall_explanation",
+        ):
+            assert field in d, f"shortfall_report missing: {field}"
+
+    def test_moderate_generate_reaches_requested_count(self, tmp_path):
+        """Moderate fixture should meet requested count of 5."""
+        if not MODERATE_TARGET.exists():
+            pytest.skip("moderate target not found")
+        r = self._run_generate(MODERATE_TARGET, tmp_path, 5)
+        assert r.returncode == 0, f"stderr: {r.stderr}"
+        d = json.loads((tmp_path / "acceptance_summary.json").read_text(encoding="utf-8"))
+        assert d["requested_count_met"] is True, (
+            f"Expected requested_count_met=True, got accepted={d['accepted_count']}/5"
+        )
+        assert d["accepted_count"] == 5
+
+    def test_moderate_generate_produces_plan_artifacts(self, tmp_path):
+        """Plan artifacts must be written under _plan/."""
+        if not MODERATE_TARGET.exists():
+            pytest.skip("moderate target not found")
+        r = self._run_generate(MODERATE_TARGET, tmp_path, 5)
+        assert r.returncode in (0, 1)
+        assert (tmp_path / "_plan" / "corpus_plan.json").exists()
+        assert (tmp_path / "_plan" / "seeds").is_dir()
+        seeds = list((tmp_path / "_plan" / "seeds").glob("*.json"))
+        assert len(seeds) >= 1
+
+    def test_minimal_generate_honest_shortfall(self, tmp_path):
+        """Minimal fixture cannot meet count=15; must report shortfall honestly."""
+        if not MINIMAL_TARGET.exists():
+            pytest.skip("minimal target not found")
+        r = self._run_generate(MINIMAL_TARGET, tmp_path, 15)
+        assert r.returncode in (0, 1)
+        # acceptance_summary must show shortfall
+        summary_path = tmp_path / "acceptance_summary.json"
+        if not summary_path.exists():
+            pytest.skip("acceptance_summary.json not written (plan may have been empty)")
+        d = json.loads(summary_path.read_text(encoding="utf-8"))
+        assert d["planned_count"] < 15, (
+            f"minimal target should not plan 15 cases, got {d['planned_count']}"
+        )
+        assert d["shortfall_amount"] > 0
+        assert d["requested_count_met"] is False
+
+    def test_minimal_generate_shortfall_categories_populated(self, tmp_path):
+        """Shortfall report must attribute causes on the minimal (poor) target."""
+        if not MINIMAL_TARGET.exists():
+            pytest.skip("minimal target not found")
+        r = self._run_generate(MINIMAL_TARGET, tmp_path, 15)
+        assert r.returncode in (0, 1)
+        shortfall_path = tmp_path / "shortfall_report.json"
+        if not shortfall_path.exists():
+            pytest.skip("shortfall_report.json not written")
+        d = json.loads(shortfall_path.read_text(encoding="utf-8"))
+        assert d["plan_shortfall"]["amount"] > 0
+        assert len(d["plan_shortfall"]["categories"]) > 0, (
+            "Plan shortfall must have at least one attributed category"
+        )
+        assert d["shortfall_explanation"], "shortfall_explanation must not be empty"
+
+    def test_dry_run_writes_artifacts_without_execution(self, tmp_path):
+        """--dry-run must write acceptance_summary and shortfall_report without running pipeline."""
+        if not MODERATE_TARGET.exists():
+            pytest.skip("moderate target not found")
+        r = self._run_generate(MODERATE_TARGET, tmp_path, 5, extra_args=["--dry-run"])
+        assert r.returncode == 0, f"stderr: {r.stderr}"
+        assert (tmp_path / "acceptance_summary.json").exists()
+        assert (tmp_path / "shortfall_report.json").exists()
+        d = json.loads((tmp_path / "acceptance_summary.json").read_text(encoding="utf-8"))
+        assert d["attempted_count"] == 0
+        assert d["accepted_count"] == 0

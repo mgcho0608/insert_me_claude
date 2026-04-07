@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "requested_count": 10,
+  "planned_count": 10,
+  "attempted_count": 10,
+  "accepted_count": 10,
+  "requested_count_met": true,
+  "shortfall_amount": 0,
+  "plan_shortfall": {
+    "amount": 0,
+    "categories": {}
+  },
+  "execution_shortfall": {
+    "amount": 0,
+    "categories": {}
+  },
+  "shortfall_explanation": "Requested count (10) was achieved with 10 accepted case(s)..",
+  "plan_path": "_tmp_phase11_cli\\_plan\\corpus_plan.json"
+}

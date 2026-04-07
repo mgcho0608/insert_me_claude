@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "run_id": "c4ee126c8cca6a7d",
+  "cwe_id": "CWE-416",
+  "spec_id": "cwe416_plan_005",
+  "seed": 4,
+  "mutations": [
+    {
+      "file": "ringbuf.c",
+      "line": 31,
+      "mutation_type": "insert_premature_free",
+      "original_fragment": "    rb->item_size = item_size;",
+      "mutated_fragment": "free(rb);",
+      "extra": {
+        "freed_pointer": "rb"
+      }
+    }
+  ],
+  "validation_passed": true
+}

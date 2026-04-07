@@ -1,0 +1,147 @@
+{
+  "schema_version": "1.0",
+  "source_root": "C:\\Users\\User\\insert_me\\examples\\local_targets\\minimal\\src",
+  "source_hash": "9468702101220acb",
+  "requested_count": 15,
+  "planned_count": 8,
+  "projected_accepted_count": 8,
+  "constraints": {
+    "max_per_file": 5,
+    "max_per_function": 2,
+    "max_per_family": null,
+    "allow_strategies": null,
+    "disallow_strategies": null,
+    "min_candidate_score": 0.0,
+    "strict_quality": false
+  },
+  "strategy_allocation": {
+    "alloc_size_undercount": 1,
+    "insert_premature_free": 1,
+    "insert_double_free": 3,
+    "remove_free_call": 0,
+    "remove_null_guard": 3
+  },
+  "suitability": {
+    "alloc_size_undercount": "LIMITED",
+    "insert_premature_free": "LIMITED",
+    "insert_double_free": "LIMITED",
+    "remove_free_call": "LIMITED",
+    "remove_null_guard": "LIMITED"
+  },
+  "cases": [
+    {
+      "case_id": "cwe122_plan_001",
+      "strategy": "alloc_size_undercount",
+      "cwe_id": "CWE-122",
+      "seed_integer": 1,
+      "target_file": "counter.c",
+      "target_line": 18,
+      "function_name": "counter_create",
+      "candidate_score": 0.55,
+      "confidence": "medium",
+      "seed_file": "seeds\\cwe122_plan_001.json"
+    },
+    {
+      "case_id": "cwe416_plan_002",
+      "strategy": "insert_premature_free",
+      "cwe_id": "CWE-416",
+      "seed_integer": 1,
+      "target_file": "counter.c",
+      "target_line": 20,
+      "function_name": "counter_create",
+      "candidate_score": 0.85,
+      "confidence": "high",
+      "seed_file": "seeds\\cwe416_plan_002.json"
+    },
+    {
+      "case_id": "cwe415_plan_003",
+      "strategy": "insert_double_free",
+      "cwe_id": "CWE-415",
+      "seed_integer": 1,
+      "target_file": "counter.c",
+      "target_line": 42,
+      "function_name": "counter_destroy",
+      "candidate_score": 0.55,
+      "confidence": "medium",
+      "seed_file": "seeds\\cwe415_plan_003.json"
+    },
+    {
+      "case_id": "cwe415_plan_004",
+      "strategy": "insert_double_free",
+      "cwe_id": "CWE-415",
+      "seed_integer": 4,
+      "target_file": "counter.c",
+      "target_line": 43,
+      "function_name": "counter_destroy",
+      "candidate_score": 0.55,
+      "confidence": "medium",
+      "seed_file": "seeds\\cwe415_plan_004.json"
+    },
+    {
+      "case_id": "cwe415_plan_005",
+      "strategy": "insert_double_free",
+      "cwe_id": "CWE-415",
+      "seed_integer": 5,
+      "target_file": "counter.c",
+      "target_line": 23,
+      "function_name": "counter_create",
+      "candidate_score": 0.55,
+      "confidence": "medium",
+      "seed_file": "seeds\\cwe415_plan_005.json"
+    },
+    {
+      "case_id": "cwe476_plan_006",
+      "strategy": "remove_null_guard",
+      "cwe_id": "CWE-476",
+      "seed_integer": 1,
+      "target_file": "counter.c",
+      "target_line": 41,
+      "function_name": "counter_destroy",
+      "candidate_score": 1.0,
+      "confidence": "high",
+      "seed_file": "seeds\\cwe476_plan_006.json"
+    },
+    {
+      "case_id": "cwe476_plan_007",
+      "strategy": "remove_null_guard",
+      "cwe_id": "CWE-476",
+      "seed_integer": 2,
+      "target_file": "counter.c",
+      "target_line": 31,
+      "function_name": "counter_increment",
+      "candidate_score": 1.0,
+      "confidence": "high",
+      "seed_file": "seeds\\cwe476_plan_007.json"
+    },
+    {
+      "case_id": "cwe476_plan_008",
+      "strategy": "remove_null_guard",
+      "cwe_id": "CWE-476",
+      "seed_integer": 5,
+      "target_file": "counter.c",
+      "target_line": 19,
+      "function_name": "counter_create",
+      "candidate_score": 1.0,
+      "confidence": "high",
+      "seed_file": "seeds\\cwe476_plan_008.json"
+    }
+  ],
+  "allocation_summary": {
+    "by_strategy": {
+      "alloc_size_undercount": 1,
+      "insert_premature_free": 1,
+      "insert_double_free": 3,
+      "remove_null_guard": 3
+    },
+    "by_file": {
+      "counter.c": 8
+    },
+    "blockers": [],
+    "warnings": [
+      "Strategy insert_premature_free: only 1/5 unique diverse candidates found after 250 sweep attempts.",
+      "Strategy remove_free_call: only 0/2 unique diverse candidates found after 100 sweep attempts.",
+      "Strategy remove_null_guard: only 3/4 unique diverse candidates found after 200 sweep attempts.",
+      "Only 8 cases planned (requested 15): the target does not have sufficient diverse candidates to reach the requested count at current quality constraints. Consider: adding more source files, relaxing --max-per-file, or lowering --count."
+    ]
+  }
+}

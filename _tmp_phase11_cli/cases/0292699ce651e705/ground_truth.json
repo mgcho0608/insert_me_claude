@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "run_id": "0292699ce651e705",
+  "cwe_id": "CWE-415",
+  "spec_id": "cwe415_plan_007",
+  "seed": 1,
+  "mutations": [
+    {
+      "file": "strvec.c",
+      "line": 25,
+      "mutation_type": "insert_double_free",
+      "original_fragment": "        free(sv);",
+      "mutated_fragment": "free(sv);",
+      "extra": {
+        "freed_pointer": "sv"
+      }
+    }
+  ],
+  "validation_passed": true
+}

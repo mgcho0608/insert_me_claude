@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "run_id": "ec50a5df4806aca9",
+  "cwe_id": "CWE-122",
+  "spec_id": "cwe122_plan_001",
+  "seed": 1,
+  "mutations": [
+    {
+      "file": "strvec.c",
+      "line": 37,
+      "mutation_type": "alloc_size_undercount",
+      "original_fragment": "malloc(new_cap * sizeof(char *))",
+      "mutated_fragment": "malloc((new_cap * sizeof(char *)) - 1)",
+      "extra": {}
+    }
+  ],
+  "validation_passed": true
+}

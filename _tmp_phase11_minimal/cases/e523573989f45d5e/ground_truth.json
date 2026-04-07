@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0",
+  "run_id": "e523573989f45d5e",
+  "cwe_id": "CWE-476",
+  "spec_id": "cwe476_plan_008",
+  "seed": 5,
+  "mutations": [
+    {
+      "file": "counter.c",
+      "line": 19,
+      "mutation_type": "remove_null_guard",
+      "original_fragment": "    if (!c) return NULL;",
+      "mutated_fragment": "/* CWE-476: null guard removed */",
+      "extra": {
+        "guard_line": 19,
+        "deref_line": -1,
+        "guarded_pointer": "c",
+        "multiline": false,
+        "body_lines": []
+      }
+    }
+  ],
+  "validation_passed": true
+}

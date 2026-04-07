@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "plan_id": "plan-08790925c07003a0",
+  "run_id": "08790925c07003a0",
+  "seed_id": "cwe416_plan_002",
+  "seed": 1,
+  "status": "APPLIED",
+  "created_at": "2026-04-07T02:14:13Z",
+  "targets": [
+    {
+      "target_id": "t0001",
+      "file": "counter.c",
+      "line": 20,
+      "mutation_strategy": "insert_premature_free",
+      "candidate_score": 0.85,
+      "context": {
+        "expression": "c->value = initial;",
+        "function_name": "counter_create",
+        "pointer_name": "c"
+      }
+    }
+  ],
+  "skipped_candidates": 12,
+  "source_tree_hash": "9468702101220acb"
+}

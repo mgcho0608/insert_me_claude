@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "seed_id": "cwe476_plan_010",
+  "seed": 2,
+  "cwe_id": "CWE-476",
+  "mutation_strategy": "remove_null_guard",
+  "target_pattern": {
+    "pattern_type": "null_guard",
+    "min_candidate_score": 0.0
+  },
+  "source_constraints": {
+    "max_targets": 1
+  },
+  "metadata": {
+    "tags": [
+      "auto-synthesised",
+      "remove_null_guard",
+      "cwe-476"
+    ],
+    "notes": "Auto-synthesised by insert-me plan-corpus. Target: ringbuf.c:69 (score=1.00) | source: C:\\Users\\User\\insert_me\\examples\\local_targets\\moderate\\src"
+  }
+}

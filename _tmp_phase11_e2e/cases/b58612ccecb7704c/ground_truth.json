@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "run_id": "b58612ccecb7704c",
+  "cwe_id": "CWE-416",
+  "spec_id": "cwe416_plan_002",
+  "seed": 1,
+  "mutations": [
+    {
+      "file": "arena.c",
+      "line": 32,
+      "mutation_type": "insert_premature_free",
+      "original_fragment": "    a->next = NULL;",
+      "mutated_fragment": "free(a);",
+      "extra": {
+        "freed_pointer": "a"
+      }
+    }
+  ],
+  "validation_passed": true
+}

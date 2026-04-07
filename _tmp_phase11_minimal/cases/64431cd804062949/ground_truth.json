@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "run_id": "64431cd804062949",
+  "cwe_id": "CWE-122",
+  "spec_id": "cwe122_plan_001",
+  "seed": 1,
+  "mutations": [
+    {
+      "file": "counter.c",
+      "line": 18,
+      "mutation_type": "alloc_size_undercount",
+      "original_fragment": "malloc(sizeof(Counter))",
+      "mutated_fragment": "malloc((sizeof(Counter)) - 1)",
+      "extra": {}
+    }
+  ],
+  "validation_passed": true
+}

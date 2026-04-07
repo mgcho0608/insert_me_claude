@@ -39,6 +39,15 @@ MAX_SWEEP_MULTIPLIER: int = 50
 #: Absolute cap to avoid infinite loops.
 MAX_SWEEP_ABS: int = 2000
 
+#: CWE ID → vulnerability class name (required by seed.schema.json).
+_CWE_VULNERABILITY_CLASS: dict[str, str] = {
+    "CWE-122": "Heap-based Buffer Overflow",
+    "CWE-401": "Missing Release of Memory after Effective Lifetime",
+    "CWE-415": "Double Free",
+    "CWE-416": "Use After Free",
+    "CWE-476": "NULL Pointer Dereference",
+}
+
 
 @dataclass
 class SynthesizedCase:
@@ -62,11 +71,13 @@ class SynthesizedCase:
         )
         if source_root:
             notes += f" | source: {source_root}"
+        vuln_class = _CWE_VULNERABILITY_CLASS.get(self.cwe_id, "Memory Safety")
         return {
             "schema_version": "1.0",
             "seed_id": self.case_id,
             "seed": self.seed_integer,
             "cwe_id": self.cwe_id,
+            "vulnerability_class": vuln_class,
             "mutation_strategy": self.strategy,
             "target_pattern": {
                 "pattern_type": self.pattern_type,
@@ -104,6 +115,49 @@ class SweepConstraints:
     max_per_file: int = 5
     max_per_function: int = 2
     min_candidate_score: float = 0.0
+    verify_patcher: bool = True  # Filter out candidates the patcher will NOOP on
+
+
+# ---------------------------------------------------------------------------
+# Patcher viability check
+# ---------------------------------------------------------------------------
+
+def _verify_patcher_will_mutate(
+    strategy: str,
+    source_root: Path,
+    target_file: str,
+    target_line: int,
+) -> bool:
+    """
+    Return True if the patcher handler will produce a non-None result for this
+    (strategy, file, line) triple.
+
+    Calls the mutation handler directly on the source lines without copying any
+    files — fast enough to run inside the sweep loop.  On any error (import,
+    IO, exception in handler) returns True to avoid silently dropping candidates.
+    """
+    try:
+        from insert_me.pipeline.patcher import (
+            _MULTILINE_STRATEGY_HANDLERS,
+            _STRATEGY_HANDLERS,
+        )
+        file_path = source_root / target_file
+        lines = file_path.read_text(encoding="utf-8", errors="replace").splitlines(
+            keepends=True
+        )
+        line_idx = target_line - 1
+        if line_idx < 0 or line_idx >= len(lines):
+            return False
+        if strategy in _MULTILINE_STRATEGY_HANDLERS:
+            result = _MULTILINE_STRATEGY_HANDLERS[strategy](lines, line_idx)
+        else:
+            handler = _STRATEGY_HANDLERS.get(strategy)
+            if handler is None:
+                return True  # Unknown strategy — optimistically allow
+            result = handler(lines[line_idx])
+        return result is not None
+    except Exception:
+        return True  # On error, optimistically allow
 
 
 # ---------------------------------------------------------------------------
@@ -199,6 +253,13 @@ class SeedSynthesizer:
             func_global_key = f"{file_key}:{func_key}" if func_key else ""
             if func_key and func_counts.get(func_global_key, 0) >= c.max_per_function:
                 continue
+
+            # Patcher viability check — skip candidates that will produce NOOP
+            if c.verify_patcher:
+                if not _verify_patcher_will_mutate(
+                    strategy, self._source_root, file_key, top.line
+                ):
+                    continue
 
             # Accept this candidate
             seen_targets.add(target_key)

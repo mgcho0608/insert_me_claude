@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "run_id": "5fb65ac3a7052507",
+  "cwe_id": "CWE-401",
+  "spec_id": "cwe401_plan_008",
+  "seed": 3,
+  "mutations": [
+    {
+      "file": "kvstore.c",
+      "line": 40,
+      "mutation_type": "remove_free_call",
+      "original_fragment": "        free(kv);",
+      "mutated_fragment": "/* CWE-401: free(kv) removed - memory leak */",
+      "extra": {
+        "leaked_pointer": "kv"
+      }
+    }
+  ],
+  "validation_passed": true
+}

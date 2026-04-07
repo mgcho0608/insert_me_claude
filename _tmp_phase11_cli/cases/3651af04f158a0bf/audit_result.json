@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0",
+  "audit_id": "ar-3651af04f158a0bf",
+  "run_id": "3651af04f158a0bf",
+  "classification": "VALID",
+  "confidence": "medium",
+  "evidence": [
+    {
+      "source": "validator",
+      "observation": "Validator passed all 5 plausibility checks.",
+      "weight": "strong"
+    },
+    {
+      "source": "patcher",
+      "observation": "Patcher applied 1 mutation(s) using strategy 'insert_premature_free'.",
+      "weight": "moderate"
+    }
+  ],
+  "reviewer": {
+    "type": "deterministic",
+    "name": "auditor_phase6_v1"
+  },
+  "audited_at": "2026-04-07T02:14:01Z"
+}

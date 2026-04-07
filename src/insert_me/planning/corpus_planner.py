@@ -194,13 +194,15 @@ _STRATEGY_PATTERN_TYPE: dict[str, str] = {
     "remove_null_guard":     "null_guard",
 }
 
-# Quality gate pass rate priors from the strategy catalog
+# Quality gate pass rate priors (validator + auditor acceptance probability,
+# AFTER patcher viability filtering in SeedSynthesizer).
+# Updated in Phase 10: remove_null_guard promoted to corpus-admitted (100% gate).
 _STRATEGY_PASS_RATE: dict[str, float] = {
     "alloc_size_undercount": 1.00,
     "insert_premature_free": 1.00,
     "insert_double_free":    0.90,
     "remove_free_call":      0.90,
-    "remove_null_guard":     0.50,   # experimental; low confidence
+    "remove_null_guard":     1.00,
 }
 
 

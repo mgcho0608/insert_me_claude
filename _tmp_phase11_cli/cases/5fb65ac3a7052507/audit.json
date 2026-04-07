@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "run_id": "5fb65ac3a7052507",
+  "seed": 3,
+  "spec_path": "_tmp_phase11_cli\\_plan\\seeds\\cwe401_plan_008.json",
+  "spec_hash": "c73e57e091df2926f9823c08dfb2a2347464dde26fba4d928bd20dee6fbdfbfa",
+  "source_root": "examples\\local_targets\\moderate\\src",
+  "source_hash": "de7a8f35aa77c74f",
+  "pipeline_version": "0.1.0.dev0",
+  "timestamp_utc": "2026-04-07T02:14:02Z",
+  "validation_verdict": {
+    "passed": true,
+    "checks": [
+      {
+        "name": "mutation_applied",
+        "status": "pass",
+        "reason": "1 mutation(s) applied."
+      },
+      {
+        "name": "good_tree_integrity",
+        "status": "pass",
+        "reason": "good/kvstore.c is byte-identical to the original source."
+      },
+      {
+        "name": "bad_tree_changed",
+        "status": "pass",
+        "reason": "bad/kvstore.c contains the expected mutation and differs from good/."
+      },
+      {
+        "name": "mutation_scope",
+        "status": "pass",
+        "reason": "Exactly 1 file changed: kvstore.c"
+      },
+      {
+        "name": "simple_syntax_sanity",
+        "status": "pass",
+        "reason": "Mutated line 40 has balanced parentheses."
+      }
+    ]
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "seed_id": "cwe401_plan_008",
+  "seed": 2,
+  "cwe_id": "CWE-401",
+  "mutation_strategy": "remove_free_call",
+  "target_pattern": {
+    "pattern_type": "free_call",
+    "min_candidate_score": 0.0
+  },
+  "source_constraints": {
+    "max_targets": 1
+  },
+  "metadata": {
+    "tags": [
+      "auto-synthesised",
+      "remove_free_call",
+      "cwe-401"
+    ],
+    "notes": "Auto-synthesised by insert-me plan-corpus. Target: strvec.c:64 (score=0.55) | source: C:\\Users\\User\\insert_me\\examples\\local_targets\\moderate\\src"
+  }
+}

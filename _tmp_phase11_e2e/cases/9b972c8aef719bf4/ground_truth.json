@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "run_id": "9b972c8aef719bf4",
+  "cwe_id": "CWE-416",
+  "spec_id": "cwe416_plan_006",
+  "seed": 7,
+  "mutations": [
+    {
+      "file": "kvstore.c",
+      "line": 43,
+      "mutation_type": "insert_premature_free",
+      "original_fragment": "    memset(kv->buckets, 0, KV_INITIAL_BUCKETS * sizeof(KVEntry *));",
+      "mutated_fragment": "free(kv);",
+      "extra": {
+        "freed_pointer": "kv"
+      }
+    }
+  ],
+  "validation_passed": true
+}

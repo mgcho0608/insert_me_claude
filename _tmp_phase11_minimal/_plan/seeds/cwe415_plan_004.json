@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0",
+  "seed_id": "cwe415_plan_004",
+  "seed": 4,
+  "cwe_id": "CWE-415",
+  "vulnerability_class": "Double Free",
+  "mutation_strategy": "insert_double_free",
+  "target_pattern": {
+    "pattern_type": "free_call",
+    "min_candidate_score": 0.0
+  },
+  "source_constraints": {
+    "max_targets": 1
+  },
+  "metadata": {
+    "tags": [
+      "auto-synthesised",
+      "insert_double_free",
+      "cwe-415"
+    ],
+    "notes": "Auto-synthesised by insert-me plan-corpus. Target: counter.c:43 (score=0.55) | source: C:\\Users\\User\\insert_me\\examples\\local_targets\\minimal\\src"
+  }
+}

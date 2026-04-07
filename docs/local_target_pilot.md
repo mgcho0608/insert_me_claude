@@ -1,11 +1,11 @@
 # Local Target Pilot Guide — insert_me
 
-> **Phase:** 9 + Phase 4c partial  
+> **Phase:** 11 — Local-Target Corpus Realization + Shortfall Diagnostics Hardening
 > **Audience:** Engineers who want to use insert_me on a local, user-provided
 > evaluation-only C/C++ project rather than the bundled sandbox targets.
 >
-> This guide covers the full workflow: preflight inspection, single-case pilot,
-> small batch, quality review, and the decision to scale or revise.
+> This guide covers the full workflow: preflight inspection, count-driven corpus
+> generation, honest shortfall diagnostics, and the criteria for a "good" target.
 
 ---
 
@@ -153,7 +153,7 @@ Key fields:
 | `cwe_id` | `CWE-122`, `CWE-416`, `CWE-415`, or `CWE-401` (corpus-admitted strategies) |
 | `mutation_strategy` | `alloc_size_undercount`, `insert_premature_free`, `insert_double_free`, or `remove_free_call` |
 | `seed` | Integer — controls which candidate is selected; change this to explore different sites |
-| `target_pattern.pattern_type` | `malloc_call` (CWE-122), `pointer_deref` (CWE-416), `free_call` (CWE-415/401) |
+| `target_pattern.pattern_type` | `malloc_call` (CWE-122), `pointer_deref` (CWE-416), `free_call` (CWE-415/401), `null_guard` (CWE-476) |
 
 ---
 
@@ -353,6 +353,66 @@ planned case and reports:
   rejected   : 3
 ```
 
+### Step 5: Interpret the output artifacts
+
+Three diagnostic files are written to `corpus_out/`:
+
+| File | Purpose |
+|---|---|
+| `acceptance_summary.json` | Full per-strategy and per-file breakdown; `requested_count_met`, `shortfall_amount` |
+| `shortfall_report.json` | Unified plan + execution shortfall with attributed categories and explanation |
+| `generation_diagnostics.json` | Execution failure categories: `patcher_noop`, `validator_fail`, etc. |
+| `_plan/corpus_plan.json` | Complete deterministic plan — saved for reruns |
+| `_plan/seeds/*.json` | One synthesised seed JSON per planned case |
+
+**Reading `shortfall_report.json`:**
+
+```json
+{
+  "requested_count": 30,
+  "planned_count": 28,
+  "accepted_count": 25,
+  "requested_count_met": false,
+  "shortfall_amount": 5,
+  "plan_shortfall": {
+    "amount": 2,
+    "categories": { "strategy_limited_few_candidates": 3 }
+  },
+  "execution_shortfall": {
+    "amount": 3,
+    "categories": { "patcher_noop": 2, "validator_fail": 1 }
+  },
+  "shortfall_explanation": "Plan shortfall: 2 case(s) not planned ..."
+}
+```
+
+**Shortfall categories:**
+
+| Category | What it means |
+|---|---|
+| `strategy_blocked_no_candidates` | No valid sites found for this strategy |
+| `strategy_limited_few_candidates` | Strategy found candidates, but fewer than requested (single file, small target) |
+| `concentration_limits` | Per-file or per-function concentration cap hit — too many cases from one location |
+| `target_too_small` | Target has too few candidate sites overall |
+| `sweep_exhausted` | Seed sweep reached max without finding enough unique diverse candidates |
+| `patcher_noop` | Pipeline ran but patcher could not apply a mutation (Seeder picked a site patcher can't handle) |
+| `validator_fail` | Patcher applied a mutation but Validator checks failed |
+| `audit_invalid` | Auditor classified the mutation as INVALID |
+| `pipeline_error` | Exception during pipeline execution |
+
+### Step 6: Rerun from a saved plan
+
+To rerun the execution phase with the same plan (e.g., after a tool fix):
+
+```bash
+# Plan artifacts are in corpus_out/_plan/
+# Re-execute using the batch command:
+insert-me batch \
+  --seed-dir  corpus_out/_plan/seeds/ \
+  --source    /path/to/local/project \
+  --output    corpus_out/cases_rerun/
+```
+
 ---
 
 ## 7. Scaling to Corpus Generation (Manual Workflow)
@@ -442,7 +502,7 @@ inspect-target
 |---|---|---|
 | Reproducibility verification | Formally verified (55/55 PASS, 3 runs each) | User's responsibility via `check_reproducibility.py` |
 | Quality gate | Full quality gate run, documented | User applies same gate; results are local |
-| Corpus admission | Formally corpus-admitted (4 strategies, 55 seeds) | Not part of the bundled accepted corpus |
+| Corpus admission | Formally corpus-admitted (5 strategies, 63 seeds) | Not part of the bundled accepted corpus |
 | Seed files | Committed in `examples/seeds/` | User-managed; not committed to this repo |
 | Suitability confirmation | Pre-verified | Run `inspect-target` before each new target |
 
@@ -453,11 +513,53 @@ reproducible given the same source tree, but they are not included in the offici
 
 ---
 
-## 10. Troubleshooting
+## 10. What Makes a Good Local Target
+
+### 10.1 Target size and diversity requirements
+
+| Capability | Minimum requirement | Recommended |
+|---|---|---|
+| **pilot_single_case** | 1 file, 1+ candidate | Any non-trivial C file |
+| **pilot_small_batch** | 1 file, 5+ candidates in >= 2 functions | 1-3 files, ~100 LOC each |
+| **corpus_generation (10-20 cases)** | 3+ files, each strategy VIABLE | 4-6 files, 300-800 LOC total |
+| **corpus_generation (30+ cases)** | 5+ files, multiple VIABLE strategies | 8+ files, 1000+ LOC |
+
+The **examples/local_targets/moderate/** fixture (4 files, ~340 LOC) demonstrates
+corpus_generation at count=20 reliably: all 5 strategies VIABLE, 10/10 VALID on first run.
+
+The **examples/local_targets/minimal/** fixture (1 file, ~44 LOC) demonstrates honest
+shortfall: all strategies LIMITED, can only plan 8-9 cases at count=15.
+
+### 10.2 Source patterns the seeder needs
+
+| Strategy | Required source pattern |
+|---|---|
+| `alloc_size_undercount` (CWE-122) | `malloc(expr)` with arithmetic in size expression |
+| `insert_premature_free` (CWE-416) | `ptr->field` dereferences with a prior malloc in scope |
+| `insert_double_free` (CWE-415) | `free(ptr)` calls with simple pointer arguments |
+| `remove_free_call` (CWE-401) | `free(ptr)` calls (same as CWE-415 sites) |
+| `remove_null_guard` (CWE-476) | `if (!ptr)` or `if (ptr == NULL)` guards followed by `ptr->field` within 4 lines |
+
+### 10.3 Predictors of NOOP at execution time
+
+Even after planning, execution NOOPs are rare on well-structured targets because
+`generate-corpus` uses **patcher verification** during planning: each synthesized
+candidate is checked against the actual mutation handler before being included in
+the plan.  Execution NOOP remaining causes:
+
+- Guard followed by function call (not `->` dereference) within the lookahead window
+- Complex expressions not matched by the patcher's single-line regex
+- Source encoding issues (BOM, non-UTF-8 bytes)
+
+If NOOPs occur, check `generation_diagnostics.json → execution_failure_categories.patcher_noop`.
+
+---
+
+## 11. Troubleshooting
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| All results NOOP | No compatible target for this strategy + seed integer | Change seed integer or switch strategy |
+| All results NOOP | No compatible target for this strategy + seed integer; or source pattern not matching | Run `inspect-target` to confirm candidate density; change seed or strategy |
 | High NOOP rate in batch | Strategy pattern does not match source style | Run `inspect-target` to confirm candidate density |
 | INVALID audit result | Patcher applied a mutation that failed Validator checks | Check the diff; may be a complex macro or inline pattern |
 | Duplicate `file:line` in batch | Two seeds landed on the same site | Change one seed's integer |

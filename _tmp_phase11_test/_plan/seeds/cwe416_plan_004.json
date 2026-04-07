@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "seed_id": "cwe416_plan_004",
+  "seed": 3,
+  "cwe_id": "CWE-416",
+  "mutation_strategy": "insert_premature_free",
+  "target_pattern": {
+    "pattern_type": "pointer_deref",
+    "min_candidate_score": 0.0
+  },
+  "source_constraints": {
+    "max_targets": 1
+  },
+  "metadata": {
+    "tags": [
+      "auto-synthesised",
+      "insert_premature_free",
+      "cwe-416"
+    ],
+    "notes": "Auto-synthesised by insert-me plan-corpus. Target: kvstore.c:44 (score=0.65) | source: C:\\Users\\User\\insert_me\\examples\\local_targets\\moderate\\src"
+  }
+}

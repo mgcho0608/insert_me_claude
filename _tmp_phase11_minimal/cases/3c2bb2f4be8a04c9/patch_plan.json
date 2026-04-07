@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "plan_id": "plan-3c2bb2f4be8a04c9",
+  "run_id": "3c2bb2f4be8a04c9",
+  "seed_id": "cwe476_plan_007",
+  "seed": 2,
+  "status": "APPLIED",
+  "created_at": "2026-04-07T02:14:13Z",
+  "targets": [
+    {
+      "target_id": "t0001",
+      "file": "counter.c",
+      "line": 31,
+      "mutation_strategy": "remove_null_guard",
+      "candidate_score": 1.0,
+      "context": {
+        "expression": "if (!c) return;",
+        "function_name": "counter_increment",
+        "guarded_pointer": "c"
+      }
+    }
+  ],
+  "skipped_candidates": 3,
+  "source_tree_hash": "9468702101220acb"
+}

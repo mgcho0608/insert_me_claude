@@ -1323,10 +1323,14 @@ def _cmd_generate_corpus(args: argparse.Namespace) -> int:
 
     if dry_run:
         print("[insert-me] --dry-run: skipping batch execution.")
-        # Still write acceptance_summary for dry-run
+        shortfall_cats_dry = _compute_plan_shortfall(plan)
         _write_acceptance_summary(
             output_root, plan, attempted=0, case_outcomes={},
-            shortfall_categories=_compute_plan_shortfall(plan),
+            shortfall_categories=shortfall_cats_dry,
+        )
+        _write_shortfall_report(
+            output_root, plan, attempted=0, case_outcomes={},
+            plan_shortfall_cats=shortfall_cats_dry,
         )
         return 0
 
@@ -1396,11 +1400,14 @@ def _cmd_generate_corpus(args: argparse.Namespace) -> int:
     shortfall_cats = _compute_plan_shortfall(plan)
     _write_acceptance_summary(output_root, plan, total, case_outcomes, shortfall_cats)
     _write_generation_diagnostics(output_root, plan, case_outcomes, shortfall_cats)
+    _write_shortfall_report(output_root, plan, total, case_outcomes, shortfall_cats)
 
     summary_path = output_root / "acceptance_summary.json"
     diag_path = output_root / "generation_diagnostics.json"
+    shortfall_path = output_root / "shortfall_report.json"
     print(f"  acceptance_summary.json    : {summary_path}")
     print(f"  generation_diagnostics.json: {diag_path}")
+    print(f"  shortfall_report.json      : {shortfall_path}")
 
     return 0 if errors == 0 else 1
 
@@ -1487,23 +1494,27 @@ def _write_acceptance_summary(
         else:
             by_file[fname]["rejected"] += 1
 
-    accepted = sum(v["accepted"] for v in by_strategy.values())
+    accepted_count = sum(v["accepted"] for v in by_strategy.values())
     rejected = sum(v["rejected"] for v in by_strategy.values())
     errors   = sum(v["error"] for v in by_strategy.values())
+    shortfall_amount = max(0, plan.requested_count - accepted_count)
+    requested_count_met = accepted_count >= plan.requested_count
 
     summary = {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "source_root": str((output_root / "..").resolve()),
         "requested_count": plan.requested_count,
         "planned_count": plan.planned_count,
         "projected_accepted_count": plan.projected_accepted_count,
         "attempted_count": attempted,
-        "accepted_count": accepted,
+        "accepted_count": accepted_count,
         "revised_count": 0,
         "rejected_count": rejected,
         "error_count": errors,
         "unresolved_count": 0,
-        "honest": plan.planned_count < plan.requested_count,
+        "requested_count_met": requested_count_met,
+        "shortfall_amount": shortfall_amount,
+        "honest": shortfall_amount > 0,
         "shortfall_categories": shortfall_categories,
         "shortfall_message": (
             next((w for w in plan.warnings if "Only" in w and "cases planned" in w), None)
@@ -1516,6 +1527,93 @@ def _write_acceptance_summary(
     output_root.mkdir(parents=True, exist_ok=True)
     (output_root / "acceptance_summary.json").write_text(
         _json.dumps(summary, indent=2), encoding="utf-8"
+    )
+
+
+def _write_shortfall_report(
+    output_root: Path,
+    plan,
+    attempted: int,
+    case_outcomes: dict,
+    plan_shortfall_cats: dict,
+) -> None:
+    """
+    Write shortfall_report.json — unified plan + execution shortfall view.
+
+    Provides a single operator-readable record explaining why the requested
+    count was or was not achieved, with both plan-level and execution-level
+    attribution.
+    """
+    import json as _json
+
+    accepted = sum(
+        1 for o in case_outcomes.values()
+        if o.get("classification") == "VALID" and not o.get("error")
+    )
+
+    # Execution-level shortfall categories (from actual outcomes)
+    exec_cats: dict[str, int] = {}
+    for outcome in case_outcomes.values():
+        cl = outcome.get("classification", "UNKNOWN")
+        err = outcome.get("error")
+        if err:
+            exec_cats["pipeline_error"] = exec_cats.get("pipeline_error", 0) + 1
+        elif cl == "NOOP":
+            exec_cats["patcher_noop"] = exec_cats.get("patcher_noop", 0) + 1
+        elif cl == "INVALID":
+            exec_cats["audit_invalid"] = exec_cats.get("audit_invalid", 0) + 1
+        elif cl == "AMBIGUOUS":
+            exec_cats["audit_ambiguous"] = exec_cats.get("audit_ambiguous", 0) + 1
+        elif cl not in ("VALID", "UNKNOWN"):
+            exec_cats["unknown"] = exec_cats.get("unknown", 0) + 1
+
+    plan_shortfall = max(0, plan.requested_count - plan.planned_count)
+    exec_shortfall = max(0, plan.planned_count - accepted)
+    total_shortfall = max(0, plan.requested_count - accepted)
+
+    # Build human-readable explanation
+    parts = []
+    if plan_shortfall > 0:
+        causes = ", ".join(plan_shortfall_cats.keys()) or "none identified"
+        parts.append(
+            f"Plan shortfall: {plan_shortfall} case(s) not planned "
+            f"(causes: {causes})"
+        )
+    if exec_shortfall > 0:
+        causes = ", ".join(exec_cats.keys()) or "none identified"
+        parts.append(
+            f"Execution shortfall: {exec_shortfall} case(s) planned but not accepted "
+            f"(causes: {causes})"
+        )
+    if not parts:
+        parts.append(
+            f"Requested count ({plan.requested_count}) was achieved "
+            f"with {accepted} accepted case(s)."
+        )
+    explanation = ". ".join(parts) + "."
+
+    report = {
+        "schema_version": "1.0",
+        "requested_count": plan.requested_count,
+        "planned_count": plan.planned_count,
+        "attempted_count": attempted,
+        "accepted_count": accepted,
+        "requested_count_met": accepted >= plan.requested_count,
+        "shortfall_amount": total_shortfall,
+        "plan_shortfall": {
+            "amount": plan_shortfall,
+            "categories": plan_shortfall_cats,
+        },
+        "execution_shortfall": {
+            "amount": exec_shortfall,
+            "categories": exec_cats,
+        },
+        "shortfall_explanation": explanation,
+        "plan_path": str(output_root / "_plan" / "corpus_plan.json"),
+    }
+    output_root.mkdir(parents=True, exist_ok=True)
+    (output_root / "shortfall_report.json").write_text(
+        _json.dumps(report, indent=2), encoding="utf-8"
     )
 
 

@@ -1,0 +1,170 @@
+{
+  "schema_version": "1.0",
+  "source_root": "C:\\Users\\User\\insert_me\\examples\\local_targets\\moderate\\src",
+  "source_hash": "de7a8f35aa77c74f",
+  "requested_count": 10,
+  "planned_count": 10,
+  "projected_accepted_count": 10,
+  "constraints": {
+    "max_per_file": 5,
+    "max_per_function": 2,
+    "max_per_family": null,
+    "allow_strategies": null,
+    "disallow_strategies": null,
+    "min_candidate_score": 0.0,
+    "strict_quality": false
+  },
+  "strategy_allocation": {
+    "alloc_size_undercount": 1,
+    "insert_premature_free": 5,
+    "insert_double_free": 1,
+    "remove_free_call": 1,
+    "remove_null_guard": 2
+  },
+  "suitability": {
+    "alloc_size_undercount": "VIABLE",
+    "insert_premature_free": "VIABLE",
+    "insert_double_free": "VIABLE",
+    "remove_free_call": "VIABLE",
+    "remove_null_guard": "VIABLE"
+  },
+  "cases": [
+    {
+      "case_id": "cwe122_plan_001",
+      "strategy": "alloc_size_undercount",
+      "cwe_id": "CWE-122",
+      "seed_integer": 1,
+      "target_file": "strvec.c",
+      "target_line": 37,
+      "function_name": "strvec_push",
+      "candidate_score": 0.75,
+      "confidence": "high",
+      "seed_file": "seeds\\cwe122_plan_001.json"
+    },
+    {
+      "case_id": "cwe416_plan_002",
+      "strategy": "insert_premature_free",
+      "cwe_id": "CWE-416",
+      "seed_integer": 1,
+      "target_file": "arena.c",
+      "target_line": 32,
+      "function_name": "arena_new",
+      "candidate_score": 0.65,
+      "confidence": "medium",
+      "seed_file": "seeds\\cwe416_plan_002.json"
+    },
+    {
+      "case_id": "cwe416_plan_003",
+      "strategy": "insert_premature_free",
+      "cwe_id": "CWE-416",
+      "seed_integer": 2,
+      "target_file": "ringbuf.c",
+      "target_line": 33,
+      "function_name": "ringbuf_new",
+      "candidate_score": 0.65,
+      "confidence": "medium",
+      "seed_file": "seeds\\cwe416_plan_003.json"
+    },
+    {
+      "case_id": "cwe416_plan_004",
+      "strategy": "insert_premature_free",
+      "cwe_id": "CWE-416",
+      "seed_integer": 3,
+      "target_file": "kvstore.c",
+      "target_line": 44,
+      "function_name": "kvstore_new",
+      "candidate_score": 0.65,
+      "confidence": "medium",
+      "seed_file": "seeds\\cwe416_plan_004.json"
+    },
+    {
+      "case_id": "cwe416_plan_005",
+      "strategy": "insert_premature_free",
+      "cwe_id": "CWE-416",
+      "seed_integer": 4,
+      "target_file": "ringbuf.c",
+      "target_line": 31,
+      "function_name": "ringbuf_new",
+      "candidate_score": 0.65,
+      "confidence": "medium",
+      "seed_file": "seeds\\cwe416_plan_005.json"
+    },
+    {
+      "case_id": "cwe416_plan_006",
+      "strategy": "insert_premature_free",
+      "cwe_id": "CWE-416",
+      "seed_integer": 7,
+      "target_file": "kvstore.c",
+      "target_line": 43,
+      "function_name": "kvstore_new",
+      "candidate_score": 0.65,
+      "confidence": "medium",
+      "seed_file": "seeds\\cwe416_plan_006.json"
+    },
+    {
+      "case_id": "cwe415_plan_007",
+      "strategy": "insert_double_free",
+      "cwe_id": "CWE-415",
+      "seed_integer": 1,
+      "target_file": "strvec.c",
+      "target_line": 25,
+      "function_name": "strvec_new",
+      "candidate_score": 0.55,
+      "confidence": "medium",
+      "seed_file": "seeds\\cwe415_plan_007.json"
+    },
+    {
+      "case_id": "cwe401_plan_008",
+      "strategy": "remove_free_call",
+      "cwe_id": "CWE-401",
+      "seed_integer": 3,
+      "target_file": "kvstore.c",
+      "target_line": 40,
+      "function_name": "kvstore_new",
+      "candidate_score": 0.55,
+      "confidence": "medium",
+      "seed_file": "seeds\\cwe401_plan_008.json"
+    },
+    {
+      "case_id": "cwe476_plan_009",
+      "strategy": "remove_null_guard",
+      "cwe_id": "CWE-476",
+      "seed_integer": 1,
+      "target_file": "arena.c",
+      "target_line": 41,
+      "function_name": "arena_alloc",
+      "candidate_score": 1.0,
+      "confidence": "high",
+      "seed_file": "seeds\\cwe476_plan_009.json"
+    },
+    {
+      "case_id": "cwe476_plan_010",
+      "strategy": "remove_null_guard",
+      "cwe_id": "CWE-476",
+      "seed_integer": 2,
+      "target_file": "ringbuf.c",
+      "target_line": 69,
+      "function_name": "ringbuf_destroy",
+      "candidate_score": 1.0,
+      "confidence": "high",
+      "seed_file": "seeds\\cwe476_plan_010.json"
+    }
+  ],
+  "allocation_summary": {
+    "by_strategy": {
+      "alloc_size_undercount": 1,
+      "insert_premature_free": 5,
+      "insert_double_free": 1,
+      "remove_free_call": 1,
+      "remove_null_guard": 2
+    },
+    "by_file": {
+      "strvec.c": 2,
+      "arena.c": 2,
+      "ringbuf.c": 3,
+      "kvstore.c": 3
+    },
+    "blockers": [],
+    "warnings": []
+  }
+}

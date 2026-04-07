@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "plan_id": "plan-c4ee126c8cca6a7d",
+  "run_id": "c4ee126c8cca6a7d",
+  "seed_id": "cwe416_plan_005",
+  "seed": 4,
+  "status": "APPLIED",
+  "created_at": "2026-04-07T02:14:01Z",
+  "targets": [
+    {
+      "target_id": "t0001",
+      "file": "ringbuf.c",
+      "line": 31,
+      "mutation_strategy": "insert_premature_free",
+      "candidate_score": 0.65,
+      "context": {
+        "expression": "rb->item_size = item_size;",
+        "function_name": "ringbuf_new",
+        "pointer_name": "rb"
+      }
+    }
+  ],
+  "skipped_candidates": 136,
+  "source_tree_hash": "de7a8f35aa77c74f"
+}

@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "run_id": "ec50a5df4806aca9",
+  "seed": 1,
+  "spec_path": "_tmp_phase11_cli\\_plan\\seeds\\cwe122_plan_001.json",
+  "spec_hash": "66f4e30e72538b4b2b6b6ba5c27c7ef2a4723fcb4651159b82e695de35b6fda2",
+  "source_root": "examples\\local_targets\\moderate\\src",
+  "source_hash": "de7a8f35aa77c74f",
+  "pipeline_version": "0.1.0.dev0",
+  "timestamp_utc": "2026-04-07T02:14:01Z",
+  "validation_verdict": {
+    "passed": true,
+    "checks": [
+      {
+        "name": "mutation_applied",
+        "status": "pass",
+        "reason": "1 mutation(s) applied."
+      },
+      {
+        "name": "good_tree_integrity",
+        "status": "pass",
+        "reason": "good/strvec.c is byte-identical to the original source."
+      },
+      {
+        "name": "bad_tree_changed",
+        "status": "pass",
+        "reason": "bad/strvec.c contains the expected mutation and differs from good/."
+      },
+      {
+        "name": "mutation_scope",
+        "status": "pass",
+        "reason": "Exactly 1 file changed: strvec.c"
+      },
+      {
+        "name": "simple_syntax_sanity",
+        "status": "pass",
+        "reason": "Mutated line 37 has balanced parentheses."
+      }
+    ]
+  }
+}

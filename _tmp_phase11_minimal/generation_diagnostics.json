@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0",
+  "source_root": "C:\\Users\\User\\insert_me",
+  "requested_count": 15,
+  "planned_count": 8,
+  "attempted_count": 8,
+  "accepted_count": 8,
+  "plan_shortfall": 7,
+  "execution_shortfall": 0,
+  "plan_shortfall_categories": {
+    "strategy_limited_few_candidates": 5,
+    "concentration_limits": 4
+  },
+  "execution_failure_categories": {},
+  "strategy_suitability": {
+    "alloc_size_undercount": "LIMITED",
+    "insert_premature_free": "LIMITED",
+    "insert_double_free": "LIMITED",
+    "remove_free_call": "LIMITED",
+    "remove_null_guard": "LIMITED"
+  },
+  "plan_warnings": [
+    "Strategy insert_premature_free: only 1/5 unique diverse candidates found after 250 sweep attempts.",
+    "Strategy remove_free_call: only 0/2 unique diverse candidates found after 100 sweep attempts.",
+    "Strategy remove_null_guard: only 3/4 unique diverse candidates found after 200 sweep attempts.",
+    "Only 8 cases planned (requested 15): the target does not have sufficient diverse candidates to reach the requested count at current quality constraints. Consider: adding more source files, relaxing --max-per-file, or lowering --count."
+  ],
+  "plan_blockers": []
+}

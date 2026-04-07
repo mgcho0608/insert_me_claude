@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "run_id": "dcb5f2bd6f548650",
+  "cwe_id": "CWE-415",
+  "spec_id": "cwe415_plan_004",
+  "seed": 4,
+  "mutations": [
+    {
+      "file": "counter.c",
+      "line": 43,
+      "mutation_type": "insert_double_free",
+      "original_fragment": "    free(c);",
+      "mutated_fragment": "free(c);",
+      "extra": {
+        "freed_pointer": "c"
+      }
+    }
+  ],
+  "validation_passed": true
+}

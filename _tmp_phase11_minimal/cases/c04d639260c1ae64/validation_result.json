@@ -1,0 +1,34 @@
+{
+  "schema_version": "1.0",
+  "result_id": "vr-c04d639260c1ae64",
+  "run_id": "c04d639260c1ae64",
+  "plan_id": "plan-c04d639260c1ae64",
+  "overall": "PASS",
+  "checks": [
+    {
+      "name": "mutation_applied",
+      "status": "pass",
+      "reason": "1 mutation(s) applied."
+    },
+    {
+      "name": "good_tree_integrity",
+      "status": "pass",
+      "reason": "good/counter.c is byte-identical to the original source."
+    },
+    {
+      "name": "bad_tree_changed",
+      "status": "pass",
+      "reason": "bad/counter.c contains the expected mutation and differs from good/."
+    },
+    {
+      "name": "mutation_scope",
+      "status": "pass",
+      "reason": "Exactly 1 file changed: counter.c"
+    },
+    {
+      "name": "simple_syntax_sanity",
+      "status": "pass",
+      "reason": "Mutated line 23 has balanced parentheses."
+    }
+  ]
+}

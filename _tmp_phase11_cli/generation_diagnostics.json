@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "source_root": "C:\\Users\\User\\insert_me",
+  "requested_count": 10,
+  "planned_count": 10,
+  "attempted_count": 10,
+  "accepted_count": 10,
+  "plan_shortfall": 0,
+  "execution_shortfall": 0,
+  "plan_shortfall_categories": {},
+  "execution_failure_categories": {},
+  "strategy_suitability": {
+    "alloc_size_undercount": "VIABLE",
+    "insert_premature_free": "VIABLE",
+    "insert_double_free": "VIABLE",
+    "remove_free_call": "VIABLE",
+    "remove_null_guard": "VIABLE"
+  },
+  "plan_warnings": [],
+  "plan_blockers": []
+}
