@@ -1,6 +1,6 @@
 # insert_me Strategy Catalog
 
-> **Phase 15 — multi-target portfolio orchestration + truth closure**  
+> **Phase 15.8 — single source of truth + auto-synced docs**  
 > **Machine-readable form:** `config/strategy_catalog.json` (schema: `schemas/strategy_catalog.schema.json`)
 
 This document lists all mutation strategies that insert_me knows about, with their

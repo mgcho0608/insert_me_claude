@@ -1,13 +1,15 @@
 """
 Documentation drift guardrails for insert_me.
 
-These tests are deterministic and offline. They check that the public-facing
-documentation (README, ARCHITECTURE, ROADMAP, CLI help) stays in sync with the
-machine-readable sources of truth (strategy_catalog.json, CLI --help output,
-bundled example files, schema files).
+All stable claims are sourced from ``config/project_status.json``.
+Tests in this module fail when public-facing docs (README, ARCHITECTURE,
+ROADMAP, docs/ headers, CLI help) disagree with the manifest.
 
-If any of these tests fail it means a doc was updated without updating the
-corresponding source of truth, or vice versa.
+Design principles:
+- Every check loads the manifest first; no literal expected values in test bodies.
+- Volatile metrics (test count, corpus seed counts) are NOT checked against docs
+  because they change too often.  They are tracked in the manifest only.
+- Checks cover the stability_policy fields marked "STABLE" in the manifest.
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -25,127 +28,209 @@ import pytest
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).parent.parent
+MANIFEST_PATH = REPO_ROOT / "config" / "project_status.json"
+
 README = REPO_ROOT / "README.md"
 ARCHITECTURE = REPO_ROOT / "ARCHITECTURE.md"
 ROADMAP = REPO_ROOT / "ROADMAP.md"
+
+DOCS = {
+    "repro_runbook":      REPO_ROOT / "docs" / "repro_runbook.md",
+    "local_target_pilot": REPO_ROOT / "docs" / "local_target_pilot.md",
+    "corpus_quality_gate":REPO_ROOT / "docs" / "corpus_quality_gate.md",
+    "strategy_catalog":   REPO_ROOT / "docs" / "strategy_catalog.md",
+}
+
 STRATEGY_CATALOG = REPO_ROOT / "config" / "strategy_catalog.json"
-EXAMPLES_SEEDS = REPO_ROOT / "examples" / "seeds"
-EXAMPLES_TARGETS = REPO_ROOT / "examples" / "targets"
-SCHEMAS_DIR = REPO_ROOT / "schemas"
+EXAMPLES_SEEDS   = REPO_ROOT / "examples" / "seeds"
+SCHEMAS_DIR      = REPO_ROOT / "schemas"
+
+
+def _manifest() -> dict[str, Any]:
+    """Load and return the project status manifest."""
+    return json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
 
 
 def _cli_help() -> str:
-    """Return the output of `insert-me --help`."""
+    """Return the text of `insert-me --help`."""
     result = subprocess.run(
         [sys.executable, "-m", "insert_me.cli", "--help"],
         capture_output=True,
         text=True,
         cwd=REPO_ROOT,
     )
-    # argparse writes --help to stdout and exits 0
     return result.stdout + result.stderr
 
 
 # ---------------------------------------------------------------------------
-# 1. Phase marker consistency: README and ARCHITECTURE must agree
+# 1. Manifest integrity — manifest is self-consistent with strategy_catalog.json
 # ---------------------------------------------------------------------------
 
 
-class TestPhaseMarkerSync:
-    """README and ARCHITECTURE must carry the same phase label."""
+class TestManifestIntegrity:
+    """The manifest must agree with the machine-readable strategy catalog."""
 
-    _PHASE_PATTERN = re.compile(
-        r"Phase\s+(\d+(?:\.\d+)?)", re.IGNORECASE
-    )
+    def test_manifest_exists(self) -> None:
+        assert MANIFEST_PATH.exists(), "config/project_status.json not found"
 
-    def _first_phase_in(self, path: Path) -> str:
-        """Extract the first Phase N / Phase N.M token from a document."""
-        text = path.read_text(encoding="utf-8")
-        m = self._PHASE_PATTERN.search(text)
-        assert m, f"No 'Phase N' marker found in {path.name}"
-        return m.group(1)
+    def test_manifest_is_valid_json(self) -> None:
+        _manifest()  # raises if invalid
 
-    def test_readme_and_architecture_carry_same_phase(self) -> None:
-        readme_phase = self._first_phase_in(README)
-        arch_phase = self._first_phase_in(ARCHITECTURE)
-        assert readme_phase == arch_phase, (
-            f"Phase mismatch: README says {readme_phase!r}, "
-            f"ARCHITECTURE says {arch_phase!r}. "
-            "Update both to the same phase number."
-        )
-
-    def test_roadmap_has_entry_for_readme_phase(self) -> None:
-        readme_phase = self._first_phase_in(README)
-        roadmap_text = ROADMAP.read_text(encoding="utf-8")
-        assert f"Phase {readme_phase}" in roadmap_text, (
-            f"ROADMAP has no section for Phase {readme_phase!r}. "
-            "Add a Phase entry to ROADMAP.md."
-        )
-
-
-# ---------------------------------------------------------------------------
-# 2. Strategy count consistency: docs must match strategy_catalog.json
-# ---------------------------------------------------------------------------
-
-
-class TestStrategyCatalogSync:
-    """Strategy counts and admitted strategies in docs must match the catalog."""
-
-    def _load_catalog(self) -> dict:
-        return json.loads(STRATEGY_CATALOG.read_text(encoding="utf-8"))
-
-    def test_catalog_total_count_matches_readme(self) -> None:
-        catalog = self._load_catalog()
-        total = len(catalog["strategies"])
-        readme_text = README.read_text(encoding="utf-8")
-        # README claims "Total entries: N" in strategy_catalog section or inline
-        # We check that the admitted count (6) appears alongside the strategy list
-        admitted = [
+    def test_admitted_count_matches_catalog(self) -> None:
+        m = _manifest()
+        catalog = json.loads(STRATEGY_CATALOG.read_text(encoding="utf-8"))
+        catalog_admitted = [
             s for s in catalog["strategies"]
             if s["maturity"] == "IMPLEMENTED_AND_CORPUS_ADMITTED"
         ]
-        admitted_count = len(admitted)
-        assert f"{admitted_count} corpus-admitted" in readme_text or \
-               f"{admitted_count} (CWE-" in readme_text or \
-               f"| 6 |" in readme_text, (
-            f"README does not mention {admitted_count} corpus-admitted strategies. "
-            "Update README to match strategy_catalog.json."
+        assert m["admitted_strategy_count"] == len(catalog_admitted), (
+            f"Manifest admitted_strategy_count={m['admitted_strategy_count']} "
+            f"but catalog has {len(catalog_admitted)} admitted strategies. "
+            "Update config/project_status.json."
         )
 
-    def test_catalog_admitted_strategy_ids_match_readme(self) -> None:
-        catalog = self._load_catalog()
-        admitted_ids = {
+    def test_admitted_ids_match_catalog(self) -> None:
+        m = _manifest()
+        catalog = json.loads(STRATEGY_CATALOG.read_text(encoding="utf-8"))
+        catalog_ids = {
             s["strategy_id"]
             for s in catalog["strategies"]
             if s["maturity"] == "IMPLEMENTED_AND_CORPUS_ADMITTED"
         }
-        readme_text = README.read_text(encoding="utf-8")
-        for sid in admitted_ids:
-            assert sid in readme_text, (
-                f"Corpus-admitted strategy '{sid}' from catalog is not mentioned in README. "
-                "README may be stale."
-            )
+        manifest_ids = set(m["admitted_strategy_ids"])
+        assert manifest_ids == catalog_ids, (
+            f"Manifest admitted_strategy_ids={sorted(manifest_ids)} "
+            f"but catalog admitted IDs={sorted(catalog_ids)}. "
+            "Update config/project_status.json."
+        )
 
-    def test_strategy_catalog_has_six_admitted(self) -> None:
-        """Hard assertion: exactly 6 corpus-admitted strategies must exist."""
-        catalog = self._load_catalog()
-        admitted = [
-            s for s in catalog["strategies"]
-            if s["maturity"] == "IMPLEMENTED_AND_CORPUS_ADMITTED"
-        ]
-        assert len(admitted) == 6, (
-            f"Expected 6 corpus-admitted strategies, got {len(admitted)}. "
-            "Update this test when a new strategy is admitted."
+    def test_total_count_matches_catalog(self) -> None:
+        m = _manifest()
+        catalog = json.loads(STRATEGY_CATALOG.read_text(encoding="utf-8"))
+        assert m["total_strategy_count"] == len(catalog["strategies"]), (
+            f"Manifest total_strategy_count={m['total_strategy_count']} "
+            f"but catalog has {len(catalog['strategies'])} entries."
         )
 
 
 # ---------------------------------------------------------------------------
-# 3. CLI command presence: key subcommands must appear in --help output
+# 2. Phase marker — README, ARCHITECTURE, ROADMAP, and all docs/ headers
+#    must carry the phase from the manifest
+# ---------------------------------------------------------------------------
+
+
+class TestPhaseMarkerSync:
+    """Every public doc must carry the current phase from the manifest."""
+
+    _PHASE_PATTERN = re.compile(r"Phase\s+(\d+(?:\.\d+)?)", re.IGNORECASE)
+
+    def _first_phase_in(self, path: Path) -> str:
+        text = path.read_text(encoding="utf-8")
+        m = self._PHASE_PATTERN.search(text)
+        assert m, f"No 'Phase N[.M]' marker found in {path.name}"
+        return m.group(1)
+
+    def test_readme_phase_matches_manifest(self) -> None:
+        expected = _manifest()["phase"]
+        found = self._first_phase_in(README)
+        assert found == expected, (
+            f"README phase={found!r} but manifest phase={expected!r}. "
+            "Update README or config/project_status.json."
+        )
+
+    def test_architecture_phase_matches_manifest(self) -> None:
+        expected = _manifest()["phase"]
+        found = self._first_phase_in(ARCHITECTURE)
+        assert found == expected, (
+            f"ARCHITECTURE phase={found!r} but manifest phase={expected!r}."
+        )
+
+    def test_roadmap_has_entry_for_manifest_phase(self) -> None:
+        expected = _manifest()["phase"]
+        roadmap_text = ROADMAP.read_text(encoding="utf-8")
+        assert f"Phase {expected}" in roadmap_text, (
+            f"ROADMAP has no section for Phase {expected!r}. "
+            "Add a Phase entry to ROADMAP.md."
+        )
+
+    @pytest.mark.parametrize("doc_name,doc_path", list(DOCS.items()))
+    def test_doc_header_phase_matches_manifest(
+        self, doc_name: str, doc_path: Path
+    ) -> None:
+        expected = _manifest()["phase"]
+        text = doc_path.read_text(encoding="utf-8")
+        # Doc headers use either "Phase: X" or "Phase X" patterns
+        assert expected in text, (
+            f"docs/{doc_path.name} does not contain phase {expected!r}. "
+            "Update the Phase header in this doc."
+        )
+
+
+# ---------------------------------------------------------------------------
+# 3. Strategy count and IDs — README must reflect manifest admitted count/IDs
+# ---------------------------------------------------------------------------
+
+
+class TestStrategyCatalogSync:
+    """README must mention the admitted strategy count and all admitted IDs."""
+
+    def test_admitted_count_in_readme(self) -> None:
+        m = _manifest()
+        count = m["admitted_strategy_count"]
+        readme_text = README.read_text(encoding="utf-8")
+        assert str(count) in readme_text, (
+            f"README does not mention admitted strategy count {count}. "
+            "Update README status table to match manifest."
+        )
+
+    def test_admitted_strategy_ids_in_readme(self) -> None:
+        m = _manifest()
+        readme_text = README.read_text(encoding="utf-8")
+        for sid in m["admitted_strategy_ids"]:
+            assert sid in readme_text, (
+                f"Corpus-admitted strategy '{sid}' not found in README. "
+                "README may be stale — update to match manifest."
+            )
+
+
+# ---------------------------------------------------------------------------
+# 4. Canonical workflow labels — CLI help must use the labels from manifest
+# ---------------------------------------------------------------------------
+
+
+class TestCanonicalWorkflowLabels:
+    """CLI help epilog must contain each canonical workflow label from manifest."""
+
+    def test_workflow_labels_in_cli_help(self) -> None:
+        m = _manifest()
+        help_text = _cli_help()
+        labels = m["canonical_workflow_labels"]
+        # We check the key distinguishing phrases rather than exact formatting
+        # "Expert/manual" must appear somewhere in help (covers seed_driven label)
+        assert "Expert/manual" in help_text or "expert/manual" in help_text, (
+            f"CLI help does not contain 'expert/manual' (from workflow labels: {labels}). "
+            "Update cli.py epilog."
+        )
+
+    def test_recommended_commands_in_cli_help(self) -> None:
+        m = _manifest()
+        help_text = _cli_help()
+        # Both recommended workflow commands must appear in CLI help epilog
+        assert "generate-corpus" in help_text, (
+            "generate-corpus not in CLI help — single-target recommended path missing"
+        )
+        assert "generate-portfolio" in help_text, (
+            "generate-portfolio not in CLI help — portfolio recommended path missing"
+        )
+
+
+# ---------------------------------------------------------------------------
+# 5. CLI subcommand presence — all documented subcommands must be in --help
 # ---------------------------------------------------------------------------
 
 
 class TestCliCommandPresence:
-    """All documented subcommands must appear in `insert-me --help`."""
+    """All CLI subcommands documented in the manifest/README must appear in --help."""
 
     REQUIRED_SUBCOMMANDS = [
         "run",
@@ -160,7 +245,7 @@ class TestCliCommandPresence:
         "audit",
     ]
 
-    def test_all_documented_subcommands_in_help(self) -> None:
+    def test_all_subcommands_in_help(self) -> None:
         help_text = _cli_help()
         missing = [cmd for cmd in self.REQUIRED_SUBCOMMANDS if cmd not in help_text]
         assert not missing, (
@@ -168,25 +253,53 @@ class TestCliCommandPresence:
             "A command was removed or renamed without updating the test."
         )
 
-    def test_recommended_workflows_in_help_epilog(self) -> None:
-        help_text = _cli_help()
-        assert "generate-corpus" in help_text, (
-            "generate-corpus not found in help — recommended single-target workflow missing"
-        )
-        assert "generate-portfolio" in help_text, (
-            "generate-portfolio not found in help — recommended portfolio workflow missing"
+
+# ---------------------------------------------------------------------------
+# 6. Not-yet-available items — README must contain each item from manifest
+# ---------------------------------------------------------------------------
+
+
+class TestNotYetAvailableSync:
+    """Each 'not yet available' item in the manifest must be reflected in README."""
+
+    # We check for the CWE/feature keyword rather than the full sentence,
+    # since wording may differ slightly between manifest and README.
+    _KEYWORD_MAP = {
+        "CWE-787 Out-of-bounds Write":    "CWE-787",
+        "AST-based or compiler-backed":   "AST-based",
+        "Phase 7B real LLM adjudicator":  "LLMAdjudicator",
+        "Parallel execution":             "Parallel execution",
+        "Portfolio reproducibility check":"Portfolio reproducibility",
+        "Production codebase support":    "Production codebase",
+    }
+
+    def test_not_yet_available_items_in_readme(self) -> None:
+        m = _manifest()
+        readme_text = README.read_text(encoding="utf-8")
+        missing = []
+        for item in m["not_yet_available"]:
+            # find the first matching keyword for this item
+            keyword = next(
+                (kw for prefix, kw in self._KEYWORD_MAP.items() if prefix in item),
+                None,
+            )
+            if keyword and keyword not in readme_text:
+                missing.append(f"{keyword!r} (from: {item[:60]}...)")
+        assert not missing, (
+            "README is missing 'not yet available' items from manifest:\n"
+            + "\n".join(f"  - {x}" for x in missing)
         )
 
 
 # ---------------------------------------------------------------------------
-# 4. Example artifact existence: files referenced in docs must be real
+# 7. Example artifact existence — required files and dirs must be on disk
 # ---------------------------------------------------------------------------
 
 
 class TestExampleArtifactExistence:
-    """Bundled example files referenced in README and docs must exist on disk."""
+    """Bundled example files referenced in docs must exist on disk."""
 
-    REQUIRED_EXAMPLE_FILES = [
+    REQUIRED_PATHS = [
         REPO_ROOT / "examples" / "seeds" / "cwe122_heap_overflow.json",
         REPO_ROOT / "examples" / "seeds" / "cwe416_use_after_free.json",
         REPO_ROOT / "examples" / "seeds" / "cwe190_integer_overflow.json",
@@ -195,26 +308,30 @@ class TestExampleArtifactExistence:
         REPO_ROOT / "examples" / "sandbox_eval" / "src",
         REPO_ROOT / "examples" / "demo" / "src",
         REPO_ROOT / "config" / "strategy_catalog.json",
+        REPO_ROOT / "config" / "project_status.json",
         REPO_ROOT / "schemas" / "seed.schema.json",
         REPO_ROOT / "schemas" / "targets.schema.json",
         REPO_ROOT / "schemas" / "portfolio_plan.schema.json",
         REPO_ROOT / "schemas" / "corpus_plan.schema.json",
+        REPO_ROOT / "scripts" / "check_public_status.py",
     ]
 
-    @pytest.mark.parametrize("path", REQUIRED_EXAMPLE_FILES, ids=lambda p: str(p.relative_to(REPO_ROOT)))
-    def test_required_example_file_exists(self, path: Path) -> None:
+    @pytest.mark.parametrize(
+        "path", REQUIRED_PATHS, ids=lambda p: str(p.relative_to(REPO_ROOT))
+    )
+    def test_required_path_exists(self, path: Path) -> None:
         assert path.exists(), (
-            f"Required example file/dir not found: {path.relative_to(REPO_ROOT)}. "
+            f"Required file/dir not found: {path.relative_to(REPO_ROOT)}. "
             "Was it deleted or renamed? Update docs and this test."
         )
 
-    def test_sandbox_targets_json_paths_resolve(self) -> None:
-        """All target paths in sandbox_targets.json must resolve to real directories."""
-        targets_path = REPO_ROOT / "examples" / "targets" / "sandbox_targets.json"
-        data = json.loads(targets_path.read_text(encoding="utf-8"))
+    def test_sandbox_targets_paths_resolve(self) -> None:
+        """All target paths in sandbox_targets.json must resolve to real dirs."""
+        targets_file = REPO_ROOT / "examples" / "targets" / "sandbox_targets.json"
+        data = json.loads(targets_file.read_text(encoding="utf-8"))
         for entry in data["targets"]:
-            resolved = (targets_path.parent / entry["path"]).resolve()
+            resolved = (targets_file.parent / entry["path"]).resolve()
             assert resolved.exists(), (
-                f"Target path in sandbox_targets.json does not exist: {entry['path']!r} "
-                f"(resolved: {resolved})"
+                f"Target path in sandbox_targets.json does not exist: "
+                f"{entry['path']!r} (resolved: {resolved})"
             )

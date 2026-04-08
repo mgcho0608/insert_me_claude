@@ -10,14 +10,16 @@
 
 ---
 
-## Current Status — Phase 15.7 (public truth closure + canonical UX closure + documentation drift guardrails)
+## Current Status — Phase 15.8 (single source of truth + auto-synced docs)
+
+> **Stable claims** (phase, strategy count/IDs, canonical workflow labels) are sourced from
+> `config/project_status.json`. Volatile counts (tests, seeds) live there too but are
+> intentionally omitted here — see `scripts/check_public_status.py` for a live report.
 
 | | |
 |---|---|
-| **Phase** | 15.7 — public truth closure · canonical UX closure · documentation drift guardrails |
-| **Tests** | 731 passing, 1 skipped |
+| **Phase** | 15.8 — single source of truth + auto-synced docs |
 | **Corpus-admitted strategies** | 6 (CWE-122/416/415/401/476/190) |
-| **Sandbox seeds** | 76 accepted (56 sandbox_eval + 20 target_b) — 100% reproducible |
 | **Mutation strategies** | `alloc_size_undercount` (CWE-122) · `insert_premature_free` (CWE-416) · `insert_double_free` (CWE-415) · `remove_free_call` (CWE-401) · `remove_null_guard` (CWE-476) · `remove_size_cast` (CWE-190) |
 | **Default mode** | Real patching + validation + audit |
 | **Dry-run mode** | `--dry-run` flag — all artifacts emitted, no source modifications |
@@ -88,7 +90,7 @@ For engineers picking this up for the first time inside an organisation:
 | | |
 |---|---|
 | **What it is** | A Python CLI that inserts known vulnerabilities into C/C++ source trees and produces fully annotated, schema-validated output bundles — single-case, single-target batch, or multi-target portfolio. |
-| **Current maturity** | Phase 15.7 — public truth closure + canonical UX closure + documentation drift guardrails. Full pipeline: 6 corpus-admitted mutation strategies (CWE-122/416/415/401/476/190), planning layer (TargetInspector/SeedSynthesizer/CorpusPlanner/PortfolioPlanner), all CLI subcommands incl. `plan-portfolio` + `generate-portfolio`, 15-entry strategy catalog (6 admitted / 1 planned / 8 candidate), 2 sandbox targets + local-target fixtures, 4 portfolio JSON schemas (portfolio_plan/index/acceptance_summary/shortfall_report), 731 tests. Not production-hardened; alpha-quality. |
+| **Current maturity** | Phase 15.8 — single source of truth + auto-synced docs. Full pipeline: 6 corpus-admitted mutation strategies (CWE-122/416/415/401/476/190), planning layer (TargetInspector/SeedSynthesizer/CorpusPlanner/PortfolioPlanner), all CLI subcommands incl. `plan-portfolio` + `generate-portfolio`, 15-entry strategy catalog (6 admitted / 1 planned / 8 candidate), 2 sandbox targets + local-target fixtures, 4 portfolio JSON schemas, `config/project_status.json` manifest. Not production-hardened; alpha-quality. |
 | **Install path** | `pip install -e .` from source. No PyPI release exists yet. |
 | **Python versions** | 3.11, 3.12 — **CI-tested**. 3.10 — **statically reviewed only** (single shim: `tomllib` → `tomli`). No other version-specific features used. |
 | **Dependencies** | `jsonschema>=4.17` + `tomli>=1.2.0` on Python 3.10 only. No other mandatory runtime dependencies. |

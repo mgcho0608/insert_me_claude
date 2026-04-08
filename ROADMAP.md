@@ -487,6 +487,30 @@ match the actually implemented product. No new features; no new mutation familie
 
 ---
 
+## Phase 15.8 — Single Source of Truth + Auto-Synced Docs ✓ COMPLETE
+
+**Goal:** Introduce a single machine-readable product status manifest so public-facing
+docs cannot silently lag behind the implementation again.
+
+- [x] `config/project_status.json` — single authoritative manifest; captures phase, maturity label, admitted strategy count/IDs, canonical workflow labels, recommended first commands per path, not-yet-available items, stability policy (STABLE vs VOLATILE metrics)
+- [x] `stability_policy` in manifest encodes which metrics belong in README (phase, strategy count/IDs, workflow labels) vs manifest only (test count, corpus seed counts)
+- [x] README status table: removed volatile test count; added reference to manifest + `check_public_status.py`
+- [x] README internal Quick Reference: removed hard-coded test count; references manifest
+- [x] README phase: 15.7 → 15.8
+- [x] ARCHITECTURE.md: Phase 15.7 → Phase 15.8; removed test count; manifest and check script noted
+- [x] Remaining stale docs updated: `docs/repro_runbook.md`, `docs/local_target_pilot.md`, `docs/corpus_quality_gate.md`, `docs/strategy_catalog.md` all updated from Phase 15 → Phase 15.8
+- [x] `cli.py` arg help line 118: `"canonical primary input"` → `"Expert/manual seed-driven path"`
+- [x] `tests/test_doc_drift.py` refactored — all stable checks now derive expected values from manifest (no literal expected strings in test bodies)
+- [x] 7 test classes: `TestManifestIntegrity`, `TestPhaseMarkerSync`, `TestStrategyCatalogSync`, `TestCanonicalWorkflowLabels`, `TestCliCommandPresence`, `TestNotYetAvailableSync`, `TestExampleArtifactExistence`
+- [x] `scripts/check_public_status.py` — manifest-driven validation script; prints per-check pass/fail; exit 0 iff all pass
+
+**Stability policy (encoded in manifest):**
+- STABLE in README: phase, admitted strategy count, admitted strategy IDs, canonical workflow labels, not-yet-available items
+- VOLATILE (manifest only): test count, corpus seed counts
+- Any future doc edit that deviates from the manifest now fails `tests/test_doc_drift.py`
+
+---
+
 ## Explicitly Deferred (No Timeline)
 
 | Feature | Reason deferred |

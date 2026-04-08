@@ -13,15 +13,16 @@ regardless of which optional components are active.
 
 ## Current Implementation Status
 
-**Phase 15.7 complete — public truth closure + canonical UX closure + documentation drift guardrails.**
+**Phase 15.8 complete — single source of truth + auto-synced docs.**
 Full pipeline operational: 6 corpus-admitted mutation strategies (CWE-122/416/415/401/476/190),
 multi-line patcher infrastructure, all CLI subcommands including `insert-me plan-portfolio` and
 `insert-me generate-portfolio` (multi-target corpus orchestration), 2 sandbox targets,
 76-seed accepted corpus (100% reproducible), 4 portfolio JSON schemas
 (portfolio_plan/index/acceptance_summary/shortfall_report — all `additionalProperties: false`),
 corpus_index.json with fingerprints, `scripts/check_plan_stability.py` for fresh-plan
-reproducibility verification, `tests/test_doc_drift.py` for documentation drift guardrails.
-731 tests passing.
+reproducibility verification, `config/project_status.json` as single authoritative status
+manifest, `tests/test_doc_drift.py` (manifest-driven drift checks), `scripts/check_public_status.py`
+for live validation report. Test count is tracked in manifest; not hard-coded in docs.
 
 | Pipeline stage | Status | Notes |
 |---|---|---|

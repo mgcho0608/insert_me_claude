@@ -1,0 +1,82 @@
+{
+  "schema_version": "1.0",
+  "description": "Single authoritative source of truth for insert_me public product status. All public-facing docs and drift checks derive stable claims from this file.",
+
+  "phase": "15.8",
+  "phase_label": "single source of truth + auto-synced docs",
+
+  "maturity_label": "alpha -- offline/evaluation use only; not production-hardened",
+
+  "admitted_strategy_count": 6,
+  "admitted_strategy_ids": [
+    "alloc_size_undercount",
+    "insert_premature_free",
+    "insert_double_free",
+    "remove_free_call",
+    "remove_null_guard",
+    "remove_size_cast"
+  ],
+  "total_strategy_count": 15,
+  "planned_strategy_count": 1,
+  "candidate_strategy_count": 8,
+
+  "canonical_workflow_labels": {
+    "seed_driven":    "expert/manual seed-driven",
+    "single_target":  "single-target target-aware",
+    "portfolio":      "multi-target portfolio"
+  },
+
+  "recommended_onboarding": {
+    "single_target": {
+      "label": "single-target local project (recommended)",
+      "first_commands": [
+        "insert-me inspect-target --source /path/to/c-project",
+        "insert-me generate-corpus --source /path/to/c-project --count 20 --output-root corpus_out/"
+      ]
+    },
+    "portfolio": {
+      "label": "multi-target portfolio (recommended for multiple targets)",
+      "first_commands": [
+        "insert-me generate-portfolio --targets-file examples/targets/sandbox_targets.json --count 20 --output-root portfolio_out/"
+      ]
+    },
+    "expert_manual": {
+      "label": "expert/manual seed-driven (single seed, advanced)",
+      "first_commands": [
+        "insert-me run --seed-file examples/seeds/cwe122_heap_overflow.json --source examples/demo/src"
+      ]
+    }
+  },
+
+  "not_yet_available": [
+    "CWE-787 Out-of-bounds Write (PLANNED -- single remaining planned strategy; broader candidate families also deferred)",
+    "AST-based or compiler-backed patching/validation (future phases; current analysis is lexical/regex only)",
+    "Phase 7B real LLM adjudicator (LLMAdjudicator.adjudicate() raises NotImplementedError; heuristic is production default)",
+    "Parallel execution (generate-corpus and generate-portfolio execute cases sequentially; process-level parallelism deferred)",
+    "Portfolio reproducibility check script (check_portfolio_stability.py not yet built; single-target check_plan_stability.py exists)",
+    "Production codebase support (evaluation-only toy/lab targets only; not a goal for this phase)"
+  ],
+
+  "stability_policy": {
+    "phase":                    "STABLE   -- required in README status table and all doc headers",
+    "admitted_strategy_count":  "STABLE   -- required in README status table",
+    "admitted_strategy_ids":    "STABLE   -- required to appear in README pipeline/strategy section",
+    "canonical_workflow_labels":"STABLE   -- required in CLI help epilog and README workflow table",
+    "not_yet_available":        "STABLE   -- required in README; items must be removed when implemented",
+    "test_count":               "VOLATILE -- tracked in manifest only; must NOT be hard-coded in README or docs",
+    "corpus_seed_counts":       "SEMI-STABLE -- tracked in manifest only; not required in README status table"
+  },
+
+  "corpus_counts": {
+    "sandbox_eval_seeds": 56,
+    "target_b_seeds": 20,
+    "total_accepted_seeds": 76,
+    "note": "Semi-stable. Track here, not in README."
+  },
+
+  "test_counts": {
+    "total_passing": 744,
+    "total_skipped": 1,
+    "note": "Volatile. Track here, not in README or ARCHITECTURE status blocks."
+  }
+}

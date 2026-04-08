@@ -108,14 +108,14 @@ def _build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    # Primary canonical input
+    # Seed file input (expert/manual seed-driven path)
     run_p.add_argument(
         "--seed-file",
         type=Path,
         default=None,
         metavar="PATH",
         help=(
-            "Path to seed JSON file (canonical primary input). "
+            "Path to seed JSON file. Expert/manual seed-driven path. "
             "See seed.schema.json and examples/seeds/. "
             "Mutually exclusive with --seed + --spec."
         ),

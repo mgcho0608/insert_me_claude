@@ -1,6 +1,6 @@
 # Local Target Pilot Guide — insert_me
 
-> **Phase:** 15 — multi-target portfolio orchestration
+> **Phase:** 15.8 — single source of truth + auto-synced docs
 > **Audience:** Engineers who want to use insert_me on a local, user-provided
 > evaluation-only C/C++ project rather than the bundled sandbox targets, or
 > across a portfolio of multiple targets.
