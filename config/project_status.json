@@ -55,6 +55,11 @@
     "Production codebase support (evaluation-only toy/lab targets only; not a goal for this phase)"
   ],
 
+  "newly_available": [
+    "Parallel execution -- --jobs N on generate-corpus and generate-portfolio; ProcessPoolExecutor; --jobs 1 = sequential equivalent; parity enforced by tests/test_parallel.py",
+    "Portfolio stability verification -- scripts/check_portfolio_stability.py; fresh-plan stability, replay stability, sequential-vs-parallel parity checks; writes portfolio_repro_report.json"
+  ],
+
   "workload_classes_manifest": "config/workload_classes.json",
   "support_envelope_doc":      "docs/support_envelope.md",
 
@@ -64,6 +69,7 @@
     "admitted_strategy_ids":    "STABLE   -- required to appear in README pipeline/strategy section",
     "canonical_workflow_labels":"STABLE   -- required in CLI help epilog and README workflow table",
     "not_yet_available":        "STABLE   -- required in README; items must be removed when implemented",
+    "newly_available":          "STABLE   -- items here must appear in README as available; must NOT appear in README not-yet-available section",
     "workload_classes_manifest":"STABLE   -- required file; workload taxonomy + measured benchmarks",
     "support_envelope_doc":     "STABLE   -- required file; target profiles + operating envelope",
     "test_count":               "VOLATILE -- tracked in manifest only; must NOT be hard-coded in README or docs",
@@ -78,7 +84,7 @@
   },
 
   "test_counts": {
-    "total_passing": 786,
+    "total_passing": 788,
     "total_skipped": 1,
     "note": "Volatile. Track here, not in README or ARCHITECTURE status blocks."
   }

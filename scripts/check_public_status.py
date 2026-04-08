@@ -222,14 +222,26 @@ def check_workflow_labels(m: dict, help_text: str, report: Report) -> None:
     )
 
 
+def _readme_not_yet_section() -> str:
+    """Extract text of README's 'What is NOT available yet' section."""
+    import re as _re
+    text = README.read_text(encoding="utf-8")
+    m = _re.search(
+        r'\*\*What is NOT available yet:\*\*(.*?)^---',
+        text,
+        _re.DOTALL | _re.MULTILINE,
+    )
+    return m.group(1) if m else ""
+
+
 def check_not_yet_available(m: dict, report: Report) -> None:
     readme = README.read_text(encoding="utf-8")
+    # Maps manifest not_yet_available item prefix -> keyword to search in README.
+    # Stale entries removed when features are implemented; see check_newly_available().
     keyword_map = {
         "CWE-787 Out-of-bounds Write":    "CWE-787",
         "AST-based or compiler-backed":   "AST-based",
         "Phase 7B real LLM adjudicator":  "LLMAdjudicator",
-        "Parallel execution":             "Parallel execution",
-        "Portfolio reproducibility check":"Portfolio reproducibility",
         "Production codebase support":    "Production codebase",
     }
     for item in m["not_yet_available"]:
@@ -241,6 +253,53 @@ def check_not_yet_available(m: dict, report: Report) -> None:
                 f"README: not-yet-available '{keyword}'",
                 keyword in readme,
                 f"'{keyword}' not found in README 'not yet available' section",
+            )
+
+
+def check_newly_available(m: dict, report: Report) -> None:
+    """Verify that newly_available items are present in README and NOT in the
+    not-yet-available section (the exact drift scenario this script guards against)."""
+    if "newly_available" not in m:
+        report.add(
+            "manifest has newly_available field",
+            False,
+            "manifest is missing 'newly_available' key",
+        )
+        return
+
+    readme = README.read_text(encoding="utf-8")
+    not_yet_section = _readme_not_yet_section()
+
+    # keyword that must appear SOMEWHERE in README (feature is documented as available)
+    presence_map = {
+        "Parallel execution":              "--jobs",
+        "Portfolio stability verification": "check_portfolio_stability",
+    }
+    # old keyword that must NOT appear in the not-yet-available section
+    old_keyword_map = {
+        "Parallel execution":              "Parallel execution",
+        "Portfolio stability verification": "Portfolio reproducibility",
+    }
+
+    for item in m["newly_available"]:
+        present_kw = next(
+            (kw for prefix, kw in presence_map.items() if prefix in item), None
+        )
+        old_kw = next(
+            (kw for prefix, kw in old_keyword_map.items() if prefix in item), None
+        )
+        if present_kw:
+            report.add(
+                f"README: newly-available '{present_kw}' mentioned",
+                present_kw in readme,
+                f"'{present_kw}' not found in README (feature now available)",
+            )
+        if old_kw and not_yet_section:
+            report.add(
+                f"README: '{old_kw}' not in not-yet-available section",
+                old_kw not in not_yet_section,
+                f"'{old_kw}' still appears in README not-yet-available section "
+                f"but is now in manifest newly_available",
             )
 
 
@@ -292,6 +351,10 @@ def print_summary(m: dict, catalog: dict) -> None:
     for key, label in m["canonical_workflow_labels"].items():
         print(f"    {key:15}  {label}")
     print()
+    print("  Newly available (Phase 17):")
+    for item in m.get("newly_available", []):
+        print(f"    + {item[:70]}")
+    print()
     print("  Not yet available:")
     for item in m["not_yet_available"]:
         print(f"    - {item[:70]}")
@@ -335,6 +398,7 @@ def main() -> int:
     check_strategy_sync(m, report)
     check_workflow_labels(m, help_text, report)
     check_not_yet_available(m, report)
+    check_newly_available(m, report)
     check_required_files(report)
 
     passes = sum(1 for r in report.results if r.passed)

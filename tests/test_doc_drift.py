@@ -292,18 +292,36 @@ class TestCliCommandPresence:
 
 
 class TestNotYetAvailableSync:
-    """Each 'not yet available' item in the manifest must be reflected in README."""
+    """Each 'not yet available' item in the manifest must be reflected in README,
+    and each 'newly available' item must NOT appear in the not-yet-available section."""
 
-    # We check for the CWE/feature keyword rather than the full sentence,
-    # since wording may differ slightly between manifest and README.
+    # Maps manifest not_yet_available item prefix -> keyword to search in README.
+    # Stale entries removed when features are implemented; see _NEWLY_AVAILABLE_KEYWORD_MAP.
     _KEYWORD_MAP = {
         "CWE-787 Out-of-bounds Write":    "CWE-787",
         "AST-based or compiler-backed":   "AST-based",
         "Phase 7B real LLM adjudicator":  "LLMAdjudicator",
-        "Parallel execution":             "Parallel execution",
-        "Portfolio reproducibility check":"Portfolio reproducibility",
         "Production codebase support":    "Production codebase",
     }
+
+    # Maps manifest newly_available item prefix -> keyword that must appear in README
+    # (as available) and must NOT appear in README's not-yet-available section.
+    # Mirror of check_public_status.py::check_newly_available().
+    _NEWLY_AVAILABLE_KEYWORD_MAP = {
+        "Parallel execution":             "--jobs",
+        "Portfolio stability verification":"check_portfolio_stability",
+    }
+
+    @staticmethod
+    def _readme_not_yet_section() -> str:
+        """Extract text of README's 'What is NOT available yet' section."""
+        text = README.read_text(encoding="utf-8")
+        m = re.search(
+            r'\*\*What is NOT available yet:\*\*(.*?)^---',
+            text,
+            re.DOTALL | re.MULTILINE,
+        )
+        return m.group(1) if m else ""
 
     def test_not_yet_available_items_in_readme(self) -> None:
         m = _manifest()
@@ -320,6 +338,55 @@ class TestNotYetAvailableSync:
         assert not missing, (
             "README is missing 'not yet available' items from manifest:\n"
             + "\n".join(f"  - {x}" for x in missing)
+        )
+
+    def test_newly_available_items_in_readme(self) -> None:
+        """Each item in manifest newly_available must be mentioned in README."""
+        m = _manifest()
+        if "newly_available" not in m:
+            pytest.skip("manifest has no newly_available field")
+        readme_text = README.read_text(encoding="utf-8")
+        missing = []
+        for item in m["newly_available"]:
+            keyword = next(
+                (kw for prefix, kw in self._NEWLY_AVAILABLE_KEYWORD_MAP.items()
+                 if prefix in item),
+                None,
+            )
+            if keyword and keyword not in readme_text:
+                missing.append(f"{keyword!r} (from: {item[:60]}...)")
+        assert not missing, (
+            "README is missing newly_available items from manifest:\n"
+            + "\n".join(f"  - {x}" for x in missing)
+        )
+
+    def test_newly_available_not_in_not_yet_section(self) -> None:
+        """Items removed from not_yet_available must not still appear in README's
+        'What is NOT available yet' section (the exact drift scenario)."""
+        m = _manifest()
+        if "newly_available" not in m:
+            pytest.skip("manifest has no newly_available field")
+        not_yet_section = self._readme_not_yet_section()
+        assert not_yet_section, "Could not locate 'What is NOT available yet' section in README"
+        stale = []
+        for item in m["newly_available"]:
+            # Check old-style keywords that would have appeared when still unavailable
+            old_keyword_map = {
+                "Parallel execution":              "Parallel execution",
+                "Portfolio stability verification": "Portfolio reproducibility",
+            }
+            old_kw = next(
+                (kw for prefix, kw in old_keyword_map.items() if prefix in item),
+                None,
+            )
+            if old_kw and old_kw in not_yet_section:
+                stale.append(
+                    f"{old_kw!r} still appears in README not-yet-available section "
+                    f"but is now in manifest newly_available (from: {item[:60]}...)"
+                )
+        assert not stale, (
+            "README 'What is NOT available yet' section contains implemented features:\n"
+            + "\n".join(f"  - {x}" for x in stale)
         )
 
 

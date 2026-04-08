@@ -545,6 +545,63 @@ insert-me run --seed-file examples/seeds/cwe122_heap_overflow.json \
 
 ---
 
+### Parallel execution with `--jobs N`
+
+Both `generate-corpus` and `generate-portfolio` accept `--jobs N` to use N parallel
+worker processes (default: all available CPU cores). Use `--jobs 1` for sequential mode.
+
+```bash
+# 4 parallel workers — faster for medium-class targets (700-3000 LOC) at count >= 10
+insert-me generate-corpus --source examples/sandbox_eval/src --count 30 \
+    --output-root corpus_out/ --jobs 4
+
+# Portfolio with parallel execution:
+insert-me generate-portfolio \
+    --targets-file examples/targets/sandbox_targets.json \
+    --count 20 --output-root portfolio_out/ --jobs 4
+
+# Sequential mode — identical output, useful for debugging / parity verification:
+insert-me generate-corpus --source examples/sandbox_eval/src --count 30 \
+    --output-root corpus_out/ --jobs 1
+```
+
+**Parity guarantee:** `--jobs 1` and `--jobs N` produce byte-identical
+`acceptance_summary.json` and the same `acceptance_fingerprint` in `corpus_index.json`
+and `portfolio_index.json`. Enforced by `tests/test_parallel.py`.
+
+**When to use:** medium-class targets (700–3000 LOC) at count >= 10 benefit most
+(Validator consumes 56–60% of per-case time; embarrassingly parallel).
+Tiny targets (<150 LOC) are overhead-bound — parallelism adds no benefit there.
+See `docs/support_envelope.md §8` for full workload-class guidance.
+
+---
+
+### Portfolio stability verification
+
+`scripts/check_portfolio_stability.py` proves that your portfolio setup is reproducible
+across independent runs and that parallel execution produces the same result as sequential:
+
+```bash
+# Quick check (2 fresh runs + replay + parity):
+python scripts/check_portfolio_stability.py \
+    --targets-file examples/targets/sandbox_targets.json \
+    --count 20
+
+# Full report with 3 fresh runs, written to portfolio_repro_report.json:
+python scripts/check_portfolio_stability.py \
+    --targets-file examples/targets/sandbox_targets.json \
+    --count 20 --runs 3 --output portfolio_repro_report.json
+```
+
+Three checks:
+1. **Fresh-plan stability** — N independent runs produce the same acceptance fingerprint.
+2. **Replay stability** — `--from-plan` replay matches the fresh-run fingerprint.
+3. **Sequential-vs-parallel parity** — `--jobs 1` and `--jobs 2` produce the same fingerprint.
+
+Exit code 0 = all passed; 1 = one or more checks failed; 2 = config error.
+
+---
+
 ## Quick Start
 
 ```bash
