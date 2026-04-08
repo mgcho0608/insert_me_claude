@@ -1,7 +1,7 @@
 # Corpus Quality Gate — insert_me
 
 > **Version:** 1.3  
-> **Phase:** 15.8 — single source of truth + auto-synced docs  
+> **Phase:** 16 -- workload characterization + support envelope  
 > **Applies to:** Seeded cases generated from evaluation-only targets (sandbox, local, and portfolio)
 
 This document defines the formal acceptance rubric for every case in the insert_me corpus.  

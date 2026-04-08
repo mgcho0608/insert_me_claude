@@ -1,0 +1,54 @@
+{
+  "schema_version": "1.0",
+  "phase": "16",
+  "seed_file": "examples\\seeds\\sandbox\\cwe416_sb_001.json",
+  "source": "examples\\sandbox_eval\\src",
+  "source_workload_class": "medium",
+  "runs": 3,
+  "stages": {
+    "seeder": {
+      "mean_ms": 34.61,
+      "min_ms": 30.12,
+      "max_ms": 42.53,
+      "all_ms": [
+        42.53,
+        30.12,
+        31.17
+      ]
+    },
+    "patcher": {
+      "mean_ms": 22.4,
+      "min_ms": 19.44,
+      "max_ms": 26.21,
+      "all_ms": [
+        26.21,
+        21.56,
+        19.44
+      ]
+    },
+    "validator": {
+      "mean_ms": 135.58,
+      "min_ms": 132.1,
+      "max_ms": 138.51,
+      "all_ms": [
+        136.13,
+        138.51,
+        132.1
+      ]
+    },
+    "auditor": {
+      "mean_ms": 54.59,
+      "min_ms": 20.1,
+      "max_ms": 122.83,
+      "all_ms": [
+        122.83,
+        20.84,
+        20.1
+      ]
+    }
+  },
+  "pipeline_total_mean_ms": 247.18,
+  "dominant_stage": "validator",
+  "dominant_stage_pct": 54.8,
+  "bottleneck_note": "'validator' consumed 54.8% of pipeline time (135.6ms / 247.2ms)"
+}

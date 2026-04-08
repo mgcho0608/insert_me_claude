@@ -2,8 +2,8 @@
   "schema_version": "1.0",
   "description": "Single authoritative source of truth for insert_me public product status. All public-facing docs and drift checks derive stable claims from this file.",
 
-  "phase": "15.8",
-  "phase_label": "single source of truth + auto-synced docs",
+  "phase": "16",
+  "phase_label": "workload characterization + support envelope",
 
   "maturity_label": "alpha -- offline/evaluation use only; not production-hardened",
 
@@ -75,7 +75,7 @@
   },
 
   "test_counts": {
-    "total_passing": 744,
+    "total_passing": 765,
     "total_skipped": 1,
     "note": "Volatile. Track here, not in README or ARCHITECTURE status blocks."
   }

@@ -1,0 +1,164 @@
+{
+  "schema_version": "1.0",
+  "phase": "16",
+  "description": "Machine-readable workload taxonomy for insert_me evaluation-only C/C++ targets. Used by characterize_workloads.py and support_envelope.md.",
+
+  "classification_algorithm": "Primary axis is LOC (total source lines). File count is secondary. Inspect suitability tier (corpus_generation, pilot_small_batch, pilot_single) is the target-side confirmation.",
+
+  "classes": {
+    "tiny": {
+      "label": "tiny",
+      "loc_max": 149,
+      "files_max": 2,
+      "inspect_tier_expected": "pilot_single_only",
+      "effective_capacity_range": [0, 8],
+      "recommended_max_count": 5,
+      "support_level": "PILOT_ONLY",
+      "support_label": "pilot only -- honest shortfall expected above recommended_max_count",
+      "primary_use": "single-case manual experiments; not suitable for batch corpus generation",
+      "parallelization_benefit": "negligible -- bottleneck is capacity, not throughput"
+    },
+    "small": {
+      "label": "small",
+      "loc_min": 150,
+      "loc_max": 699,
+      "files_min": 2,
+      "files_max": 6,
+      "inspect_tier_expected": "corpus_generation",
+      "effective_capacity_range": [8, 30],
+      "recommended_max_count": 20,
+      "support_level": "SUPPORTED_PILOT",
+      "support_label": "supported -- pilot to small-corpus; mild shortfall possible above ~20",
+      "primary_use": "small corpora 5-20 cases; multi-target portfolio starter",
+      "parallelization_benefit": "low -- per-case time 150-200ms; sequential is fast enough"
+    },
+    "medium": {
+      "label": "medium",
+      "loc_min": 700,
+      "loc_max": 3000,
+      "files_min": 4,
+      "files_max": 15,
+      "inspect_tier_expected": "corpus_generation",
+      "effective_capacity_range": [30, 160],
+      "recommended_max_count": 60,
+      "support_level": "RECOMMENDED",
+      "support_label": "recommended -- primary corpus generation target class",
+      "primary_use": "primary corpus generation 20-60 cases; portfolio multi-target with small targets",
+      "parallelization_benefit": "moderate -- 200-260ms/case; 50-case corpus takes ~15s sequential"
+    },
+    "large_phase16": {
+      "label": "large (phase 16 projection)",
+      "loc_min": 3001,
+      "files_min": 15,
+      "inspect_tier_expected": "corpus_generation",
+      "effective_capacity_range": [160, null],
+      "recommended_max_count": null,
+      "support_level": "OUT_OF_SCOPE_PHASE16",
+      "support_label": "projected only -- not validated in phase 16; expect validator bottleneck to dominate",
+      "primary_use": "future phase; parallelization likely required before this class is practical",
+      "parallelization_benefit": "high -- validator scales with source size; parallelism would be impactful"
+    }
+  },
+
+  "known_targets": {
+    "minimal": {
+      "path": "examples/local_targets/minimal/src",
+      "workload_class": "tiny",
+      "files": 1,
+      "loc_approx": 44,
+      "max_supportable": 17,
+      "viable_strategies": [],
+      "limited_strategies": ["alloc_size_undercount", "insert_premature_free", "insert_double_free", "remove_free_call", "remove_null_guard"],
+      "total_admitted_candidates": 25,
+      "inspect_tier": "pilot_single_only",
+      "concentration_risk": "HIGH -- 100% in one file",
+      "support_level": "PILOT_ONLY",
+      "notes": "Reference tiny target. 1-file concentration triggers honest shortfall above count=3."
+    },
+    "demo": {
+      "path": "examples/demo/src",
+      "workload_class": "tiny",
+      "files": 2,
+      "loc_approx": 80,
+      "max_supportable": 15,
+      "viable_strategies": [],
+      "limited_strategies": ["alloc_size_undercount", "insert_premature_free", "insert_double_free", "remove_free_call", "remove_null_guard"],
+      "total_admitted_candidates": 15,
+      "inspect_tier": "pilot_small_batch",
+      "concentration_risk": "OK -- 2 files, balanced",
+      "support_level": "PILOT_ONLY",
+      "notes": "Primary expert/manual demo fixture. 2 files, low capacity. Good for run --seed-file demos."
+    },
+    "moderate": {
+      "path": "examples/local_targets/moderate/src",
+      "workload_class": "small",
+      "files": 4,
+      "loc_approx": 339,
+      "max_supportable": 83,
+      "viable_strategies": ["alloc_size_undercount", "insert_premature_free", "insert_double_free", "remove_free_call", "remove_null_guard"],
+      "limited_strategies": [],
+      "total_admitted_candidates": 218,
+      "inspect_tier": "corpus_generation",
+      "concentration_risk": "OK -- 4 files, acceptable",
+      "support_level": "SUPPORTED_PILOT",
+      "notes": "Reference small target. Good first corpus target for new users."
+    },
+    "target_b": {
+      "path": "examples/sandbox_targets/target_b/src",
+      "workload_class": "small",
+      "files": 3,
+      "loc_approx": 666,
+      "max_supportable": 75,
+      "viable_strategies": ["alloc_size_undercount", "insert_premature_free", "insert_double_free", "remove_free_call", "remove_null_guard"],
+      "limited_strategies": [],
+      "total_admitted_candidates": 334,
+      "inspect_tier": "corpus_generation",
+      "concentration_risk": "OK -- 3 files, borderline",
+      "support_level": "SUPPORTED_PILOT",
+      "notes": "Compact but dense small target. Higher LOC/file than moderate."
+    },
+    "sandbox_eval": {
+      "path": "examples/sandbox_eval/src",
+      "workload_class": "medium",
+      "files": 6,
+      "loc_approx": 1402,
+      "max_supportable": 160,
+      "viable_strategies": ["alloc_size_undercount", "insert_premature_free", "insert_double_free", "remove_free_call", "remove_null_guard", "remove_size_cast"],
+      "limited_strategies": [],
+      "total_admitted_candidates": 758,
+      "inspect_tier": "corpus_generation",
+      "concentration_risk": "LOW -- 6 files, well-distributed",
+      "support_level": "RECOMMENDED",
+      "notes": "Primary medium reference target. All 6 admitted strategies viable. Recommended for corpus generation benchmarks."
+    }
+  },
+
+  "stage_timing_benchmarks": {
+    "note": "Approximate median times from 5-run measurement on reference hardware. All values in milliseconds.",
+    "per_pipeline_case": {
+      "tiny_minimal":    {"seeder": 1.3, "patcher": 9.7, "validator": 12.3, "auditor": 53.2, "total": 76.6},
+      "small_moderate":  {"seeder": 8.8, "patcher": 14.3, "validator": 58.1, "auditor": 22.9, "total": 104.1},
+      "medium_sandbox_eval": {"seeder": 37.3, "patcher": 24.4, "validator": 138.4, "auditor": 29.3, "total": 229.4}
+    },
+    "dominant_stage_by_class": {
+      "tiny":   "auditor (schema validation overhead dominates at small file count)",
+      "small":  "validator (file I/O for tree comparison)",
+      "medium": "validator (file I/O for tree comparison -- 60% of pipeline time)"
+    },
+    "bottleneck_finding": "Validator (file I/O for bad/good tree comparison) is the dominant stage for small and medium targets, consuming 56-60% of per-case pipeline time. It scales with source tree size. Seeder scales with candidate pool size."
+  },
+
+  "workflow_timing_benchmarks": {
+    "note": "Approximate wall-clock times including subprocess startup. Single run.",
+    "inspect_target_ms": {
+      "tiny_minimal": 155, "small_moderate": 174, "medium_sandbox_eval": 231
+    },
+    "plan_corpus_ms": {
+      "tiny_minimal_count5": 454, "small_moderate_count10": 258, "medium_sandbox_eval_count20": 1293
+    },
+    "generate_corpus_per_case_ms": {
+      "tiny_minimal": 573, "small_moderate": 191, "medium_sandbox_eval": 261
+    },
+    "planning_note": "plan-corpus is O(count * strategies * candidates). For tiny targets with few candidates, planning can take longer than generation due to exhaustive sweep and honest shortfall resolution."
+  }
+}

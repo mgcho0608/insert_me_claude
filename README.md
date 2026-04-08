@@ -10,15 +10,15 @@
 
 ---
 
-## Current Status — Phase 15.8 (single source of truth + auto-synced docs)
+## Current Status — Phase 16 (workload characterization + support envelope)
 
 > **Stable claims** (phase, strategy count/IDs, canonical workflow labels) are sourced from
 > `config/project_status.json`. Volatile counts (tests, seeds) live there too but are
-> intentionally omitted here — see `scripts/check_public_status.py` for a live report.
+> intentionally omitted here -- see `scripts/check_public_status.py` for a live report.
 
 | | |
 |---|---|
-| **Phase** | 15.8 — single source of truth + auto-synced docs |
+| **Phase** | 16 -- workload characterization + support envelope |
 | **Corpus-admitted strategies** | 6 (CWE-122/416/415/401/476/190) |
 | **Mutation strategies** | `alloc_size_undercount` (CWE-122) · `insert_premature_free` (CWE-416) · `insert_double_free` (CWE-415) · `remove_free_call` (CWE-401) · `remove_null_guard` (CWE-476) · `remove_size_cast` (CWE-190) |
 | **Default mode** | Real patching + validation + audit |

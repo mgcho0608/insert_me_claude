@@ -13,16 +13,19 @@ regardless of which optional components are active.
 
 ## Current Implementation Status
 
-**Phase 15.8 complete — single source of truth + auto-synced docs.**
+**Phase 16 complete -- workload characterization + support envelope.**
 Full pipeline operational: 6 corpus-admitted mutation strategies (CWE-122/416/415/401/476/190),
 multi-line patcher infrastructure, all CLI subcommands including `insert-me plan-portfolio` and
 `insert-me generate-portfolio` (multi-target corpus orchestration), 2 sandbox targets,
 76-seed accepted corpus (100% reproducible), 4 portfolio JSON schemas
-(portfolio_plan/index/acceptance_summary/shortfall_report — all `additionalProperties: false`),
+(portfolio_plan/index/acceptance_summary/shortfall_report -- all `additionalProperties: false`),
 corpus_index.json with fingerprints, `scripts/check_plan_stability.py` for fresh-plan
 reproducibility verification, `config/project_status.json` as single authoritative status
 manifest, `tests/test_doc_drift.py` (manifest-driven drift checks), `scripts/check_public_status.py`
-for live validation report. Test count is tracked in manifest; not hard-coded in docs.
+for live validation report. `config/workload_classes.json` defines tiny/small/medium/large workload
+taxonomy with measured benchmarks; `scripts/characterize_workloads.py` and
+`scripts/profile_pipeline_stage.py` measure per-stage pipeline timing; `docs/support_envelope.md`
+documents the Phase 16 operating envelope. Test count is tracked in manifest; not hard-coded in docs.
 
 | Pipeline stage | Status | Notes |
 |---|---|---|

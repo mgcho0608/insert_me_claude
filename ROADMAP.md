@@ -511,6 +511,25 @@ docs cannot silently lag behind the implementation again.
 
 ---
 
+## Phase 16 — Workload Characterization + Support Envelope ✓ COMPLETE
+
+**Goal:** Measure and document the practical operating envelope of insert_me on evaluation-only
+C/C++ targets; produce machine-readable support artifacts.
+
+- [x] `config/workload_classes.json` -- machine-readable workload taxonomy: tiny/small/medium/large_phase16 classes with LOC/file thresholds, support levels, recommended max counts, known target assignments, and stage timing benchmarks
+- [x] `scripts/profile_pipeline_stage.py` -- times each pipeline stage (Seeder/Patcher/Validator/Auditor) individually using the Python API; produces `stage_timing_report.json`
+- [x] `scripts/characterize_workloads.py` -- runs inspect/plan/(optionally) generate on all 5 bundled fixtures; produces `workload_report.json`, `support_matrix.json`, `target_classification.json`
+- [x] `docs/support_envelope.md` -- workload class table, 5 target profiles, stage bottleneck analysis, per-class recommendations, parallelisation assessment
+- [x] `tests/test_characterization.py` -- 21 lightweight regression checks (manifest integrity, classification algorithm, profile_pipeline_stage artifact structure, characterize_workloads artifact structure); timing values NOT asserted
+- [x] Phase marker updated to 16 throughout: README, ARCHITECTURE.md, ROADMAP.md, docs/corpus_quality_gate.md, config/project_status.json
+- [x] `config/project_status.json` phase_label: "workload characterization + support envelope"
+
+**Key finding:** Validator (file I/O for bad/good tree comparison) is the dominant pipeline stage
+for small/medium targets (56-60% of per-case time). Parallelisation at the process level is the
+recommended next step for throughput scaling.
+
+---
+
 ## Explicitly Deferred (No Timeline)
 
 | Feature | Reason deferred |
