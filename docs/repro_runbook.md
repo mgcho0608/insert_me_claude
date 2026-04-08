@@ -1,6 +1,6 @@
 # Reproducibility Runbook — insert_me Corpus Generation
 
-> **Phase:** 15.8 — single source of truth + auto-synced docs  
+> **Phase:** 16 -- workload characterization + support envelope  
 > **Audience:** Engineers reproducing or extending the sandbox corpus, or using the
 > planning layer on a local evaluation-only target project.
 >

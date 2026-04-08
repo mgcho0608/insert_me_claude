@@ -1,6 +1,6 @@
 # insert_me Strategy Catalog
 
-> **Phase 15.8 — single source of truth + auto-synced docs**  
+> **Phase 16 -- workload characterization + support envelope**  
 > **Machine-readable form:** `config/strategy_catalog.json` (schema: `schemas/strategy_catalog.schema.json`)
 
 This document lists all mutation strategies that insert_me knows about, with their

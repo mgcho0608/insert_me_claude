@@ -309,11 +309,15 @@ class TestExampleArtifactExistence:
         REPO_ROOT / "examples" / "demo" / "src",
         REPO_ROOT / "config" / "strategy_catalog.json",
         REPO_ROOT / "config" / "project_status.json",
+        REPO_ROOT / "config" / "workload_classes.json",
+        REPO_ROOT / "docs" / "support_envelope.md",
         REPO_ROOT / "schemas" / "seed.schema.json",
         REPO_ROOT / "schemas" / "targets.schema.json",
         REPO_ROOT / "schemas" / "portfolio_plan.schema.json",
         REPO_ROOT / "schemas" / "corpus_plan.schema.json",
         REPO_ROOT / "scripts" / "check_public_status.py",
+        REPO_ROOT / "scripts" / "characterize_workloads.py",
+        REPO_ROOT / "scripts" / "profile_pipeline_stage.py",
     ]
 
     @pytest.mark.parametrize(
@@ -335,3 +339,51 @@ class TestExampleArtifactExistence:
                 f"Target path in sandbox_targets.json does not exist: "
                 f"{entry['path']!r} (resolved: {resolved})"
             )
+
+
+# ---------------------------------------------------------------------------
+# 8. Phase 16 artifact integrity — workload characterization files are wired in
+# ---------------------------------------------------------------------------
+
+
+class TestPhase16ArtifactIntegrity:
+    """Phase 16 characterization artifacts must be present and cross-referenced."""
+
+    def test_workload_classes_manifest_valid_json(self) -> None:
+        path = REPO_ROOT / "config" / "workload_classes.json"
+        assert path.exists(), "config/workload_classes.json not found"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        assert "classes" in data, "workload_classes.json missing 'classes' key"
+        assert "known_targets" in data, "workload_classes.json missing 'known_targets' key"
+
+    def test_project_status_references_workload_classes(self) -> None:
+        m = json.loads(
+            (REPO_ROOT / "config" / "project_status.json").read_text(encoding="utf-8")
+        )
+        assert "workload_classes_manifest" in m, (
+            "project_status.json missing 'workload_classes_manifest' field -- "
+            "add a pointer to config/workload_classes.json"
+        )
+
+    def test_project_status_references_support_envelope(self) -> None:
+        m = json.loads(
+            (REPO_ROOT / "config" / "project_status.json").read_text(encoding="utf-8")
+        )
+        assert "support_envelope_doc" in m, (
+            "project_status.json missing 'support_envelope_doc' field -- "
+            "add a pointer to docs/support_envelope.md"
+        )
+
+    def test_support_envelope_referenced_in_local_target_pilot(self) -> None:
+        text = (REPO_ROOT / "docs" / "local_target_pilot.md").read_text(encoding="utf-8")
+        assert "support_envelope" in text, (
+            "docs/local_target_pilot.md does not reference support_envelope.md. "
+            "Add a cross-reference so users can find detailed target profiles."
+        )
+
+    def test_support_envelope_referenced_in_readme(self) -> None:
+        text = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        assert "support_envelope" in text, (
+            "README.md does not reference docs/support_envelope.md. "
+            "Add a cross-reference in the target sizing section."
+        )

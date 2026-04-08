@@ -528,6 +528,32 @@ C/C++ targets; produce machine-readable support artifacts.
 for small/medium targets (56-60% of per-case time). Parallelisation at the process level is the
 recommended next step for throughput scaling.
 
+**Phase 16.1 -- Public Truth Closure + Characterization Artifact Sync ✓ COMPLETE**
+- [x] All stale Phase 15.8 headers updated to Phase 16 across all public docs
+- [x] `config/project_status.json` -- added `workload_classes_manifest` and `support_envelope_doc` reference fields; stability_policy updated with STABLE entries for both
+- [x] README Internal Quick Reference: maturity row updated to Phase 16 + workload characterization; target sizing quick reference table added; workload class guidance visible to new users
+- [x] `docs/local_target_pilot.md` -- new section 1.4: workload class table with recommended counts and workflow guidance per class; cross-reference to `docs/support_envelope.md`
+- [x] `scripts/check_public_status.py` -- 4 new required-file checks (workload_classes.json, support_envelope.md, characterize_workloads.py, profile_pipeline_stage.py); now 37 checks total
+- [x] `tests/test_doc_drift.py` -- 4 new paths in REQUIRED_PATHS; new `TestPhase16ArtifactIntegrity` class (5 checks: workload manifest valid JSON, manifest references both Phase 16 files, support_envelope cross-referenced from local_target_pilot and README)
+
+**Next evidence-based decision after Phase 16:**
+
+The workload characterization data gives a concrete basis for the next architectural
+question: **is process-level parallelism justified?**
+
+Evidence from Phase 16 measurements:
+- Validator consumes 56-60% of per-case pipeline time for small/medium targets
+- A 50-case medium corpus (~229ms/case) takes ~11.5 seconds single-threaded
+- Validator is embarrassingly parallel (no shared state across cases)
+- Auditor I/O is also per-case with no contention
+
+The data supports: process-level parallelism in `generate-corpus` / `generate-portfolio`
+would yield ~55-60% throughput improvement for small/medium targets at the cost of
+added complexity and non-deterministic ordering of output bundles.
+
+**This is the leading candidate for Phase 17 unless a correctness or feature gap is
+identified as higher priority.**
+
 ---
 
 ## Explicitly Deferred (No Timeline)

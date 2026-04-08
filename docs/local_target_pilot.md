@@ -1,6 +1,6 @@
 # Local Target Pilot Guide — insert_me
 
-> **Phase:** 15.8 — single source of truth + auto-synced docs
+> **Phase:** 16 -- workload characterization + support envelope
 > **Audience:** Engineers who want to use insert_me on a local, user-provided
 > evaluation-only C/C++ project rather than the bundled sandbox targets, or
 > across a portfolio of multiple targets.
@@ -52,6 +52,34 @@ projects become practical.  For now, stick to evaluation-only targets.
 
 insert_me's Seeder and Patcher are tuned for C/C++ (`malloc`, `free`, pointer
 dereferences, null guards).  Other languages are outside scope for this phase.
+
+---
+
+### 1.4 Workload classes — know your target size before you start
+
+insert_me classifies targets by source file count and approximate LOC into four
+workload classes. The class determines which workflow to use and what corpus counts
+are realistic. These thresholds are advisory; `inspect-target` gives the authoritative
+suitability verdict for a specific source tree.
+
+| Class | Files | LOC | Support level | Recommended max `--count` | Best workflow |
+|---|---|---|---|---|---|
+| **tiny** | 1-2 | <150 | PILOT ONLY | 5 | `run --seed-file` or `batch`; skip `generate-corpus` |
+| **small** | 2-6 | 150-699 | SUPPORTED (pilot to corpus-starter) | 20 | `generate-corpus --count 10-20` |
+| **medium** | 4-15 | 700-3000 | RECOMMENDED (primary corpus target) | 60 | `generate-corpus --count 20-60`; portfolio for multiple |
+| **large** | 15+ | >3000 | OUT OF SCOPE -- Phase 16 | n/a | Not supported in this phase |
+
+**When to prefer portfolio mode over single-target mode:**
+Use `generate-portfolio` when you have two or more small or medium targets.
+Portfolio mode applies global diversity constraints and gives you a unified shortfall
+report across all targets in a single command.
+
+**Requesting more cases than the class supports will not fail** — it triggers honest
+shortfall: insert_me plans what it can and reports the gap. Still, staying within the
+recommended max avoids concentration warnings and produces cleaner corpora.
+
+Full target profiles for all five bundled fixtures (including measured per-case timing)
+are in `docs/support_envelope.md`.
 
 ---
 

@@ -215,9 +215,13 @@ def check_required_files(report: Report) -> None:
     required = [
         REPO_ROOT / "config" / "project_status.json",
         REPO_ROOT / "config" / "strategy_catalog.json",
+        REPO_ROOT / "config" / "workload_classes.json",
+        REPO_ROOT / "docs" / "support_envelope.md",
         REPO_ROOT / "examples" / "seeds" / "cwe122_heap_overflow.json",
         REPO_ROOT / "examples" / "targets" / "sandbox_targets.json",
         REPO_ROOT / "scripts" / "check_public_status.py",
+        REPO_ROOT / "scripts" / "characterize_workloads.py",
+        REPO_ROOT / "scripts" / "profile_pipeline_stage.py",
         REPO_ROOT / "schemas" / "seed.schema.json",
         REPO_ROOT / "schemas" / "portfolio_plan.schema.json",
     ]

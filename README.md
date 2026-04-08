@@ -90,12 +90,13 @@ For engineers picking this up for the first time inside an organisation:
 | | |
 |---|---|
 | **What it is** | A Python CLI that inserts known vulnerabilities into C/C++ source trees and produces fully annotated, schema-validated output bundles — single-case, single-target batch, or multi-target portfolio. |
-| **Current maturity** | Phase 15.8 — single source of truth + auto-synced docs. Full pipeline: 6 corpus-admitted mutation strategies (CWE-122/416/415/401/476/190), planning layer (TargetInspector/SeedSynthesizer/CorpusPlanner/PortfolioPlanner), all CLI subcommands incl. `plan-portfolio` + `generate-portfolio`, 15-entry strategy catalog (6 admitted / 1 planned / 8 candidate), 2 sandbox targets + local-target fixtures, 4 portfolio JSON schemas, `config/project_status.json` manifest. Not production-hardened; alpha-quality. |
+| **Current maturity** | Phase 16 -- workload characterization + support envelope. Full pipeline: 6 corpus-admitted mutation strategies (CWE-122/416/415/401/476/190), planning layer (TargetInspector/SeedSynthesizer/CorpusPlanner/PortfolioPlanner), all CLI subcommands incl. `plan-portfolio` + `generate-portfolio`, 15-entry strategy catalog (6 admitted / 1 planned / 8 candidate), 2 sandbox targets + local-target fixtures, 4 portfolio JSON schemas, `config/project_status.json` manifest, `config/workload_classes.json` workload taxonomy, `docs/support_envelope.md` operating envelope. Not production-hardened; alpha-quality. |
 | **Install path** | `pip install -e .` from source. No PyPI release exists yet. |
 | **Python versions** | 3.11, 3.12 — **CI-tested**. 3.10 — **statically reviewed only** (single shim: `tomllib` → `tomli`). No other version-specific features used. |
 | **Dependencies** | `jsonschema>=4.17` + `tomli>=1.2.0` on Python 3.10 only. No other mandatory runtime dependencies. |
 | **Network access** | None required for core operation. All schema validation ships with the package. |
 | **License** | **Undecided.** See `NOTICE.txt`. Internal/research use only. Do not redistribute without explicit permission. |
+| **Target sizing** | tiny (<150 LOC, ≤2 files): PILOT ONLY, max 5 cases · small (150-699 LOC): SUPPORTED, max 20 · medium (700-3000 LOC): RECOMMENDED, max 60 · large: OUT OF SCOPE. See `docs/support_envelope.md` for full profiles. |
 | **First command** | Single-case expert: `pip install -e . && insert-me run --seed-file examples/seeds/cwe122_heap_overflow.json --source examples/demo/src` — or for a count-driven corpus: `insert-me generate-corpus --source examples/sandbox_eval/src --count 10` — or for multi-target: `insert-me generate-portfolio --targets-file examples/targets/sandbox_targets.json --count 20` |
 
 **What to expect from a run today:**
@@ -110,7 +111,6 @@ For engineers picking this up for the first time inside an organisation:
 - Parallel execution — single-threaded only; `generate-corpus` and `generate-portfolio` execute cases sequentially
 - Portfolio reproducibility check script — `check_plan_stability.py` covers single-target fresh-plan stability; a `check_portfolio_stability.py` equivalent does not exist yet
 - Production codebase support — not a goal for this phase; evaluation-only toy/lab targets only
-- Real internal LLM adjudicator — heuristic offline adjudicator is the production default; LLM path deferred to Phase 7B
 
 ---
 
@@ -215,6 +215,22 @@ prefer `--seed-file PATH`. The two forms are mutually exclusive.
 | Multi-target corpus with global count | Pattern 3 (`generate-portfolio`) |
 | Reproducible replay of a portfolio | Pattern 3 (`generate-portfolio --from-plan`) |
 | Checking target suitability before committing | Pattern 2/3 (`inspect-target`) |
+
+### Target sizing quick reference
+
+insert_me classifies targets by file count and LOC. Use this table to choose realistic
+`--count` values before running. Full profiles with per-case timing are in
+[`docs/support_envelope.md`](docs/support_envelope.md).
+
+| Workload class | Files | LOC | Recommended max `--count` | Support level |
+|---|---|---|---|---|
+| **tiny** | 1-2 | <150 | 5 | PILOT ONLY — use `run --seed-file`; skip `generate-corpus` |
+| **small** | 2-6 | 150-699 | 20 | SUPPORTED — corpus-starter |
+| **medium** | 4-15 | 700-3000 | 60 | RECOMMENDED — primary corpus target |
+| **large** | 15+ | >3000 | — | OUT OF SCOPE — Phase 16 |
+
+Run `insert-me inspect-target --source /path/to/project` first — it gives the
+authoritative suitability verdict for your specific source tree.
 
 ---
 
