@@ -348,6 +348,7 @@ class TestExampleArtifactExistence:
         REPO_ROOT / "schemas" / "portfolio_plan.schema.json",
         REPO_ROOT / "schemas" / "corpus_plan.schema.json",
         REPO_ROOT / "scripts" / "check_public_status.py",
+        REPO_ROOT / "scripts" / "check_portfolio_stability.py",
         REPO_ROOT / "scripts" / "characterize_workloads.py",
         REPO_ROOT / "scripts" / "profile_pipeline_stage.py",
     ]

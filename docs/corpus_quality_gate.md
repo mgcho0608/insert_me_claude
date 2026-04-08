@@ -1,7 +1,7 @@
 # Corpus Quality Gate — insert_me
 
 > **Version:** 1.3  
-> **Phase:** 16 -- workload characterization + support envelope  
+> **Phase:** 17 -- process-level parallelism + portfolio stability proof  
 > **Applies to:** Seeded cases generated from evaluation-only targets (sandbox, local, and portfolio)
 
 This document defines the formal acceptance rubric for every case in the insert_me corpus.  

@@ -556,6 +556,34 @@ identified as higher priority.**
 
 ---
 
+## Phase 17 — Process-Level Parallelism + Portfolio Stability Proof ✓ COMPLETE
+
+**Goal:** Add `--jobs N` parallelism to `generate-corpus` and `generate-portfolio` using
+`ProcessPoolExecutor`; add `check_portfolio_stability.py` for multi-target reproducibility
+verification; prove sequential-vs-parallel parity with dedicated tests.
+
+- [x] `--jobs N` argument on `generate-corpus` and `generate-portfolio` (default: all CPU cores; `--jobs 1` = sequential)
+- [x] `_execute_single_case_worker(task: dict)` — module-level picklable worker function for process-pool dispatch (Windows `spawn` compatible)
+- [x] `_execute_plan_cases()` rewritten to support both sequential (`jobs <= 1`) and parallel (`jobs > 1`) modes
+- [x] Parallel mode: dispatches all cases via `ProcessPoolExecutor`; collects results into `case_outcomes` dict; prints + writes results in canonical plan order after all futures complete
+- [x] Deterministic artifact output: fingerprints sort their inputs; `case_outcomes` keyed by `case_id` (order-independent); `--jobs 1` and `--jobs N` produce byte-identical `acceptance_summary.json`, `corpus_index.json`, `portfolio_index.json`
+- [x] `scripts/check_portfolio_stability.py` — three-check verification script: fresh-plan stability, replay stability, sequential-vs-parallel parity; writes `portfolio_repro_report.json`; exit 0/1/2
+- [x] `tests/test_parallel.py` — `TestCorpusParallelParity` (3 tests), `TestPortfolioParallelParity` (3 tests), `TestPortfolioStabilityScript` (3 tests)
+- [x] `config/project_status.json`: phase → 17; removed "Parallel execution" and "Portfolio reproducibility check script" from `not_yet_available`
+- [x] README, ARCHITECTURE.md, ROADMAP.md, `docs/support_envelope.md`, `docs/repro_runbook.md` truth-synced to Phase 17
+
+**Parity guarantee (enforced by tests):**
+`--jobs 1` (sequential) and `--jobs N` (parallel) produce identical `accepted_count`,
+`rejected_count`, `planned_count`, and `acceptance_fingerprint` for both corpus and portfolio
+generation. Replay (`--from-plan`) with parallel execution matches fresh sequential fingerprint.
+
+**Not changed:**
+- Planning layer remains single-threaded and deterministic
+- No new mutation strategies
+- No LLM integration
+
+---
+
 ## Explicitly Deferred (No Timeline)
 
 | Feature | Reason deferred |

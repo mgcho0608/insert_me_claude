@@ -1,6 +1,6 @@
 # Reproducibility Runbook — insert_me Corpus Generation
 
-> **Phase:** 16 -- workload characterization + support envelope  
+> **Phase:** 17 -- process-level parallelism + portfolio stability proof  
 > **Audience:** Engineers reproducing or extending the sandbox corpus, or using the
 > planning layer on a local evaluation-only target project.
 >
@@ -619,4 +619,82 @@ The replay skips re-planning and re-executes the exact same cases.
 | `no_viable_targets` | All targets returned zero effective capacity |
 | `experimental_strategy_excluded` | Experimental strategies excluded from corpus |
 | `sweep_exhausted` | All candidates consumed; count still short |
+
+---
+
+## Parallel Execution Mode (Phase 17)
+
+`generate-corpus` and `generate-portfolio` support `--jobs N` for process-level
+parallelism. Planning remains sequential; only the case-execution loop is parallelised.
+
+### Parity guarantee
+
+`--jobs 1` (sequential) and `--jobs N` (parallel) produce **identical** artifacts:
+- `acceptance_summary.json` — same `accepted_count`, `rejected_count`, `planned_count`
+- `corpus_index.json` / `portfolio_index.json` — same `acceptance_fingerprint`
+- All per-case output bundles — byte-identical content (same seed + source = same result)
+
+The console output order differs (parallel mode prints results in canonical plan order
+after all workers complete), but all written artifacts are identical.
+
+### Using parallel mode
+
+```bash
+# Use all available CPU cores (default when --jobs is omitted):
+insert-me generate-corpus \
+    --source examples/sandbox_eval/src \
+    --count 30 \
+    --output-root corpus_out/
+
+# Explicitly request 4 parallel workers:
+insert-me generate-corpus \
+    --source examples/sandbox_eval/src \
+    --count 30 \
+    --output-root corpus_out/ --jobs 4
+
+# Sequential mode (for debugging or parity verification):
+insert-me generate-corpus \
+    --source examples/sandbox_eval/src \
+    --count 30 \
+    --output-root corpus_out/ --jobs 1
+```
+
+Portfolio generation uses the same flag:
+
+```bash
+insert-me generate-portfolio \
+    --targets-file examples/targets/sandbox_targets.json \
+    --count 20 \
+    --output-root portfolio_out/ --jobs 4
+```
+
+### Portfolio stability verification (check_portfolio_stability.py)
+
+Verifies three properties across fresh and parallel runs:
+
+```bash
+python scripts/check_portfolio_stability.py \
+    --targets-file examples/targets/sandbox_targets.json \
+    --count 20 \
+    --runs 3 \
+    --output portfolio_repro_report.json
+```
+
+Three checks:
+1. **Fresh-plan stability** — N independent `generate-portfolio` runs produce the same
+   `acceptance_fingerprint` and `portfolio_fingerprint`.
+2. **Replay stability** — `--from-plan` replay matches the fresh-run acceptance fingerprint.
+3. **Sequential-vs-parallel parity** — `--jobs 1` and `--jobs 2` produce the same fingerprints.
+
+Exit codes: `0` = all passed, `1` = one or more checks failed, `2` = configuration error.
+
+### Reproducibility table update (Phase 17)
+
+| Layer | Guaranteed reproducible? | Parallel-invariant? | Artifact |
+|---|---|---|---|
+| Planning (`plan-corpus` / `plan-portfolio`) | YES | N/A (always sequential) | `corpus_plan.json`, `portfolio_plan.json` |
+| Generation (`generate-corpus --jobs N`) | YES | YES | all 5 pipeline artifacts per case |
+| Corpus index (`corpus_index.json`) | YES | YES | `acceptance_fingerprint` is order-independent |
+| Portfolio index (`portfolio_index.json`) | YES | YES | `acceptance_fingerprint` is order-independent |
+| Quality gate classification | YES | YES | `audit_result.json` ACCEPT/REJECT |
 

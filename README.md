@@ -10,7 +10,7 @@
 
 ---
 
-## Current Status — Phase 16 (workload characterization + support envelope)
+## Current Status — Phase 17 (process-level parallelism + portfolio stability proof)
 
 > **Stable claims** (phase, strategy count/IDs, canonical workflow labels) are sourced from
 > `config/project_status.json`. Volatile counts (tests, seeds) live there too but are
@@ -18,7 +18,7 @@
 
 | | |
 |---|---|
-| **Phase** | 16 -- workload characterization + support envelope |
+| **Phase** | 17 -- process-level parallelism + portfolio stability proof |
 | **Corpus-admitted strategies** | 6 (CWE-122/416/415/401/476/190) |
 | **Mutation strategies** | `alloc_size_undercount` (CWE-122) · `insert_premature_free` (CWE-416) · `insert_double_free` (CWE-415) · `remove_free_call` (CWE-401) · `remove_null_guard` (CWE-476) · `remove_size_cast` (CWE-190) |
 | **Default mode** | Real patching + validation + audit |
@@ -90,7 +90,7 @@ For engineers picking this up for the first time inside an organisation:
 | | |
 |---|---|
 | **What it is** | A Python CLI that inserts known vulnerabilities into C/C++ source trees and produces fully annotated, schema-validated output bundles — single-case, single-target batch, or multi-target portfolio. |
-| **Current maturity** | Phase 16 -- workload characterization + support envelope. Full pipeline: 6 corpus-admitted mutation strategies (CWE-122/416/415/401/476/190), planning layer (TargetInspector/SeedSynthesizer/CorpusPlanner/PortfolioPlanner), all CLI subcommands incl. `plan-portfolio` + `generate-portfolio`, 15-entry strategy catalog (6 admitted / 1 planned / 8 candidate), 2 sandbox targets + local-target fixtures, 4 portfolio JSON schemas, `config/project_status.json` manifest, `config/workload_classes.json` workload taxonomy, `docs/support_envelope.md` operating envelope. Not production-hardened; alpha-quality. |
+| **Current maturity** | Phase 17 -- process-level parallelism + portfolio stability proof. Full pipeline: 6 corpus-admitted mutation strategies (CWE-122/416/415/401/476/190), planning layer (TargetInspector/SeedSynthesizer/CorpusPlanner/PortfolioPlanner), all CLI subcommands incl. `plan-portfolio` + `generate-portfolio`, `--jobs N` parallel execution on both `generate-corpus` and `generate-portfolio`, `scripts/check_portfolio_stability.py` for multi-target reproducibility verification, 15-entry strategy catalog (6 admitted / 1 planned / 8 candidate), 2 sandbox targets + local-target fixtures, 4 portfolio JSON schemas, `config/project_status.json` manifest, `config/workload_classes.json` workload taxonomy, `docs/support_envelope.md` operating envelope. Not production-hardened; alpha-quality. |
 | **Install path** | `pip install -e .` from source. No PyPI release exists yet. |
 | **Python versions** | 3.11, 3.12 — **CI-tested**. 3.10 — **statically reviewed only** (single shim: `tomllib` → `tomli`). No other version-specific features used. |
 | **Dependencies** | `jsonschema>=4.17` + `tomli>=1.2.0` on Python 3.10 only. No other mandatory runtime dependencies. |
@@ -108,8 +108,6 @@ For engineers picking this up for the first time inside an organisation:
 - Additional mutation strategies (CWE-787 Out-of-bounds Write) — the single remaining PLANNED entry; broader candidate families also deferred
 - AST-based or compiler-backed patching/validation — future phases; current analysis is lexical/regex only
 - Phase 7B: real LLM adjudicator — placeholder exists; `LLMAdjudicator.adjudicate()` raises `NotImplementedError`
-- Parallel execution — single-threaded only; `generate-corpus` and `generate-portfolio` execute cases sequentially
-- Portfolio reproducibility check script — `check_plan_stability.py` covers single-target fresh-plan stability; a `check_portfolio_stability.py` equivalent does not exist yet
 - Production codebase support — not a goal for this phase; evaluation-only toy/lab targets only
 
 ---
@@ -472,6 +470,7 @@ any small/medium evaluation-only C/C++ project (see "Target sizing quick referen
 insert-me inspect-target --source examples/sandbox_eval/src
 
 # Step 2: generate a 10-case corpus (plan + execute in one command)
+# Add --jobs N to use N parallel worker processes (default: all CPU cores)
 insert-me generate-corpus \
     --source examples/sandbox_eval/src \
     --count 10 \

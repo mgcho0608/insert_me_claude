@@ -2,8 +2,8 @@
   "schema_version": "1.0",
   "description": "Single authoritative source of truth for insert_me public product status. All public-facing docs and drift checks derive stable claims from this file.",
 
-  "phase": "16",
-  "phase_label": "workload characterization + support envelope",
+  "phase": "17",
+  "phase_label": "process-level parallelism + portfolio stability proof",
 
   "maturity_label": "alpha -- offline/evaluation use only; not production-hardened",
 
@@ -52,8 +52,6 @@
     "CWE-787 Out-of-bounds Write (PLANNED -- single remaining planned strategy; broader candidate families also deferred)",
     "AST-based or compiler-backed patching/validation (future phases; current analysis is lexical/regex only)",
     "Phase 7B real LLM adjudicator (LLMAdjudicator.adjudicate() raises NotImplementedError; heuristic is production default)",
-    "Parallel execution (generate-corpus and generate-portfolio execute cases sequentially; process-level parallelism deferred)",
-    "Portfolio reproducibility check script (check_portfolio_stability.py not yet built; single-target check_plan_stability.py exists)",
     "Production codebase support (evaluation-only toy/lab targets only; not a goal for this phase)"
   ],
 
@@ -80,7 +78,7 @@
   },
 
   "test_counts": {
-    "total_passing": 776,
+    "total_passing": 786,
     "total_skipped": 1,
     "note": "Volatile. Track here, not in README or ARCHITECTURE status blocks."
   }

@@ -253,6 +253,7 @@ def check_required_files(report: Report) -> None:
         REPO_ROOT / "examples" / "seeds" / "cwe122_heap_overflow.json",
         REPO_ROOT / "examples" / "targets" / "sandbox_targets.json",
         REPO_ROOT / "scripts" / "check_public_status.py",
+        REPO_ROOT / "scripts" / "check_portfolio_stability.py",
         REPO_ROOT / "scripts" / "characterize_workloads.py",
         REPO_ROOT / "scripts" / "profile_pipeline_stage.py",
         REPO_ROOT / "schemas" / "seed.schema.json",

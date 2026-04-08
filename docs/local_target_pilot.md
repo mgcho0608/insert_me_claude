@@ -1,6 +1,6 @@
 # Local Target Pilot Guide — insert_me
 
-> **Phase:** 16 -- workload characterization + support envelope
+> **Phase:** 17 -- process-level parallelism + portfolio stability proof
 > **Audience:** Engineers who want to use insert_me on a local, user-provided
 > evaluation-only C/C++ project rather than the bundled sandbox targets, or
 > across a portfolio of multiple targets.

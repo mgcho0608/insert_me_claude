@@ -1,6 +1,6 @@
 # insert_me Support Envelope and Workload Characterization
 
-> **Phase:** 16 -- workload characterization + support envelope  
+> **Phase:** 17 -- process-level parallelism + portfolio stability proof  
 > **Machine-readable form:** `config/workload_classes.json`  
 > **Measurement scripts:** `scripts/characterize_workloads.py`, `scripts/profile_pipeline_stage.py`  
 > **Audience:** Engineers choosing evaluation-only targets and corpus sizes for insert_me
@@ -256,20 +256,66 @@ Portfolio mode does NOT help when:
 
 ---
 
-## 8. Parallelisation Recommendation
+## 8. Parallelisation
 
-Based on phase 16 measurements:
+**Phase 17 implemented process-level parallelism** for `generate-corpus` and
+`generate-portfolio` using `ProcessPoolExecutor`.
 
-**Parallelisation is justified as the next step after phase 16** for users who need
-corpora larger than ~50 cases or latency under 5s for medium-class targets.
+### 8.1 Phase 16 evidence (motivating the decision)
 
-Evidence:
 - Validator consumes 56-60% of per-case pipeline time for small/medium targets
 - Validator is not shared across cases (pure per-case file I/O)
 - 50-case medium corpus: ~13s sequential; projected ~3-4s with 4-way parallelism
 - No architectural blocker: each case is independent; determinism is preserved if worker
-  assignment is deterministic (e.g., sort by case_id before distributing)
+  assignment is deterministic
 
-**Not justified yet for tiny targets** (overhead-bound, not throughput-bound).
+### 8.2 Phase 17 implementation
 
-See `ROADMAP.md` for the Phase 17 parallelisation proposal.
+Use `--jobs N` on any `generate-corpus` or `generate-portfolio` invocation:
+
+```bash
+# Use all available CPU cores (default):
+insert-me generate-corpus --source examples/sandbox_eval/src --count 30 \
+    --output-root corpus_out/
+
+# Use exactly 4 worker processes:
+insert-me generate-corpus --source examples/sandbox_eval/src --count 30 \
+    --output-root corpus_out/ --jobs 4
+
+# Sequential mode (equivalent to --jobs 1, useful for debugging):
+insert-me generate-corpus --source examples/sandbox_eval/src --count 30 \
+    --output-root corpus_out/ --jobs 1
+```
+
+### 8.3 Determinism guarantee
+
+`--jobs 1` and `--jobs N` produce **identical** `acceptance_summary.json`,
+`corpus_index.json`, and `portfolio_index.json` artifacts. The `acceptance_fingerprint`
+is identical regardless of job count. This is enforced by `tests/test_parallel.py`.
+
+### 8.4 Workload class suitability for parallelism
+
+| Class | Parallel benefit | Notes |
+|---|---|---|
+| tiny | Low | Overhead-bound (Auditor JSON I/O dominates); not a good parallelism target |
+| small | Moderate | Validator 56% of pipeline; useful at count >= 10 |
+| medium | High | Validator 60% of pipeline; ~4x speedup with 4 workers on a 30+ case corpus |
+| large | Projected high | Not validated in Phase 16/17; parallelism expected to scale further |
+
+**Not justified for tiny targets** (overhead-bound, not throughput-bound). Use `--jobs 1`
+or omit `--jobs` for tiny targets with count <= 5.
+
+### 8.5 Portfolio stability verification
+
+Use `scripts/check_portfolio_stability.py` to verify that your portfolio setup is
+reproducible across runs and that parallel execution produces the same results as sequential:
+
+```bash
+python scripts/check_portfolio_stability.py \
+    --targets-file examples/targets/sandbox_targets.json \
+    --count 20
+```
+
+Checks: fresh-plan stability (2 independent runs match), replay stability (replay matches
+fresh), sequential-vs-parallel parity (`--jobs 1` vs `--jobs 2` produce same fingerprint).
+Writes `portfolio_repro_report.json`. Exit 0 = all passed.

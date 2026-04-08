@@ -13,19 +13,23 @@ regardless of which optional components are active.
 
 ## Current Implementation Status
 
-**Phase 16 complete -- workload characterization + support envelope.**
+**Phase 17 complete -- process-level parallelism + portfolio stability proof.**
 Full pipeline operational: 6 corpus-admitted mutation strategies (CWE-122/416/415/401/476/190),
 multi-line patcher infrastructure, all CLI subcommands including `insert-me plan-portfolio` and
 `insert-me generate-portfolio` (multi-target corpus orchestration), 2 sandbox targets,
 76-seed accepted corpus (100% reproducible), 4 portfolio JSON schemas
 (portfolio_plan/index/acceptance_summary/shortfall_report -- all `additionalProperties: false`),
 corpus_index.json with fingerprints, `scripts/check_plan_stability.py` for fresh-plan
-reproducibility verification, `config/project_status.json` as single authoritative status
-manifest, `tests/test_doc_drift.py` (manifest-driven drift checks), `scripts/check_public_status.py`
-for live validation report. `config/workload_classes.json` defines tiny/small/medium/large workload
-taxonomy with measured benchmarks; `scripts/characterize_workloads.py` and
-`scripts/profile_pipeline_stage.py` measure per-stage pipeline timing; `docs/support_envelope.md`
-documents the Phase 16 operating envelope. Test count is tracked in manifest; not hard-coded in docs.
+reproducibility verification, `scripts/check_portfolio_stability.py` for multi-target
+portfolio stability verification (fresh-plan, replay, sequential-vs-parallel parity),
+`--jobs N` flag on `generate-corpus` and `generate-portfolio` for process-level parallelism
+(deterministic artifact output regardless of job count), `config/project_status.json` as single
+authoritative status manifest, `tests/test_doc_drift.py` (manifest-driven drift checks),
+`scripts/check_public_status.py` for live validation report. `config/workload_classes.json`
+defines tiny/small/medium/large workload taxonomy with measured benchmarks;
+`scripts/characterize_workloads.py` and `scripts/profile_pipeline_stage.py` measure per-stage
+pipeline timing; `docs/support_envelope.md` documents the operating envelope and parallelism
+assessment. Test count is tracked in manifest; not hard-coded in docs.
 
 | Pipeline stage | Status | Notes |
 |---|---|---|
@@ -36,9 +40,9 @@ documents the Phase 16 operating envelope. Test count is tracked in manifest; no
 | Evaluator | **Complete** (Phase 7A) | Optional separate step; compares detector reports against ground truth |
 | Adjudicator | **Phase 7B-prep** | `HeuristicAdjudicator` (offline default) · `DisabledAdjudicator` · `LLMAdjudicator` placeholder |
 | LLM Adapter | Interface only | `NoOpAdapter` always available; LLM enrichment (labels.json) deferred to Phase 7B |
-| Corpus tooling | **Phase 8–15** | `scripts/generate_corpus.py` · `scripts/check_reproducibility.py` · `scripts/check_plan_stability.py` · `insert-me batch` · `insert-me inspect-target` · `insert-me plan-corpus` · `insert-me generate-corpus` (incl. `--from-plan` replay) · `corpus_index.json` with fingerprints |
+| Corpus tooling | **Phase 8–17** | `scripts/generate_corpus.py` · `scripts/check_reproducibility.py` · `scripts/check_plan_stability.py` · `scripts/check_portfolio_stability.py` · `insert-me batch` · `insert-me inspect-target` · `insert-me plan-corpus` · `insert-me generate-corpus` (incl. `--from-plan` replay, `--jobs N` parallel) · `corpus_index.json` with fingerprints |
 | Planning layer (single-target) | **Phase 9/11/12** | `src/insert_me/planning/` -- `TargetInspector`, `SeedSynthesizer`, `CorpusPlanner` (incl. `from_dict()` for replay); count-driven; deterministic; suitability tiers VIABLE/LIMITED/BLOCKED |
-| Portfolio layer (multi-target) | **Phase 15** | `src/insert_me/planning/portfolio.py` -- `PortfolioPlanner`, `PortfolioPlan`, `PortfolioConstraints`, `load_targets_file`; proportional allocation; global diversity constraints; `insert-me plan-portfolio` · `insert-me generate-portfolio` (incl. `--from-plan` replay) |
+| Portfolio layer (multi-target) | **Phase 15/17** | `src/insert_me/planning/portfolio.py` -- `PortfolioPlanner`, `PortfolioPlan`, `PortfolioConstraints`, `load_targets_file`; proportional allocation; global diversity constraints; `insert-me plan-portfolio` · `insert-me generate-portfolio` (incl. `--from-plan` replay, `--jobs N` parallel) |
 
 The pipeline orchestrator (`pipeline/__init__.py`) coordinates all four stages.
 Each stage's `run()` method is implemented and called in sequence.
@@ -414,3 +418,38 @@ byte-identical `portfolio_plan.json` and `portfolio_fingerprint`.
 
 **Replay:** `insert-me generate-portfolio --from-plan portfolio_plan.json` re-executes
 the same cases in the same order without re-planning.
+
+---
+
+## Parallel Execution Layer (Phase 17)
+
+`generate-corpus` and `generate-portfolio` both accept a `--jobs N` flag that enables
+process-level parallelism using `concurrent.futures.ProcessPoolExecutor`.
+
+**Design invariants:**
+
+1. **Planning is always sequential.** Only the case-execution loop is parallelised.
+2. **Deterministic output regardless of `--jobs` value.** Results are collected into a
+   `case_outcomes: dict[case_id, outcome]` keyed by the canonical case ID. After all
+   futures complete, results are printed and written in canonical plan order.
+3. **Fingerprints are already order-independent.** `_write_corpus_index` and
+   `_write_acceptance_summary` sort their inputs (accepted_ids, by_strategy keys) before
+   computing fingerprints. Parallel collection order does not affect fingerprint values.
+4. **Worker is a module-level picklable function.** `_execute_single_case_worker(task: dict)`
+   is defined at module level (not a closure) to satisfy the `spawn` start method used on
+   Windows/macOS. It accepts only a plain dict of primitive-typed values + string paths.
+5. **`--jobs 1` is fully equivalent to sequential mode.** Both code paths call
+   `_execute_single_case_worker` with the same arguments. Parity is enforced by
+   `tests/test_parallel.py` (`TestCorpusParallelParity`, `TestPortfolioParallelParity`).
+
+**Portfolio stability verification:**
+
+`scripts/check_portfolio_stability.py` verifies three properties:
+
+- **Fresh-plan stability** — two independent planning runs produce the same portfolio fingerprint.
+- **Replay stability** — replay (`--from-plan`) matches the fresh run's acceptance fingerprint.
+- **Sequential-vs-parallel parity** — `--jobs 1` and `--jobs N` produce identical acceptance
+  fingerprints.
+
+Exit code 0 = all checks passed; 1 = failure; 2 = config error.
+Writes `portfolio_repro_report.json` with machine-readable results.

@@ -53,6 +53,7 @@ Other commands
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -324,7 +325,7 @@ def _build_parser() -> argparse.ArgumentParser:
             type=float,
             default=0.0,
             metavar="SCORE",
-            help="Minimum candidate suitability score (0.0–1.0, default: 0.0).",
+            help="Minimum candidate suitability score (0.0-1.0, default: 0.0).",
         )
         p.add_argument(
             "--strict-quality",
@@ -439,6 +440,17 @@ def _build_parser() -> argparse.ArgumentParser:
         "--dry-run",
         action="store_true",
         help="Plan only; do not execute the pipeline.",
+    )
+    gen_p.add_argument(
+        "--jobs",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Number of worker processes for parallel case execution "
+            "(default: use all available CPU cores). "
+            "Use --jobs 1 for sequential mode (debug / parity checking)."
+        ),
     )
     _add_planning_args(gen_p)
     gen_p.set_defaults(func=_cmd_generate_corpus)
@@ -602,6 +614,17 @@ def _build_parser() -> argparse.ArgumentParser:
         "--dry-run",
         action="store_true",
         help="Plan only; do not execute the pipeline.",
+    )
+    pgen_p.add_argument(
+        "--jobs",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Number of worker processes for parallel case execution "
+            "(default: use all available CPU cores). "
+            "Use --jobs 1 for sequential mode (debug / parity checking)."
+        ),
     )
     _add_portfolio_args(pgen_p)
     pgen_p.set_defaults(func=_cmd_generate_portfolio)
@@ -1604,6 +1627,64 @@ def _cmd_generate_corpus_replay(
     return _finish_generate_corpus(output_root, plan, case_outcomes, "replay", plan_file)
 
 
+def _execute_single_case_worker(task: dict) -> tuple[str, dict]:
+    """
+    Top-level worker function for per-case parallel execution.
+
+    Must be defined at module level (not as a closure or nested function)
+    so that it is picklable by the multiprocessing spawn start method used
+    on Windows and macOS.
+
+    Accepts a plain dict of picklable primitives; returns (case_id, outcome).
+    """
+    import json as _json
+    from pathlib import Path as _Path
+    from insert_me.config import load_config, apply_cli_overrides
+    from insert_me.pipeline import run_pipeline
+
+    case_id     = task["case_id"]
+    seed_path   = _Path(task["seed_path"])
+    source      = _Path(task["source"])
+    output_root = _Path(task["output_root"])
+    strategy    = task["strategy"]
+    target_file = task["target_file"]
+    config_path = _Path(task["config_path"]) if task.get("config_path") else None
+    no_llm      = bool(task.get("no_llm", False))
+
+    outcome: dict = {
+        "strategy":       strategy,
+        "target_file":    target_file,
+        "classification": "ERROR",
+        "error":          None,
+    }
+
+    if not seed_path.exists():
+        outcome["error"] = f"seed file missing: {seed_path}"
+        return case_id, outcome
+
+    try:
+        run_cfg = load_config(config_path)
+        run_cfg = apply_cli_overrides(
+            run_cfg,
+            seed_file=seed_path,
+            source_path=source,
+            output_root=output_root / "cases",
+            no_llm=no_llm,
+        )
+        bundle = run_pipeline(run_cfg, dry_run=False)
+
+        classification = "UNKNOWN"
+        if bundle.audit_result.exists():
+            ar = _json.loads(bundle.audit_result.read_text(encoding="utf-8"))
+            classification = ar.get("classification", "UNKNOWN")
+        outcome["classification"] = classification
+
+    except Exception as exc:
+        outcome["error"] = str(exc)
+
+    return case_id, outcome
+
+
 def _execute_plan_cases(
     args: argparse.Namespace,
     plan,
@@ -1611,52 +1692,106 @@ def _execute_plan_cases(
     source: Path,
     output_root: Path,
 ) -> dict:
-    """Execute all cases in a plan, returning per-case outcome dict."""
-    import json as _json
-    from insert_me.config import load_config, apply_cli_overrides
-    from insert_me.pipeline import run_pipeline
+    """Execute all cases in a plan, returning per-case outcome dict.
+
+    When ``args.jobs == 1`` (or the flag is absent), execution is sequential —
+    preserving prior behaviour and making it easy to debug individual cases.
+
+    When ``args.jobs > 1`` (or ``None`` for auto), cases are dispatched to a
+    ``ProcessPoolExecutor``.  Results are **collected and printed in canonical
+    plan order** (by case_id) regardless of which worker finishes first, so
+    artifact content is identical between sequential and parallel runs.
+
+    Determinism guarantees
+    ----------------------
+    * Planning is always single-threaded; the case list is fixed before any
+      worker is spawned.
+    * Each case writes to its own ``cases/<run_id>/`` subdirectory derived
+      deterministically from its seed + source hash — no path collisions.
+    * ``case_outcomes`` is a dict keyed by ``case_id``; aggregation functions
+      (``_write_acceptance_summary``, ``_write_corpus_index``) already sort
+      their inputs, so counts and fingerprints are execution-order independent.
+    """
+    raw_jobs: int | None = getattr(args, "jobs", None)
+    # None → auto-detect all available CPU cores
+    jobs: int = raw_jobs if raw_jobs is not None else (os.cpu_count() or 1)
+    n_tasks = len(plan.cases)
+    # Cap workers at the number of tasks — no benefit spawning more processes
+    effective_jobs = min(max(jobs, 1), max(n_tasks, 1))
+
+    # Build task list in canonical plan order
+    config_val = getattr(args, "config", None)
+    tasks = [
+        {
+            "case_id":     case.case_id,
+            "seed_path":   str(plan_dir / case.seed_file),
+            "source":      str(source),
+            "output_root": str(output_root),
+            "strategy":    case.strategy,
+            "target_file": case.target_file,
+            "config_path": str(config_val) if config_val is not None else None,
+            "no_llm":      bool(getattr(args, "no_llm", False)),
+        }
+        for case in plan.cases
+    ]
 
     case_outcomes: dict[str, dict] = {}
 
-    for idx, case in enumerate(plan.cases, 1):
-        seed_path = plan_dir / case.seed_file
-        outcome: dict = {
-            "strategy": case.strategy,
-            "target_file": case.target_file,
-            "classification": "ERROR",
-            "error": None,
-        }
-        if not seed_path.exists():
-            outcome["error"] = f"seed file missing: {seed_path}"
-            case_outcomes[case.case_id] = outcome
-            print(f"  [{idx:>3}] ERROR   {case.case_id} — seed file missing")
-            continue
+    if effective_jobs <= 1:
+        # Sequential mode — identical to previous behaviour, preserves print ordering
+        for idx, task in enumerate(tasks, 1):
+            case_id, outcome = _execute_single_case_worker(task)
+            case_outcomes[case_id] = outcome
+            classification = outcome["classification"]
+            if outcome.get("error"):
+                print(
+                    f"  [{idx:>3}] ERROR   {case_id}: {outcome['error'][:60]}",
+                    file=sys.stderr,
+                )
+            else:
+                status = (
+                    "OK  " if classification == "VALID" else
+                    "NOOP" if classification == "NOOP" else "FAIL"
+                )
+                print(f"  [{idx:>3}] {status}  {case_id}  [{classification}]")
+    else:
+        # Parallel mode — dispatch all tasks, collect in canonical order
+        from concurrent.futures import ProcessPoolExecutor, as_completed as _as_completed
 
-        try:
-            run_cfg = load_config(getattr(args, "config", None))
-            run_cfg = apply_cli_overrides(
-                run_cfg,
-                seed_file=seed_path,
-                source_path=source,
-                output_root=output_root / "cases",
-                no_llm=getattr(args, "no_llm", False),
-            )
-            bundle = run_pipeline(run_cfg, dry_run=False)
+        print(
+            f"  [parallel] dispatching {n_tasks} case(s) "
+            f"across {effective_jobs} worker(s) ..."
+        )
+        with ProcessPoolExecutor(max_workers=effective_jobs) as executor:
+            future_map = {
+                executor.submit(_execute_single_case_worker, task): task["case_id"]
+                for task in tasks
+            }
+            completed = 0
+            for future in _as_completed(future_map):
+                case_id, outcome = future.result()
+                case_outcomes[case_id] = outcome
+                completed += 1
+                milestone = max(1, n_tasks // 4)
+                if completed % milestone == 0 or completed == n_tasks:
+                    print(f"  [parallel] {completed}/{n_tasks} completed ...")
 
-            classification = "UNKNOWN"
-            if bundle.audit_result.exists():
-                ar = _json.loads(bundle.audit_result.read_text(encoding="utf-8"))
-                classification = ar.get("classification", "UNKNOWN")
-
-            outcome["classification"] = classification
-            status = "OK  " if classification == "VALID" else "NOOP" if classification == "NOOP" else "FAIL"
-            print(f"  [{idx:>3}] {status}  {case.case_id}  [{classification}]")
-
-        except Exception as exc:
-            outcome["error"] = str(exc)
-            print(f"  [{idx:>3}] ERROR   {case.case_id}: {str(exc)[:60]}", file=sys.stderr)
-
-        case_outcomes[case.case_id] = outcome
+        # Print results in canonical case order (not completion order)
+        for idx, task in enumerate(tasks, 1):
+            cid = task["case_id"]
+            outcome = case_outcomes[cid]
+            classification = outcome["classification"]
+            if outcome.get("error"):
+                print(
+                    f"  [{idx:>3}] ERROR   {cid}: {outcome['error'][:60]}",
+                    file=sys.stderr,
+                )
+            else:
+                status = (
+                    "OK  " if classification == "VALID" else
+                    "NOOP" if classification == "NOOP" else "FAIL"
+                )
+                print(f"  [{idx:>3}] {status}  {cid}  [{classification}]")
 
     return case_outcomes
 

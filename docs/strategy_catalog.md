@@ -1,6 +1,6 @@
 # insert_me Strategy Catalog
 
-> **Phase 16 -- workload characterization + support envelope**  
+> **Phase 17 -- process-level parallelism + portfolio stability proof**  
 > **Machine-readable form:** `config/strategy_catalog.json` (schema: `schemas/strategy_catalog.schema.json`)
 
 This document lists all mutation strategies that insert_me knows about, with their
