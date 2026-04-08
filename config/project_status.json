@@ -80,7 +80,7 @@
   },
 
   "test_counts": {
-    "total_passing": 774,
+    "total_passing": 776,
     "total_skipped": 1,
     "note": "Volatile. Track here, not in README or ARCHITECTURE status blocks."
   }

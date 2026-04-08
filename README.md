@@ -264,7 +264,7 @@ Example seed files are in `examples/seeds/`:
          |  patch_plan.json  <- patch_plan.schema.json
          v
   +-------------+
-  |   Patcher   |  Phase 15 -- 6 corpus-admitted strategies:
+  |   Patcher   |  Phase 16 -- 6 corpus-admitted strategies:
   +------+------+    alloc_size_undercount (CWE-122)
          |           insert_premature_free (CWE-416)
          |           insert_double_free    (CWE-415)
@@ -463,6 +463,10 @@ pip install -e .
 
 Inspect a source tree, then generate a count-driven corpus. All commands use bundled fixtures.
 
+`examples/sandbox_eval/src` is the recommended first example — it is a **medium-class** target
+(~1400 LOC, 6 files, all 6 strategies viable, ~230ms/case). For your own targets, substitute
+any small/medium evaluation-only C/C++ project (see "Target sizing quick reference" below).
+
 ```bash
 # Step 1: preflight — see candidate density, suitability tier, concentration risk
 insert-me inspect-target --source examples/sandbox_eval/src
@@ -548,18 +552,21 @@ insert-me run --seed-file examples/seeds/cwe122_heap_overflow.json \
 # Install (editable)
 pip install -e .
 
-# Pattern 2 (recommended for one target): target-aware corpus
-insert-me generate-corpus --source examples/sandbox_eval/src --count 20
+# Recommended (one target, medium class — ~230ms/case, max 60 cases):
+insert-me generate-corpus --source examples/sandbox_eval/src --count 20 --output-root corpus_out/
 
-# Pattern 3 (recommended for multiple targets): multi-target portfolio
+# Recommended (multiple targets — global count, unified shortfall report):
 insert-me generate-portfolio \
     --targets-file examples/targets/sandbox_targets.json \
-    --count 30
+    --count 30 --output-root portfolio_out/
 
-# Pattern 1 (expert/manual): one-off seed run
+# Expert/manual (single hand-authored seed, tiny demo target):
 insert-me run --seed-file examples/seeds/cwe122_heap_overflow.json \
-              --source /path/to/c-project
+              --source examples/demo/src
 ```
+
+Not sure which `--count` to use? Run `inspect-target` first, or see the
+"Target sizing quick reference" table in the [Canonical Interface](#canonical-interface) section.
 
 ---
 

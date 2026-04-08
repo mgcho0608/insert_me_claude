@@ -138,6 +138,38 @@ class TestPhaseMarkerSync:
             "Update README or config/project_status.json."
         )
 
+    def test_readme_current_status_heading_has_manifest_phase(self) -> None:
+        """The '## Current Status' heading must explicitly carry the manifest phase."""
+        phase = _manifest()["phase"]
+        text = README.read_text(encoding="utf-8")
+        heading_re = re.compile(
+            r"##\s+Current Status[^\n]*Phase\s+(\d+(?:\.\d+)?)", re.IGNORECASE
+        )
+        m = heading_re.search(text)
+        assert m, (
+            "README '## Current Status' heading not found or has no 'Phase N' marker. "
+            "The heading must read '## Current Status — Phase N (label)'."
+        )
+        assert m.group(1) == phase, (
+            f"README '## Current Status' heading shows Phase {m.group(1)!r} "
+            f"but manifest says Phase {phase!r}. Update the heading."
+        )
+
+    def test_readme_quick_reference_maturity_has_manifest_phase(self) -> None:
+        """The 'Current maturity' cell in the Internal Quick Reference must carry the manifest phase."""
+        phase = _manifest()["phase"]
+        text = README.read_text(encoding="utf-8")
+        maturity_pos = text.find("Current maturity")
+        assert maturity_pos >= 0, (
+            "README 'Internal Reuse — Quick Reference' table is missing a 'Current maturity' row."
+        )
+        # Look for the phase within the cell content (~300 chars after the label)
+        context = text[maturity_pos : maturity_pos + 300]
+        assert f"Phase {phase}" in context, (
+            f"README 'Current maturity' cell does not contain 'Phase {phase}'. "
+            "This cell must be kept in sync with config/project_status.json."
+        )
+
     def test_architecture_phase_matches_manifest(self) -> None:
         expected = _manifest()["phase"]
         found = self._first_phase_in(ARCHITECTURE)

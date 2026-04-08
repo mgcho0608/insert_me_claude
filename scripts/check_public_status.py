@@ -138,6 +138,39 @@ def check_phase_markers(m: dict, report: Report) -> None:
             f"found={found!r} expected={phase!r}",
         )
 
+    # Explicit check: README ## Current Status heading must carry the manifest phase.
+    # This check catches the scenario where the heading is correct but the body differs,
+    # OR vice versa — it validates the specific heading format independently.
+    readme_text = README.read_text(encoding="utf-8")
+    _heading_re = re.compile(
+        r"##\s+Current Status[^\n]*Phase\s+(\d+(?:\.\d+)?)", re.IGNORECASE
+    )
+    heading_m = _heading_re.search(readme_text)
+    report.add(
+        "README Current Status heading has manifest phase",
+        heading_m is not None and heading_m.group(1) == phase,
+        f"heading phase={heading_m.group(1)!r} expected={phase!r}"
+        if heading_m else "## Current Status heading not found or has no Phase marker",
+    )
+
+    # Explicit check: README Internal Quick Reference 'Current maturity' cell.
+    # This catches drift in the table that _first_phase_in() would miss if the heading
+    # is already correct.
+    maturity_pos = readme_text.find("Current maturity")
+    if maturity_pos >= 0:
+        context = readme_text[maturity_pos : maturity_pos + 300]
+        report.add(
+            "README Quick Reference maturity has manifest phase",
+            f"Phase {phase}" in context,
+            f"'Current maturity' cell does not contain 'Phase {phase}'",
+        )
+    else:
+        report.add(
+            "README Quick Reference maturity has manifest phase",
+            False,
+            "'Current maturity' row not found in README Quick Reference table",
+        )
+
     roadmap_text = ROADMAP.read_text(encoding="utf-8")
     report.add(
         "ROADMAP has Phase entry",

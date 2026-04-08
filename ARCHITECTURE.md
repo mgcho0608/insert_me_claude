@@ -61,7 +61,7 @@ Each stage's `run()` method is implemented and called in sequence.
 │        |  [patch_plan.json]  <- schema: patch_plan.schema.json       │
 │        v                                                              │
 │  ┌───────────┐   PatchPlan -> bad/good source trees                  │
-│  │  Patcher  │   DETERMINISTIC  [✓ Phase 15 — 6 strategies]             │
+│  │  Patcher  │   DETERMINISTIC  [✓ Phase 16 — 6 strategies]             │
 │  └─────┬─────┘                                                        │
 │        |                                                              │
 │        v                                                              │
@@ -366,7 +366,7 @@ See `docs/artifact_contracts.md` for the full artifact specification.
 
 ---
 
-## Portfolio Orchestration Layer (Phase 15)
+## Portfolio Orchestration Layer
 
 The portfolio layer sits above the single-target planning layer and coordinates
 corpus generation across multiple evaluation-only C/C++ source trees.

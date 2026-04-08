@@ -530,7 +530,7 @@ but reproducibility is not formally pre-verified. Use `check_plan_stability.py` 
 
 ---
 
-## Multi-Target Portfolio Reproducibility (Phase 15)
+## Multi-Target Portfolio Reproducibility
 
 Portfolio planning allocates a global count across multiple targets.  The same guarantee
 applies: same inputs => same `portfolio_plan.json` (byte-identical).
